@@ -22,6 +22,14 @@ const char* ToLabel(SupportCategory category) {
     return "Unknown";
 }
 
+const char* ToLabel(StoreCurrency currency) {
+    switch (currency) {
+        case StoreCurrency::InGame: return "Recovery Scrip";
+        case StoreCurrency::SymbolicSupport: return "Symbolic Support";
+    }
+    return "Unknown";
+}
+
 const char* ToLabel(SupportOrderState state) {
     switch (state) {
         case SupportOrderState::Draft: return "Draft";
@@ -165,8 +173,15 @@ void DrawSupportTab(LanlineServicesState& state, const ServicesUnlockState& unlo
     ImGui::BulletText("Recovery Scrip: %d", state.relayCredits);
     ImGui::Separator();
 
+    ImGui::Text("Operational Requests");
+    ImGui::TextDisabled("Materials, utility, tank service and medical supplies stay on in-game currency.");
+    ImGui::Separator();
+
     for (const auto& item : state.supportCatalog) {
         if (!IsAllowedSupportItem(item)) {
+            continue;
+        }
+        if (item.currency != StoreCurrency::InGame) {
             continue;
         }
         if (item.category == SupportCategory::TankService && !IsTankServiceUnlocked(unlockState)) {
@@ -179,7 +194,7 @@ void DrawSupportTab(LanlineServicesState& state, const ServicesUnlockState& unlo
         ImGui::PushID(item.id.c_str());
         ImGui::Text("[%s] %s", ToLabel(item.category), item.label.c_str());
         ImGui::TextWrapped("%s", item.description.c_str());
-        ImGui::BulletText("Cost: %d Recovery Scrip", item.priceCredits);
+        ImGui::BulletText("Cost: %d %s", item.priceCredits, ToLabel(item.currency));
         if (ImGui::TreeNode("Contents")) {
             for (const auto& content : item.contents) {
                 ImGui::BulletText("%s", content.c_str());
@@ -200,6 +215,36 @@ void DrawSupportTab(LanlineServicesState& state, const ServicesUnlockState& unlo
         ImGui::EndDisabled();
         if (!affordable) {
             ImGui::TextDisabled("Insufficient Recovery Scrip.");
+        }
+        ImGui::Separator();
+        ImGui::PopID();
+    }
+
+    ImGui::Text("Symbolic Support");
+    ImGui::TextDisabled("Skins and cosmetics only. No gameplay advantage.");
+    ImGui::Separator();
+    for (const auto& item : state.supportCatalog) {
+        if (!IsAllowedSupportItem(item) || item.currency != StoreCurrency::SymbolicSupport) {
+            continue;
+        }
+
+        ImGui::PushID(item.id.c_str());
+        ImGui::Text("[%s] %s", ToLabel(item.category), item.label.c_str());
+        ImGui::TextWrapped("%s", item.description.c_str());
+        ImGui::BulletText("Support tier: %s", item.supportLabel.empty() ? "Symbolic Support" : item.supportLabel.c_str());
+        if (ImGui::TreeNode("Includes")) {
+            for (const auto& content : item.contents) {
+                ImGui::BulletText("%s", content.c_str());
+            }
+            ImGui::TreePop();
+        }
+        if (ImGui::Button("Support Project")) {
+            SupportOrder order;
+            order.orderId = "support_" + item.id + "_" + std::to_string(state.supportOrders.size() + 1);
+            order.itemId = item.id;
+            order.itemLabel = item.label;
+            order.state = SupportOrderState::Draft;
+            state.supportOrders.push_back(order);
         }
         ImGui::Separator();
         ImGui::PopID();
@@ -270,21 +315,30 @@ ServicesUnlockState BuildServicesUnlockState(const SessionProfile& profile, cons
 }
 
 bool IsAllowedSupportItem(const SupportCatalogItem& item) {
-    return !item.grantsWeapon && !item.grantsCompletedTank && !item.combatAdvantage;
+    if (item.grantsWeapon || item.grantsCompletedTank || item.combatAdvantage) {
+        return false;
+    }
+    if (item.currency == StoreCurrency::SymbolicSupport) {
+        return item.category == SupportCategory::Skins || item.category == SupportCategory::Cosmetics;
+    }
+    if (item.currency == StoreCurrency::InGame) {
+        return item.category != SupportCategory::Skins && item.category != SupportCategory::Cosmetics;
+    }
+    return false;
 }
 
 std::vector<SupportCatalogItem> MakeDefaultSupportCatalog() {
     return {
-        {"support_salvage_small", "Salvage Crate / Small", "Basic recovery materials for shelter upkeep and workshop stock.", SupportCategory::Materials, 120, false, false, false, TankSubsystem::None, {"bulk_salvage", "repair_parts", "circuit_scrap"}},
-        {"relay_filter_bundle", "Filter Media Bundle", "Purification media and relay-safe consumables for continued recovery operations.", SupportCategory::Utility, 95, false, false, false, TankSubsystem::None, {"filter_media", "sealant_roll", "field_battery"}},
-        {"skin_bt72_ashgray", "BT-72 Hull Livery: Ash Gray", "Cosmetic paint set for BT-72. No gameplay effect.", SupportCategory::Skins, 160, false, false, false, TankSubsystem::None, {"skin_bt72_ashgray"}},
-        {"cosmetic_relay_badge", "Relay Operator Badge", "Terminal insignia and profile marker set. Cosmetic only.", SupportCategory::Cosmetics, 140, false, false, false, TankSubsystem::None, {"badge_relay_operator", "terminal_theme_relay"}},
-        {"tank_suspension_kit", "BT-72 Suspension Repair Kit", "Service bundle for suspension and track maintenance.", SupportCategory::TankService, 210, false, false, false, TankSubsystem::Suspension, {"track_patch", "bearing_set", "grease_pack", "alignment_tools"}},
-        {"tank_turret_kit", "BT-72 Turret Service Kit", "Turret servo, stabilization and bearing maintenance bundle.", SupportCategory::TankService, 230, false, false, false, TankSubsystem::Turret, {"servo_patch", "turret_bearing", "stabilizer_fluid"}},
-        {"tank_engine_kit", "BT-72 Engine Service Kit", "Field maintenance kit for engine and cooling assembly.", SupportCategory::TankService, 250, false, false, false, TankSubsystem::Engine, {"engine_seal", "coolant_pack", "injector_cleanser"}},
-        {"tank_sensor_kit", "BT-72 Sensor Recovery Kit", "Optics, relay and calibration tools for damaged sensor arrays.", SupportCategory::TankService, 185, false, false, false, TankSubsystem::Sensors, {"lens_pack", "sensor_relay", "calibration_spool"}},
-        {"medkit_standard", "Field Medkit", "Standard expedition med supply for operator recovery.", SupportCategory::Medical, 75, false, false, false, TankSubsystem::None, {"medkit", "bandage_roll", "sterile_patch"}},
-        {"medkit_trauma", "Trauma Response Pack", "Advanced trauma bundle for severe field damage recovery.", SupportCategory::Medical, 120, false, false, false, TankSubsystem::None, {"trauma_kit", "injector", "coagulant_pack"}},
+        {"support_salvage_small", "Salvage Crate / Small", "Basic recovery materials for shelter upkeep and workshop stock.", SupportCategory::Materials, StoreCurrency::InGame, 120, "", false, false, false, TankSubsystem::None, {"bulk_salvage", "repair_parts", "circuit_scrap"}},
+        {"relay_filter_bundle", "Filter Media Bundle", "Purification media and relay-safe consumables for continued recovery operations.", SupportCategory::Utility, StoreCurrency::InGame, 95, "", false, false, false, TankSubsystem::None, {"filter_media", "sealant_roll", "field_battery"}},
+        {"skin_bt72_ashgray", "BT-72 Hull Livery: Ash Gray", "Cosmetic paint set for BT-72. No gameplay effect.", SupportCategory::Skins, StoreCurrency::SymbolicSupport, 0, "Support Tier A", false, false, false, TankSubsystem::None, {"skin_bt72_ashgray"}},
+        {"cosmetic_relay_badge", "Relay Operator Badge", "Terminal insignia and profile marker set. Cosmetic only.", SupportCategory::Cosmetics, StoreCurrency::SymbolicSupport, 0, "Support Tier B", false, false, false, TankSubsystem::None, {"badge_relay_operator", "terminal_theme_relay"}},
+        {"tank_suspension_kit", "BT-72 Suspension Repair Kit", "Service bundle for suspension and track maintenance.", SupportCategory::TankService, StoreCurrency::InGame, 210, "", false, false, false, TankSubsystem::Suspension, {"track_patch", "bearing_set", "grease_pack", "alignment_tools"}},
+        {"tank_turret_kit", "BT-72 Turret Service Kit", "Turret servo, stabilization and bearing maintenance bundle.", SupportCategory::TankService, StoreCurrency::InGame, 230, "", false, false, false, TankSubsystem::Turret, {"servo_patch", "turret_bearing", "stabilizer_fluid"}},
+        {"tank_engine_kit", "BT-72 Engine Service Kit", "Field maintenance kit for engine and cooling assembly.", SupportCategory::TankService, StoreCurrency::InGame, 250, "", false, false, false, TankSubsystem::Engine, {"engine_seal", "coolant_pack", "injector_cleanser"}},
+        {"tank_sensor_kit", "BT-72 Sensor Recovery Kit", "Optics, relay and calibration tools for damaged sensor arrays.", SupportCategory::TankService, StoreCurrency::InGame, 185, "", false, false, false, TankSubsystem::Sensors, {"lens_pack", "sensor_relay", "calibration_spool"}},
+        {"medkit_standard", "Field Medkit", "Standard expedition med supply for operator recovery.", SupportCategory::Medical, StoreCurrency::InGame, 75, "", false, false, false, TankSubsystem::None, {"medkit", "bandage_roll", "sterile_patch"}},
+        {"medkit_trauma", "Trauma Response Pack", "Advanced trauma bundle for severe field damage recovery.", SupportCategory::Medical, StoreCurrency::InGame, 120, "", false, false, false, TankSubsystem::None, {"trauma_kit", "injector", "coagulant_pack"}},
     };
 }
 

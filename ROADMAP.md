@@ -368,6 +368,7 @@
 - launcher/runtime lobby UX tightened further: `Lanline` seats теперь явно показывают slot-state (`Open / Pending / Accepted / Active`), а runtime notifications ловят смену роли внутри lobby, так что host/client flow уже читается как seat-state machine, а не просто как список игроков
 - slot-state machine tightened further: `Lanline` host lobby теперь проходит через `Open -> Reserved Client -> Pending Client -> Client`, где выбор join-target может заранее резервировать место в launcher, а реальный запуск клиента продвигает seat дальше по lifecycle
 - pre-match layer added on top of `Lanline` lobby seats: launcher умеет переключать `ready/not ready` для host/client seats и armed state для host session, а runtime `NET` tab теперь показывает ready-состояние и ловит ready-transitions как отдельные session notifications
+- `Lanline Services` support catalog tightened to dual-currency rules: operational requests (`materials / utility / tank service / medical`) остаются на `Recovery Scrip`, а `skins / cosmetics` вынесены в отдельный `Symbolic Support` поток без боевого преимущества и с жесткой catalog validation
 
 Что еще осталось:
 

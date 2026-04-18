@@ -3102,9 +3102,6 @@ Tank Service
 Дать live diagnostics для Lanline - optime
 Сделать shell-версию Lanline Services
 Добавить unlock через первую вышку
-Добавить dual-currency каталог
-игровые деньги для supplies / tank service / medical
-real-money symbolic support для skins / cosmetics
 Добавить Fey Ring Network timers
 Добавить friends / chat / voice settings
 Потом уже расширять до richer online relay

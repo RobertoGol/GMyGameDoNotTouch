@@ -13,6 +13,8 @@ namespace bunker {
 
 namespace {
 
+bool IsLanlineReadyEligibleSlot(const LanlinePlayerEntry& entry);
+
 bool TankNeedsRepair(const SessionProfile& profile) {
     const auto& damage = profile.partnerTank.damage;
     return damage.hull < 99.0f || damage.turret < 99.0f || damage.bucket < 99.0f ||

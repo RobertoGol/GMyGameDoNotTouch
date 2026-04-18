@@ -10,6 +10,12 @@
 
 namespace bunker {
 
+enum class ServiceHubMode {
+    OfflineLocal,
+    LanlineLocal,
+    RelayOnline
+};
+
 enum class ServicesUnlockTier {
     Locked,
     TowerLinked,
@@ -53,6 +59,11 @@ enum class SupportCategory {
     Utility,
     TankService,
     Medical
+};
+
+enum class StoreCurrency {
+    InGame,
+    SymbolicSupport
 };
 
 enum class TankSubsystem {
@@ -116,7 +127,9 @@ struct SupportCatalogItem {
     std::string label;
     std::string description;
     SupportCategory category = SupportCategory::Materials;
+    StoreCurrency currency = StoreCurrency::InGame;
     int priceCredits = 0;
+    std::string supportLabel;
     bool grantsWeapon = false;
     bool grantsCompletedTank = false;
     bool combatAdvantage = false;
@@ -148,6 +161,7 @@ struct FeyGateCycle {
 };
 
 struct LanlineServicesState {
+    ServiceHubMode mode = ServiceHubMode::OfflineLocal;
     int relayCredits = 420;
     std::vector<FriendEntry> friends{};
     std::vector<ChatChannel> chatChannels{};
@@ -162,7 +176,10 @@ bool IsAllowedSupportItem(const SupportCatalogItem& item);
 std::vector<SupportCatalogItem> MakeDefaultSupportCatalog();
 std::vector<FeyGateCycle> MakeDefaultFeyGateCycles(std::int64_t nowUnix);
 LanlineServicesState MakeDefaultLanlineServicesState(std::int64_t nowUnix);
-void SyncLanlineServicesPresence(LanlineServicesState& state, const LanlineSessionState* sessionState);
+ServiceHubMode ResolveLanlineServicesMode(const ServicesUnlockState& unlockState, const LanlineSessionState* sessionState);
+void SyncLanlineServicesPresence(LanlineServicesState& state,
+    const LanlineSessionState* sessionState,
+    const ServicesUnlockState& unlockState);
 FeyGateState ComputeFeyGateState(const FeyGateCycle& gate, std::int64_t nowUnix);
 std::string FormatCountdown(std::int64_t secondsRemaining);
 void DrawLanlineServicesPanel(LanlineServicesState& state,

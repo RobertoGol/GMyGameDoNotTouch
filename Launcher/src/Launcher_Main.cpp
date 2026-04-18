@@ -44,6 +44,8 @@ struct LauncherState {
     std::string statusText = "System ready. Authorize to continue.";
 };
 
+void SaveLanlineSnapshotAndMaybeActive(const bunker::LanlineSessionState& snapshot);
+
 int ClampIndex(int value, int itemCount) {
     if (itemCount <= 0) {
         return 0;
