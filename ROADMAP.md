@@ -355,6 +355,19 @@
 - `LanlineSession` snapshots теперь пишутся в отдельный каталог, а launcher показывает список известных LAN-сессий как ранний browser/discovery слой
 - launcher теперь умеет применять выбранный `Lanline - optime` snapshot к текущим полям host/world/mode, а не только пассивно его показывать
 - browser/discovery для `Lanline - optime` вынесен в общий session-модуль и теперь виден и в launcher, и внутри runtime
+- `launcher stability pass` tightened: выбор мира больше не держится на временных `c_str()`, списки миров и `Lanline` snapshots перечитываются вживую, индексы клампятся безопасно, а запуск `BunkerGame.exe` / `BunkerEditor.exe` теперь привязан к директории самого `BunkerLauncher`, а не к случайному `current_path`
+- `Lanline - optime` diagnostics tightened: launcher и runtime теперь показывают live reachability probe, ping-like timing, world match, snapshot freshness и visible session presence поверх уже существующего snapshot/session-state слоя
+- добавлен ранний shell-слой `Lanline Services`: общий UI/state для launcher и runtime с relay friends/chat/voice settings, support request catalog без combat advantages и ранним `Fey Ring Network` schedule board
+- session lifecycle для `Lanline - optime` стал явнее: launcher/runtime теперь пишут `lifecycleStage`, `activeActor`, `pendingPeer` и `connectedPeer`, так что host/client flow уже читается как ранний handshake, а не как безликий roster dump
+- launcher-side handshake control tightened: выбранный `Lanline` snapshot теперь можно не только применить, но и host-side принять pending peer или сбросить peer link прямо из `BunkerLauncher`
+- client join-target flow tightened: выбранный host snapshot теперь может быть явно залочен как `Join Selected Lanline Session`, launcher seed'ит join request в target session, а runtime больше не теряет host-side peer link при входе клиента
+- `Lanline` discovery/browser стал читабельнее: launcher теперь показывает joinability (`joinable/pending/linked/non-host`), объясняет почему snapshot можно или нельзя использовать как join-target, и тем самым превращает список session snapshots в ранний LAN join browser
+- launcher client-flow tightened further: при входе в `LAN Client` режим launcher теперь автоматически фокусирует первый joinable host snapshot, если такой уже есть, и не заставляет игрока вручную искать подходящий join-target
+- launcher browser теперь показывает ранний lobby-capacity слой для `Lanline`: `occupied/open slots` считаются из текущего roster, так что host snapshot читается уже как lobby с вместимостью, а не просто как endpoint + lifecycle
+- host lobby seats для `Lanline` стали поведенческими: pending/accepted peer теперь занимают конкретные `LAN slot` записи в roster, а не живут только в `pendingPeer/connectedPeer`, так что browser и runtime уже читают lobby как места, а не как абстрактный peer string
+- launcher/runtime lobby UX tightened further: `Lanline` seats теперь явно показывают slot-state (`Open / Pending / Accepted / Active`), а runtime notifications ловят смену роли внутри lobby, так что host/client flow уже читается как seat-state machine, а не просто как список игроков
+- slot-state machine tightened further: `Lanline` host lobby теперь проходит через `Open -> Reserved Client -> Pending Client -> Client`, где выбор join-target может заранее резервировать место в launcher, а реальный запуск клиента продвигает seat дальше по lifecycle
+- pre-match layer added on top of `Lanline` lobby seats: launcher умеет переключать `ready/not ready` для host/client seats и armed state для host session, а runtime `NET` tab теперь показывает ready-состояние и ловит ready-transitions как отдельные session notifications
 
 Что еще осталось:
 

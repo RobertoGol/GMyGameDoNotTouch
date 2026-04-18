@@ -1,9 +1,11 @@
 #include "../include/GameRuntime.hpp"
+#include "../include/LanlineServices.hpp"
 #include "../include/LanlineSession.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 
 #include "imgui.h"
 
@@ -201,6 +203,134 @@ std::string DescribeTerminalSync(const MapObject& object) {
         : "Terminal sync complete: " + object.scriptTag;
 }
 
+const LanlineDiagnostics& CachedLanlineDiagnostics(const LanlineSessionState& session, std::string_view runtimeWorldName) {
+    static std::string cachedSessionKey;
+    static std::string cachedWorldName;
+    static double lastProbeTime = -10.0;
+    static LanlineDiagnostics cachedDiagnostics;
+
+    const std::string probeKey = session.sessionId + "|" + session.updatedAt + "|" + session.hostEndpoint;
+    const std::string normalizedWorldName = NormalizeWorldReference(runtimeWorldName);
+    const double now = ImGui::GetTime();
+    if (probeKey != cachedSessionKey || normalizedWorldName != cachedWorldName || (now - lastProbeTime) >= 1.5) {
+        cachedDiagnostics = ProbeLanlineHost(session, normalizedWorldName);
+        cachedSessionKey = probeKey;
+        cachedWorldName = normalizedWorldName;
+        lastProbeTime = now;
+    }
+    return cachedDiagnostics;
+}
+
+const std::vector<std::string>& UpdateLanlineRuntimeNotifications(const LanlineSessionState* session,
+    std::string_view runtimeWorldName,
+    GameState& gameState) {
+    static bool hadPreviousSession = false;
+    static LanlineSessionState previousSession;
+    static std::vector<std::string> notifications;
+
+    const auto pushNotification = [&](std::string message) {
+        if (message.empty()) {
+            return;
+        }
+        notifications.push_back(std::move(message));
+        if (notifications.size() > 8) {
+            notifications.erase(notifications.begin());
+        }
+        gameState.lastEvent = notifications.back();
+    };
+
+    if (session == nullptr) {
+        if (hadPreviousSession) {
+            pushNotification("Lanline session link lost. Waiting for refreshed launcher/session state.");
+            hadPreviousSession = false;
+            previousSession = {};
+        }
+        return notifications;
+    }
+
+    const std::string normalizedRuntimeWorld = NormalizeWorldReference(runtimeWorldName);
+    const std::string normalizedSessionWorld = NormalizeWorldReference(session->worldName);
+    const bool worldMatchesRuntime = normalizedRuntimeWorld == normalizedSessionWorld;
+
+    if (!hadPreviousSession) {
+        pushNotification("Lanline session linked: " + session->sessionId + " on " + normalizedSessionWorld + ".");
+        if (!worldMatchesRuntime) {
+            pushNotification("Lanline world mismatch: runtime is on " + normalizedRuntimeWorld +
+                ", session points to " + normalizedSessionWorld + ".");
+        }
+        previousSession = *session;
+        hadPreviousSession = true;
+        return notifications;
+    }
+
+    const std::string previousNormalizedWorld = NormalizeWorldReference(previousSession.worldName);
+    if (session->sessionId != previousSession.sessionId) {
+        pushNotification("Lanline session switched to " + session->sessionId + " (" + session->mode + ").");
+    }
+    if (session->mode != previousSession.mode) {
+        pushNotification("Lanline mode changed to " + session->mode + ".");
+    }
+    if (session->lifecycleStage != previousSession.lifecycleStage) {
+        pushNotification("Lanline lifecycle advanced to " + session->lifecycleStage + ".");
+    }
+    if (session->pendingPeer != previousSession.pendingPeer) {
+        pushNotification(session->pendingPeer.empty()
+            ? "Lanline pending peer queue cleared."
+            : "Lanline pending peer updated: " + session->pendingPeer + ".");
+    }
+    if (session->connectedPeer != previousSession.connectedPeer) {
+        pushNotification(session->connectedPeer.empty()
+            ? "Lanline connected peer link cleared."
+            : "Lanline peer link confirmed with " + session->connectedPeer + ".");
+    }
+    if (normalizedSessionWorld != previousNormalizedWorld) {
+        pushNotification("Lanline session world updated: " + previousNormalizedWorld + " -> " + normalizedSessionWorld + ".");
+    }
+
+    const bool previousWorldMatch = previousNormalizedWorld == normalizedRuntimeWorld;
+    if (worldMatchesRuntime != previousWorldMatch) {
+        pushNotification(worldMatchesRuntime
+            ? "Lanline session world now matches the active runtime world."
+            : "Lanline session world drifted away from the active runtime world.");
+    }
+
+    for (const auto& playerEntry : session->players) {
+        const auto previousIt = std::find_if(previousSession.players.begin(), previousSession.players.end(),
+            [&](const LanlinePlayerEntry& previousEntry) {
+                return previousEntry.displayName == playerEntry.displayName;
+            });
+        if (previousIt == previousSession.players.end()) {
+            pushNotification(playerEntry.displayName + " joined Lanline roster as " + playerEntry.role + ".");
+            continue;
+        }
+        if (playerEntry.role != previousIt->role) {
+            pushNotification(playerEntry.displayName + " moved from " + previousIt->role + " to " + playerEntry.role + " in Lanline lobby.");
+        }
+        if (playerEntry.online != previousIt->online) {
+            pushNotification(playerEntry.displayName +
+                (playerEntry.online ? " came online in Lanline." : " went offline in Lanline."));
+        }
+        if (IsLanlineReadyEligibleSlot(playerEntry) && playerEntry.ready != previousIt->ready) {
+            pushNotification(playerEntry.displayName +
+                (playerEntry.ready ? " is now ready for Lanline deployment." : " is no longer ready for Lanline deployment."));
+        }
+    }
+
+    for (const auto& previousEntry : previousSession.players) {
+        const auto currentIt = std::find_if(session->players.begin(), session->players.end(),
+            [&](const LanlinePlayerEntry& currentEntry) {
+                return currentEntry.displayName == previousEntry.displayName;
+            });
+        if (currentIt == session->players.end()) {
+            pushNotification(previousEntry.displayName + " left the Lanline roster.");
+        }
+    }
+
+    previousSession = *session;
+    hadPreviousSession = true;
+    return notifications;
+}
+
 int CountRestoredPylons(const SessionProfile& profile);
 bool IsRegionalGridOnline(const SessionProfile& profile);
 
@@ -223,6 +353,92 @@ bool OrbitalUplinkReady(const SessionProfile& profile, const WorldFieldState& wo
 
 bool RailFortressReady(const SessionProfile& profile, const WorldFieldState& worldState) {
     return IsRailFortressOperational(profile, worldState);
+}
+
+bool IsLanlineAwaitingSlot(const LanlinePlayerEntry& entry) {
+    return entry.role == "Awaiting";
+}
+
+bool IsLanlinePendingSlot(const LanlinePlayerEntry& entry) {
+    return entry.role == "Pending Client";
+}
+
+bool IsLanlineReservedSlot(const LanlinePlayerEntry& entry) {
+    return entry.role == "Reserved Client";
+}
+
+bool IsLanlineAcceptedSlot(const LanlinePlayerEntry& entry) {
+    return entry.role == "Client";
+}
+
+bool IsLanlineReadyEligibleSlot(const LanlinePlayerEntry& entry) {
+    return entry.role == "Host" || entry.role == "Client" || entry.role == "Local Operator";
+}
+
+const char* LanlineSlotStateLabel(const LanlinePlayerEntry& entry) {
+    if (IsLanlineAwaitingSlot(entry)) {
+        return "Open";
+    }
+    if (IsLanlinePendingSlot(entry)) {
+        return "Pending";
+    }
+    if (IsLanlineReservedSlot(entry)) {
+        return "Reserved";
+    }
+    if (IsLanlineAcceptedSlot(entry)) {
+        return "Accepted";
+    }
+    if (entry.online) {
+        return "Active";
+    }
+    return "Reserved";
+}
+
+const char* LanlineReadyLabel(const LanlinePlayerEntry& entry) {
+    if (!IsLanlineReadyEligibleSlot(entry)) {
+        return "-";
+    }
+    return entry.ready ? "Ready" : "Not Ready";
+}
+
+int PendingLanlineSessionSlots(const LanlineSessionState& session) {
+    int pending = 0;
+    for (const auto& player : session.players) {
+        if (IsLanlinePendingSlot(player)) {
+            pending += 1;
+        }
+    }
+    return pending;
+}
+
+int ReservedLanlineSessionSlots(const LanlineSessionState& session) {
+    int reserved = 0;
+    for (const auto& player : session.players) {
+        if (IsLanlineReservedSlot(player)) {
+            reserved += 1;
+        }
+    }
+    return reserved;
+}
+
+int AcceptedLanlineSessionSlots(const LanlineSessionState& session) {
+    int accepted = 0;
+    for (const auto& player : session.players) {
+        if (IsLanlineAcceptedSlot(player)) {
+            accepted += 1;
+        }
+    }
+    return accepted;
+}
+
+int ReadyLanlineSessionSlots(const LanlineSessionState& session) {
+    int ready = 0;
+    for (const auto& player : session.players) {
+        if (IsLanlineReadyEligibleSlot(player) && player.ready) {
+            ready += 1;
+        }
+    }
+    return ready;
 }
 
 bool RecoveryFabricatorReady(const SessionProfile& profile, const WorldFieldState& worldState) {
@@ -2779,7 +2995,7 @@ void DrawPipPad(const World& world,
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.1f, 0.7f, 0.3f, 0.7f));
     ImGui::Begin("PIP-PAD // Recovery Shell", nullptr, ImGuiWindowFlags_NoCollapse);
 
-    const char* tabs[] = {"STAT", "INV", "DATA", "MAP", "QUEST", "NET"};
+    const char* tabs[] = {"STAT", "INV", "DATA", "MAP", "QUEST", "NET", "SERV"};
     for (int index = 0; index < IM_ARRAYSIZE(tabs); ++index) {
         if (index > 0) {
             ImGui::SameLine();
@@ -3514,25 +3730,59 @@ void DrawPipPad(const World& world,
     } else if (activeTab == 5) {
         LanlineSessionState sessionState;
         const bool hasSessionState = LoadLanlineSessionState(sessionState);
+        const auto* currentWorldFieldState = FindWorldFieldState(profile, profile.selectedWorld);
+        const auto& runtimeNotifications = UpdateLanlineRuntimeNotifications(
+            hasSessionState ? &sessionState : nullptr,
+            profile.selectedWorld,
+            gameState);
+        static LanlineServicesState lanlineServices = MakeDefaultLanlineServicesState(std::time(nullptr));
+        SyncLanlineServicesPresence(lanlineServices, hasSessionState ? &sessionState : nullptr);
+        const auto servicesUnlock = BuildServicesUnlockState(profile, currentWorldFieldState);
         ImGui::Text("Lanline - optime");
         if (!hasSessionState) {
             ImGui::TextDisabled("No active Lanline session state found. Launch through BunkerLauncher to seed roster and snapshot data.");
+            if (!runtimeNotifications.empty()) {
+                ImGui::Separator();
+                ImGui::Text("Runtime Notifications");
+                for (const auto& notification : runtimeNotifications) {
+                    ImGui::BulletText("%s", notification.c_str());
+                }
+            }
         } else {
             const std::string sessionWorldReference = NormalizeWorldReference(sessionState.worldName);
             const bool worldMatchesRuntime = sessionWorldReference == profile.selectedWorld;
+            const auto& diagnostics = CachedLanlineDiagnostics(sessionState, profile.selectedWorld);
             ImGui::Text("Session ID: %s", sessionState.sessionId.c_str());
             ImGui::Text("Mode: %s", sessionState.mode.c_str());
+            ImGui::Text("Lifecycle: %s", sessionState.lifecycleStage.c_str());
+            ImGui::Text("Active Actor: %s", sessionState.activeActor.c_str());
+            ImGui::Text("Pending Peer: %s", sessionState.pendingPeer.empty() ? "none" : sessionState.pendingPeer.c_str());
+            ImGui::Text("Connected Peer: %s", sessionState.connectedPeer.empty() ? "none" : sessionState.connectedPeer.c_str());
+            ImGui::Text("Reserved Slots: %d", ReservedLanlineSessionSlots(sessionState));
+            ImGui::Text("Pending Slots: %d", PendingLanlineSessionSlots(sessionState));
+            ImGui::Text("Accepted Client Slots: %d", AcceptedLanlineSessionSlots(sessionState));
+            ImGui::Text("Ready Seats: %d", ReadyLanlineSessionSlots(sessionState));
             ImGui::Text("World: %s", sessionWorldReference.c_str());
             ImGui::Text("Host: %s", sessionState.hostEndpoint.c_str());
             ImGui::Text("Updated: %s", sessionState.updatedAt.c_str());
             ImGui::Text("Runtime World Match: %s", worldMatchesRuntime ? "yes" : "no");
+            ImGui::BulletText("Host reachable: %s", diagnostics.hostReachable ? "yes" : "no");
+            ImGui::BulletText("Ping: %s",
+                diagnostics.pingMs >= 0 ? (std::to_string(diagnostics.pingMs) + " ms").c_str() : "n/a");
+            ImGui::BulletText("Snapshot freshness: %s", diagnostics.snapshotFresh ? "fresh" : "stale");
+            ImGui::BulletText("Presence: %d / %d online", diagnostics.onlinePlayers, diagnostics.totalPlayers);
+            if (!diagnostics.lastError.empty()) {
+                ImGui::TextDisabled("%s", diagnostics.lastError.c_str());
+            }
             ImGui::Separator();
             ImGui::Text("Session Roster");
             for (const auto& playerEntry : sessionState.players) {
-                ImGui::BulletText("%s | %s | %s",
+                ImGui::BulletText("%s | %s | %s | %s | %s",
                     playerEntry.displayName.c_str(),
                     playerEntry.role.c_str(),
-                    playerEntry.online ? "Online" : "Pending");
+                    playerEntry.online ? "Online" : "Offline",
+                    LanlineSlotStateLabel(playerEntry),
+                    LanlineReadyLabel(playerEntry));
             }
             ImGui::Separator();
             ImGui::Text("Session Log");
@@ -3544,22 +3794,36 @@ void DrawPipPad(const World& world,
                 }
             }
             ImGui::Separator();
+            ImGui::Text("Runtime Notifications");
+            if (runtimeNotifications.empty()) {
+                ImGui::TextDisabled("No runtime Lanline notifications yet.");
+            } else {
+                for (const auto& notification : runtimeNotifications) {
+                    ImGui::BulletText("%s", notification.c_str());
+                }
+            }
+            ImGui::Separator();
             const auto knownSessions = DiscoverLanlineSessionSnapshots();
             ImGui::Text("Known Sessions");
             if (knownSessions.empty()) {
                 ImGui::TextDisabled("No session snapshots discovered.");
             } else {
                 for (const auto& knownSession : knownSessions) {
+                    const auto normalizedKnownWorld = NormalizeWorldReference(knownSession.worldName);
                     ImGui::BulletText("%s | %s | %s | %s",
                         knownSession.sessionId.c_str(),
                         knownSession.mode.c_str(),
-                        NormalizeWorldReference(knownSession.worldName).c_str(),
+                        knownSession.lifecycleStage.c_str(),
+                        normalizedKnownWorld.c_str(),
                         knownSession.hostEndpoint.c_str());
                 }
             }
             ImGui::Separator();
             ImGui::TextWrapped("Lanline - optime keeps a visible session roster and snapshot trail even without Steam/Xbox auth.");
         }
+        ImGui::Separator();
+        ImGui::Text("Lanline Services");
+        DrawLanlineServicesPanel(lanlineServices, servicesUnlock, static_cast<std::int64_t>(std::time(nullptr)));
     }
 
     ImGui::Separator();

@@ -1,8 +1,17 @@
 #include "../include/LanlineSession.hpp"
 
+#include <algorithm>
+#include <chrono>
 #include <ctime>
 #include <fstream>
 #include <sstream>
+#include <string_view>
+
+#define WIN32_LEAN_AND_MEAN
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+
+#pragma comment(lib, "Ws2_32.lib")
 
 #include "../include/AppPaths.hpp"
 
@@ -33,6 +42,53 @@ std::string CurrentTimestampString() {
     return out.str();
 }
 
+bool TryParseTimestamp(std::string_view timestamp, std::tm& outTime) {
+    if (timestamp.size() != 19) {
+        return false;
+    }
+    outTime = {};
+    try {
+        outTime.tm_year = std::stoi(std::string(timestamp.substr(0, 4))) - 1900;
+        outTime.tm_mon = std::stoi(std::string(timestamp.substr(5, 2))) - 1;
+        outTime.tm_mday = std::stoi(std::string(timestamp.substr(8, 2)));
+        outTime.tm_hour = std::stoi(std::string(timestamp.substr(11, 2)));
+        outTime.tm_min = std::stoi(std::string(timestamp.substr(14, 2)));
+        outTime.tm_sec = std::stoi(std::string(timestamp.substr(17, 2)));
+        outTime.tm_isdst = -1;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool IsFreshTimestamp(std::string_view timestamp, int maxAgeSeconds) {
+    std::tm parsedTime{};
+    if (!TryParseTimestamp(timestamp, parsedTime)) {
+        return false;
+    }
+    const std::time_t sessionTime = std::mktime(&parsedTime);
+    if (sessionTime <= 0) {
+        return false;
+    }
+    const std::time_t now = std::time(nullptr);
+    return now >= sessionTime && (now - sessionTime) <= maxAgeSeconds;
+}
+
+struct WinsockSession {
+    bool initialized = false;
+
+    WinsockSession() {
+        WSADATA data{};
+        initialized = WSAStartup(MAKEWORD(2, 2), &data) == 0;
+    }
+
+    ~WinsockSession() {
+        if (initialized) {
+            WSACleanup();
+        }
+    }
+};
+
 }  // namespace
 
 bool SaveLanlineSessionState(const LanlineSessionState& state) {
@@ -45,13 +101,19 @@ bool SaveLanlineSessionState(const LanlineSessionState& state, const std::filesy
         return false;
     }
 
+    const std::string normalizedWorldName = NormalizeWorldReference(state.worldName);
+
     out << "session_id=" << state.sessionId << '\n';
     out << "mode=" << state.mode << '\n';
-    out << "world=" << state.worldName << '\n';
+    out << "lifecycle_stage=" << state.lifecycleStage << '\n';
+    out << "world=" << normalizedWorldName << '\n';
     out << "host=" << state.hostEndpoint << '\n';
     out << "updated_at=" << (state.updatedAt.empty() ? CurrentTimestampString() : state.updatedAt) << '\n';
+    out << "active_actor=" << state.activeActor << '\n';
+    out << "pending_peer=" << state.pendingPeer << '\n';
+    out << "connected_peer=" << state.connectedPeer << '\n';
     for (const auto& player : state.players) {
-        out << "player=" << player.displayName << "|" << player.role << "|" << (player.online ? 1 : 0) << '\n';
+        out << "player=" << player.displayName << "|" << player.role << "|" << (player.online ? 1 : 0) << "|" << (player.ready ? 1 : 0) << '\n';
     }
     for (const auto& eventLine : state.eventLog) {
         out << "event=" << eventLine << '\n';
@@ -82,20 +144,30 @@ bool LoadLanlineSessionState(const std::filesystem::path& path, LanlineSessionSt
             state.sessionId = value;
         } else if (key == "mode") {
             state.mode = value;
+        } else if (key == "lifecycle_stage") {
+            state.lifecycleStage = value;
         } else if (key == "world") {
-            state.worldName = value;
+            state.worldName = NormalizeWorldReference(value);
         } else if (key == "host") {
             state.hostEndpoint = value;
         } else if (key == "updated_at") {
             state.updatedAt = value;
+        } else if (key == "active_actor") {
+            state.activeActor = value;
+        } else if (key == "pending_peer") {
+            state.pendingPeer = value;
+        } else if (key == "connected_peer") {
+            state.connectedPeer = value;
         } else if (key == "player") {
             const auto first = value.find('|');
             const auto second = value.find('|', first == std::string::npos ? first : first + 1);
+            const auto third = value.find('|', second == std::string::npos ? second : second + 1);
             if (first != std::string::npos && second != std::string::npos) {
                 state.players.push_back({
                     value.substr(0, first),
                     value.substr(first + 1, second - first - 1),
-                    value.substr(second + 1) != "0"});
+                    third == std::string::npos ? (value.substr(second + 1) != "0") : (value.substr(second + 1, third - second - 1) != "0"),
+                    third == std::string::npos ? false : (value.substr(third + 1) != "0")});
             }
         } else if (key == "event") {
             state.eventLog.push_back(value);
@@ -123,7 +195,101 @@ std::vector<LanlineSessionState> DiscoverLanlineSessionSnapshots() {
         }
     }
 
+    std::sort(sessions.begin(), sessions.end(), [](const LanlineSessionState& left, const LanlineSessionState& right) {
+        if (left.updatedAt != right.updatedAt) {
+            return left.updatedAt > right.updatedAt;
+        }
+        return left.sessionId < right.sessionId;
+    });
+
     return sessions;
+}
+
+LanlineDiagnostics ProbeLanlineHost(const LanlineSessionState& session, std::string_view runtimeWorldName) {
+    LanlineDiagnostics out;
+    out.normalizedWorldName = NormalizeWorldReference(session.worldName);
+    out.worldMatch = out.normalizedWorldName == NormalizeWorldReference(runtimeWorldName);
+    out.totalPlayers = static_cast<int>(session.players.size());
+    for (const auto& player : session.players) {
+        if (player.online) {
+            out.onlinePlayers += 1;
+        }
+    }
+    out.snapshotFresh = IsFreshTimestamp(session.updatedAt, 15);
+
+    const auto colonPos = session.hostEndpoint.find(':');
+    const std::string host = colonPos == std::string::npos ? session.hostEndpoint : session.hostEndpoint.substr(0, colonPos);
+    const std::string port = colonPos == std::string::npos ? "27015" : session.hostEndpoint.substr(colonPos + 1);
+    if (host.empty() || port.empty()) {
+        out.lastError = "Host endpoint is incomplete.";
+        return out;
+    }
+
+    WinsockSession winsock;
+    if (!winsock.initialized) {
+        out.lastError = "Winsock initialization failed.";
+        return out;
+    }
+
+    addrinfo hints{};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    addrinfo* result = nullptr;
+    if (getaddrinfo(host.c_str(), port.c_str(), &hints, &result) != 0 || result == nullptr) {
+        out.lastError = "Unable to resolve Lanline host.";
+        if (result != nullptr) {
+            freeaddrinfo(result);
+        }
+        return out;
+    }
+
+    for (addrinfo* address = result; address != nullptr; address = address->ai_next) {
+        SOCKET socketHandle = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
+        if (socketHandle == INVALID_SOCKET) {
+            continue;
+        }
+
+        u_long nonBlocking = 1;
+        ioctlsocket(socketHandle, FIONBIO, &nonBlocking);
+        const auto start = std::chrono::steady_clock::now();
+        const int connectResult = connect(socketHandle, address->ai_addr, static_cast<int>(address->ai_addrlen));
+        if (connectResult == SOCKET_ERROR) {
+            const int error = WSAGetLastError();
+            if (error != WSAEWOULDBLOCK && error != WSAEINPROGRESS && error != WSAEINVAL) {
+                closesocket(socketHandle);
+                continue;
+            }
+        }
+
+        fd_set writeSet;
+        FD_ZERO(&writeSet);
+        FD_SET(socketHandle, &writeSet);
+        timeval timeout{};
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 180000;
+        const int selectResult = select(0, nullptr, &writeSet, nullptr, &timeout);
+        if (selectResult > 0 && FD_ISSET(socketHandle, &writeSet)) {
+            int socketError = 0;
+            int socketErrorSize = sizeof(socketError);
+            getsockopt(socketHandle, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&socketError), &socketErrorSize);
+            if (socketError == 0) {
+                const auto end = std::chrono::steady_clock::now();
+                out.hostReachable = true;
+                out.pingMs = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
+                closesocket(socketHandle);
+                break;
+            }
+        }
+        closesocket(socketHandle);
+    }
+
+    freeaddrinfo(result);
+    if (!out.hostReachable && out.lastError.empty()) {
+        out.lastError = "Host did not answer within probe window.";
+    }
+    return out;
 }
 
 }  // namespace bunker

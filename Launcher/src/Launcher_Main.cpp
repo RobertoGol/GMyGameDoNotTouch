@@ -1,15 +1,28 @@
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
+#include <array>
+#include <ctime>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <vector>
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <Windows.h>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
 #include "../../include/AppPaths.hpp"
+#include "../../include/LanlineServices.hpp"
 #include "../../include/LanlineSession.hpp"
 #include "../../include/LaunchSession.hpp"
 #include "../../include/SessionFlow.hpp"
@@ -21,6 +34,7 @@ struct LauncherState {
     bool authFailed = false;
     int selectedCharacter = 0;
     int sessionModeIndex = 0;
+    int previousSessionModeIndex = 0;
     int selectedWorldIndex = 0;
     int selectedLanlineSnapshot = -1;
     char login[64] = "wanderer";
@@ -29,6 +43,217 @@ struct LauncherState {
     char lanPort[16] = "27015";
     std::string statusText = "System ready. Authorize to continue.";
 };
+
+int ClampIndex(int value, int itemCount) {
+    if (itemCount <= 0) {
+        return 0;
+    }
+    return std::clamp(value, 0, itemCount - 1);
+}
+
+void TrimLanlineEventLog(bunker::LanlineSessionState& state, std::size_t maxEntries) {
+    if (state.eventLog.size() > maxEntries) {
+        state.eventLog.erase(
+            state.eventLog.begin(),
+            state.eventLog.begin() + static_cast<std::vector<std::string>::difference_type>(state.eventLog.size() - maxEntries));
+    }
+}
+
+void UpsertLanlinePlayer(bunker::LanlineSessionState& state,
+    const std::string& displayName,
+    const std::string& role,
+    bool online,
+    bool ready = false) {
+    auto playerIt = std::find_if(state.players.begin(), state.players.end(),
+        [&](const bunker::LanlinePlayerEntry& entry) {
+            return entry.displayName == displayName;
+        });
+    if (playerIt == state.players.end()) {
+        state.players.push_back({displayName, role, online, ready});
+        return;
+    }
+    playerIt->role = role;
+    playerIt->online = online;
+    playerIt->ready = ready;
+}
+
+bool IsLanlineAwaitingSlot(const bunker::LanlinePlayerEntry& entry) {
+    return entry.role == "Awaiting";
+}
+
+bool IsLanlinePendingSlot(const bunker::LanlinePlayerEntry& entry) {
+    return entry.role == "Pending Client";
+}
+
+bool IsLanlineReservedSlot(const bunker::LanlinePlayerEntry& entry) {
+    return entry.role == "Reserved Client";
+}
+
+bool IsLanlineAcceptedSlot(const bunker::LanlinePlayerEntry& entry) {
+    return entry.role == "Client";
+}
+
+bool IsLanlineReadyEligibleSlot(const bunker::LanlinePlayerEntry& entry) {
+    return entry.role == "Host" || entry.role == "Client" || entry.role == "Local Operator";
+}
+
+const char* LanlineSlotStateLabel(const bunker::LanlinePlayerEntry& entry) {
+    if (IsLanlineAwaitingSlot(entry)) {
+        return "Open";
+    }
+    if (IsLanlinePendingSlot(entry)) {
+        return "Pending";
+    }
+    if (IsLanlineReservedSlot(entry)) {
+        return "Reserved";
+    }
+    if (IsLanlineAcceptedSlot(entry)) {
+        return "Accepted";
+    }
+    if (entry.online) {
+        return "Active";
+    }
+    return "Reserved";
+}
+
+const char* LanlineReadyLabel(const bunker::LanlinePlayerEntry& entry) {
+    if (!IsLanlineReadyEligibleSlot(entry)) {
+        return "-";
+    }
+    return entry.ready ? "Ready" : "Not Ready";
+}
+
+int FindFirstAwaitingSlotIndex(const bunker::LanlineSessionState& state) {
+    for (int index = 0; index < static_cast<int>(state.players.size()); ++index) {
+        if (IsLanlineAwaitingSlot(state.players[static_cast<std::size_t>(index)])) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+void ReserveLanlineLobbySlot(bunker::LanlineSessionState& state, const std::string& peerName) {
+    for (auto& player : state.players) {
+        if (player.displayName == peerName && (IsLanlineReservedSlot(player) || IsLanlinePendingSlot(player))) {
+            return;
+        }
+    }
+    const int slotIndex = FindFirstAwaitingSlotIndex(state);
+    if (slotIndex < 0) {
+        return;
+    }
+    auto& slot = state.players[static_cast<std::size_t>(slotIndex)];
+    slot.displayName = peerName;
+    slot.role = "Reserved Client";
+    slot.online = false;
+    slot.ready = false;
+}
+
+void PromoteReservedLanlineLobbySlot(bunker::LanlineSessionState& state, const std::string& peerName) {
+    for (auto& player : state.players) {
+        if (player.displayName == peerName) {
+            if (IsLanlineReservedSlot(player) || IsLanlinePendingSlot(player)) {
+                player.role = "Pending Client";
+                player.online = false;
+                player.ready = false;
+            }
+            return;
+        }
+    }
+    ReserveLanlineLobbySlot(state, peerName);
+    for (auto& player : state.players) {
+        if (player.displayName == peerName && IsLanlineReservedSlot(player)) {
+            player.role = "Pending Client";
+            player.online = false;
+            player.ready = false;
+            return;
+        }
+    }
+}
+
+void AcceptLanlineLobbySlot(bunker::LanlineSessionState& state, const std::string& peerName) {
+    for (auto& player : state.players) {
+        if (player.displayName == peerName) {
+            player.role = "Client";
+            player.online = true;
+            player.ready = false;
+            return;
+        }
+    }
+    ReserveLanlineLobbySlot(state, peerName);
+    for (auto& player : state.players) {
+        if (player.displayName == peerName) {
+            player.role = "Client";
+            player.online = true;
+            player.ready = false;
+            return;
+        }
+    }
+    UpsertLanlinePlayer(state, peerName, "Client", true, false);
+}
+
+void ClearLanlineLobbyPeerSlots(bunker::LanlineSessionState& state, const std::string& peerName) {
+    int awaitingOrdinal = 2;
+    for (auto& player : state.players) {
+        if ((player.displayName == peerName && (player.role == "Reserved Client" || player.role == "Pending Client" || player.role == "Client")) ||
+            player.role == "Reserved Client" || player.role == "Pending Client") {
+            player.displayName = "LAN slot " + std::to_string(awaitingOrdinal);
+            player.role = "Awaiting";
+            player.online = false;
+            player.ready = false;
+        }
+        if (player.role == "Awaiting") {
+            player.displayName = "LAN slot " + std::to_string(awaitingOrdinal);
+            awaitingOrdinal += 1;
+        }
+    }
+}
+
+std::filesystem::path LauncherExecutableDirectory() {
+    std::array<char, MAX_PATH> buffer{};
+    const DWORD length = GetModuleFileNameA(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+    if (length == 0 || length >= buffer.size()) {
+        return std::filesystem::current_path();
+    }
+    return std::filesystem::path(std::string(buffer.data(), length)).parent_path();
+}
+
+std::filesystem::path FindSiblingExecutable(const char* executableName) {
+    const std::array<std::filesystem::path, 2> candidateRoots = {
+        LauncherExecutableDirectory(),
+        std::filesystem::current_path(),
+    };
+    for (const auto& root : candidateRoots) {
+        const auto candidate = root / executableName;
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+    }
+    return {};
+}
+
+std::filesystem::path SelectedWorldPath(const std::vector<std::filesystem::path>& worlds, int selectedWorldIndex) {
+    if (worlds.empty()) {
+        return bunker::DefaultWorldPath().filename();
+    }
+    return worlds[static_cast<std::size_t>(ClampIndex(selectedWorldIndex, static_cast<int>(worlds.size())))];
+}
+
+void RefreshWorldSelectionFromProfile(const bunker::SessionProfile& sessionProfile,
+    LauncherState& launcherState,
+    const std::vector<std::filesystem::path>& worlds) {
+    if (worlds.empty()) {
+        launcherState.selectedWorldIndex = 0;
+        return;
+    }
+    launcherState.selectedWorldIndex = ClampIndex(launcherState.selectedWorldIndex, static_cast<int>(worlds.size()));
+    for (std::size_t index = 0; index < worlds.size(); ++index) {
+        if (bunker::NormalizeWorldReference(worlds[index].string()) == sessionProfile.selectedWorld) {
+            launcherState.selectedWorldIndex = static_cast<int>(index);
+            return;
+        }
+    }
+}
 
 std::vector<std::string> BuildLanlineRoster(const LauncherState& launcherState, const char* selectedCharacterLabel) {
     std::vector<std::string> roster;
@@ -57,37 +282,225 @@ std::string BuildLanlineSessionId(const LauncherState& launcherState, const std:
             (launcherState.sessionModeIndex == static_cast<int>(bunker::SessionMode::LanHost) ? "host" : "client"));
 }
 
-void SaveLanlineRosterState(const LauncherState& launcherState, const char* selectedCharacterLabel, const std::filesystem::path& selectedWorld) {
-    const std::string worldReference = bunker::NormalizeWorldReference(selectedWorld.string());
+bool IsJoinableLanlineSession(const bunker::LanlineSessionState& session) {
+    if (session.mode != "LAN Host") {
+        return false;
+    }
+    if (!session.connectedPeer.empty()) {
+        return false;
+    }
+    return session.lifecycleStage == "HostLobbyOpen" || session.lifecycleStage == "HostJoinPending" ||
+        session.lifecycleStage == "HostRuntimeActive";
+}
+
+int MaxLanlineSessionSlots(const bunker::LanlineSessionState& session) {
+    if (session.mode != "LAN Host") {
+        return 0;
+    }
+    return std::max(1, static_cast<int>(session.players.size()));
+}
+
+int OccupiedLanlineSessionSlots(const bunker::LanlineSessionState& session) {
+    int occupied = 0;
+    for (const auto& player : session.players) {
+        if (session.mode == "LAN Host" && IsLanlineAwaitingSlot(player)) {
+            continue;
+        }
+        if (player.role != "Awaiting") {
+            occupied += 1;
+        }
+    }
+    return occupied;
+}
+
+int AvailableLanlineSessionSlots(const bunker::LanlineSessionState& session) {
+    return std::max(0, MaxLanlineSessionSlots(session) - OccupiedLanlineSessionSlots(session));
+}
+
+int PendingLanlineSessionSlots(const bunker::LanlineSessionState& session) {
+    int pending = 0;
+    for (const auto& player : session.players) {
+        if (IsLanlinePendingSlot(player)) {
+            pending += 1;
+        }
+    }
+    return pending;
+}
+
+int ReservedLanlineSessionSlots(const bunker::LanlineSessionState& session) {
+    int reserved = 0;
+    for (const auto& player : session.players) {
+        if (IsLanlineReservedSlot(player)) {
+            reserved += 1;
+        }
+    }
+    return reserved;
+}
+
+int AcceptedLanlineSessionSlots(const bunker::LanlineSessionState& session) {
+    int accepted = 0;
+    for (const auto& player : session.players) {
+        if (IsLanlineAcceptedSlot(player)) {
+            accepted += 1;
+        }
+    }
+    return accepted;
+}
+
+int ReadyLanlineSessionSlots(const bunker::LanlineSessionState& session) {
+    int ready = 0;
+    for (const auto& player : session.players) {
+        if (IsLanlineReadyEligibleSlot(player) && player.ready) {
+            ready += 1;
+        }
+    }
+    return ready;
+}
+
+bool IsLanlineMatchStartReady(const bunker::LanlineSessionState& session) {
+    if (session.mode != "LAN Host") {
+        return false;
+    }
+    if (ReservedLanlineSessionSlots(session) > 0 || PendingLanlineSessionSlots(session) > 0) {
+        return false;
+    }
+    int readyEligible = 0;
+    for (const auto& player : session.players) {
+        if (!IsLanlineReadyEligibleSlot(player)) {
+            continue;
+        }
+        readyEligible += 1;
+        if (!player.ready) {
+            return false;
+        }
+    }
+    return readyEligible >= 2;
+}
+
+const char* JoinabilityLabel(const bunker::LanlineSessionState& session) {
+    if (session.mode != "LAN Host") {
+        return "non-host";
+    }
+    if (!session.connectedPeer.empty()) {
+        return "linked";
+    }
+    if (!session.pendingPeer.empty()) {
+        return "pending";
+    }
+    if (session.lifecycleStage == "HostLobbyOpen" || session.lifecycleStage == "HostRuntimeActive") {
+        return "joinable";
+    }
+    return "locked";
+}
+
+std::string JoinabilityReason(const bunker::LanlineSessionState& session) {
+    if (session.mode != "LAN Host") {
+        return "Only host snapshots can be used as a join target.";
+    }
+    if (AvailableLanlineSessionSlots(session) <= 0) {
+        return "This host snapshot has no remaining open slots.";
+    }
+    if (!session.connectedPeer.empty()) {
+        return "This host snapshot already has an active connected peer: " + session.connectedPeer + ".";
+    }
+    if (!session.pendingPeer.empty()) {
+        return "This host snapshot is already processing a pending peer: " + session.pendingPeer + ".";
+    }
+    if (session.lifecycleStage == "HostLobbyOpen" || session.lifecycleStage == "HostRuntimeActive") {
+        return "Host snapshot is ready to accept a client join target.";
+    }
+    return "Host snapshot is not in a join-ready lifecycle stage yet.";
+}
+
+int FindFirstJoinableSessionIndex(const std::vector<bunker::LanlineSessionState>& knownLanlineSessions) {
+    for (int index = 0; index < static_cast<int>(knownLanlineSessions.size()); ++index) {
+        if (IsJoinableLanlineSession(knownLanlineSessions[static_cast<std::size_t>(index)])) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+int CountJoinableSessions(const std::vector<bunker::LanlineSessionState>& knownLanlineSessions) {
+    int count = 0;
+    for (const auto& session : knownLanlineSessions) {
+        if (IsJoinableLanlineSession(session)) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+const bunker::LanlineSessionState* SelectedJoinTarget(const LauncherState& launcherState,
+    const std::vector<bunker::LanlineSessionState>& knownLanlineSessions) {
+    if (launcherState.sessionModeIndex != static_cast<int>(bunker::SessionMode::LanClient)) {
+        return nullptr;
+    }
+    if (launcherState.selectedLanlineSnapshot < 0 ||
+        launcherState.selectedLanlineSnapshot >= static_cast<int>(knownLanlineSessions.size())) {
+        return nullptr;
+    }
+    const auto& candidate = knownLanlineSessions[static_cast<std::size_t>(launcherState.selectedLanlineSnapshot)];
+    return IsJoinableLanlineSession(candidate) ? &candidate : nullptr;
+}
+
+bunker::LanlineSessionState SaveLanlineRosterState(const LauncherState& launcherState,
+    const char* selectedCharacterLabel,
+    const std::filesystem::path& selectedWorld,
+    const bunker::LanlineSessionState* joinTarget) {
+    const std::string worldReference = joinTarget != nullptr
+        ? bunker::NormalizeWorldReference(joinTarget->worldName)
+        : bunker::NormalizeWorldReference(selectedWorld.string());
     bunker::LanlineSessionState state;
-    state.sessionId = BuildLanlineSessionId(launcherState, selectedWorld);
+    state.sessionId = joinTarget != nullptr ? joinTarget->sessionId : BuildLanlineSessionId(launcherState, selectedWorld);
     state.mode = launcherState.sessionModeIndex == static_cast<int>(bunker::SessionMode::Solo)
         ? "Solo"
         : (launcherState.sessionModeIndex == static_cast<int>(bunker::SessionMode::LanHost) ? "LAN Host" : "LAN Client");
+    state.activeActor = selectedCharacterLabel;
     state.worldName = worldReference;
-    state.hostEndpoint = std::string(launcherState.lanHost) + ":" + launcherState.lanPort;
+    state.hostEndpoint = joinTarget != nullptr
+        ? joinTarget->hostEndpoint
+        : (std::string(launcherState.lanHost) + ":" + launcherState.lanPort);
     state.updatedAt.clear();
+    state.pendingPeer.clear();
+    state.connectedPeer.clear();
 
     if (launcherState.sessionModeIndex == static_cast<int>(bunker::SessionMode::Solo)) {
-        state.players.push_back({selectedCharacterLabel, "Local Operator", true});
+        state.lifecycleStage = "LauncherSeeded";
+        state.players.push_back({selectedCharacterLabel, "Local Operator", true, false});
         state.eventLog.push_back(std::string(selectedCharacterLabel) + " entered solo runtime.");
     } else if (launcherState.sessionModeIndex == static_cast<int>(bunker::SessionMode::LanHost)) {
-        state.players.push_back({selectedCharacterLabel, "Host", true});
-        state.players.push_back({"LAN slot 2", "Awaiting", false});
-        state.players.push_back({"LAN slot 3", "Awaiting", false});
-        state.players.push_back({"LAN slot 4", "Awaiting", false});
+        state.lifecycleStage = "HostLobbyOpen";
+        state.players.push_back({selectedCharacterLabel, "Host", true, false});
+        state.players.push_back({"LAN slot 2", "Awaiting", false, false});
+        state.players.push_back({"LAN slot 3", "Awaiting", false, false});
+        state.players.push_back({"LAN slot 4", "Awaiting", false, false});
         state.eventLog.push_back(std::string(selectedCharacterLabel) + " opened a Lanline - optime host session.");
         state.eventLog.push_back(std::string("Host endpoint ready at ") + state.hostEndpoint + ".");
     } else {
-        state.players.push_back({selectedCharacterLabel, "Client", true});
-        state.players.push_back({std::string("Host @ ") + launcherState.lanHost, "Host", true});
-        state.players.push_back({"LAN roster sync", "Pending", false});
+        state.lifecycleStage = joinTarget != nullptr ? "ClientJoinTargetLocked" : "ClientJoinRequested";
+        state.pendingPeer = selectedCharacterLabel;
+        state.connectedPeer = joinTarget != nullptr ? joinTarget->activeActor : std::string{};
+        state.players.push_back({selectedCharacterLabel, "Client", true, false});
+        state.players.push_back({std::string("Host @ ") + launcherState.lanHost, "Host", true, false});
+        state.players.push_back({"LAN roster sync", "Pending", false, false});
         state.eventLog.push_back(std::string(selectedCharacterLabel) + " is attempting to join a Lanline - optime session.");
         state.eventLog.push_back(std::string("Client targeting host ") + state.hostEndpoint + ".");
+        if (joinTarget != nullptr) {
+            state.eventLog.push_back("Join target locked to session " + joinTarget->sessionId + ".");
+            bunker::LanlineSessionState hostSession = *joinTarget;
+            hostSession.pendingPeer = selectedCharacterLabel;
+            hostSession.lifecycleStage = "HostJoinPending";
+            PromoteReservedLanlineLobbySlot(hostSession, selectedCharacterLabel);
+            hostSession.eventLog.push_back(std::string(selectedCharacterLabel) + " requested join through launcher targeting " + hostSession.sessionId + ".");
+            TrimLanlineEventLog(hostSession, 12);
+            SaveLanlineSnapshotAndMaybeActive(hostSession);
+        }
     }
 
     bunker::SaveLanlineSessionState(state);
     bunker::SaveLanlineSessionState(state, bunker::LanlineSessionSnapshotPath(state.sessionId));
+    return state;
 }
 
 void ApplyLanlineSnapshotToLauncher(const bunker::LanlineSessionState& snapshot,
@@ -116,6 +529,88 @@ void ApplyLanlineSnapshotToLauncher(const bunker::LanlineSessionState& snapshot,
     }
 }
 
+void SaveLanlineSnapshotAndMaybeActive(const bunker::LanlineSessionState& snapshot) {
+    bunker::SaveLanlineSessionState(snapshot, bunker::LanlineSessionSnapshotPath(snapshot.sessionId));
+
+    bunker::LanlineSessionState activeSession;
+    if (bunker::LoadLanlineSessionState(activeSession) && activeSession.sessionId == snapshot.sessionId) {
+        bunker::SaveLanlineSessionState(snapshot);
+    }
+}
+
+bool AcceptPendingLanlinePeer(bunker::LanlineSessionState& session) {
+    if (session.pendingPeer.empty() && session.connectedPeer.empty()) {
+        return false;
+    }
+    session.connectedPeer = session.pendingPeer.empty() ? session.connectedPeer : session.pendingPeer;
+    session.pendingPeer.clear();
+    session.lifecycleStage = "HostClientAccepted";
+    AcceptLanlineLobbySlot(session, session.connectedPeer);
+    session.eventLog.push_back("Launcher accepted pending Lanline peer " + session.connectedPeer + ".");
+    TrimLanlineEventLog(session, 12);
+    SaveLanlineSnapshotAndMaybeActive(session);
+    return true;
+}
+
+bool ClearLanlinePeerLink(bunker::LanlineSessionState& session) {
+    if (session.pendingPeer.empty() && session.connectedPeer.empty()) {
+        return false;
+    }
+
+    const std::string clearedPeer = !session.connectedPeer.empty() ? session.connectedPeer : session.pendingPeer;
+    session.pendingPeer.clear();
+    session.connectedPeer.clear();
+    if (!clearedPeer.empty()) {
+        ClearLanlineLobbyPeerSlots(session, clearedPeer);
+    }
+    if (session.mode == "LAN Host") {
+        session.lifecycleStage = "HostLobbyOpen";
+    } else if (session.mode == "LAN Client") {
+        session.lifecycleStage = "ClientJoinRequested";
+    } else {
+        session.lifecycleStage = "LauncherSeeded";
+    }
+    session.eventLog.push_back("Launcher cleared Lanline peer link for " + clearedPeer + ".");
+    TrimLanlineEventLog(session, 12);
+    SaveLanlineSnapshotAndMaybeActive(session);
+    return true;
+}
+
+bool ReserveLanlinePeerSlot(bunker::LanlineSessionState& session, const std::string& peerName) {
+    if (peerName.empty()) {
+        return false;
+    }
+    ReserveLanlineLobbySlot(session, peerName);
+    session.lifecycleStage = "HostSeatReserved";
+    session.eventLog.push_back("Launcher reserved a Lanline slot for " + peerName + ".");
+    TrimLanlineEventLog(session, 12);
+    SaveLanlineSnapshotAndMaybeActive(session);
+    return true;
+}
+
+bool ToggleLanlinePlayerReady(bunker::LanlineSessionState& session, const std::string& displayName) {
+    for (auto& player : session.players) {
+        if (player.displayName == displayName && IsLanlineReadyEligibleSlot(player)) {
+            player.ready = !player.ready;
+            session.eventLog.push_back(displayName + std::string(player.ready ? " is now ready." : " is no longer ready."));
+            TrimLanlineEventLog(session, 12);
+            SaveLanlineSnapshotAndMaybeActive(session);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool SetLanlineMatchStartArmed(bunker::LanlineSessionState& session, bool armed) {
+    session.lifecycleStage = armed ? "MatchStartReady" : "HostLobbyOpen";
+    session.eventLog.push_back(armed
+        ? "Host armed Lanline match start."
+        : "Host returned Lanline session to lobby state.");
+    TrimLanlineEventLog(session, 12);
+    SaveLanlineSnapshotAndMaybeActive(session);
+    return true;
+}
+
 std::vector<std::filesystem::path> DiscoverWorlds() {
     std::vector<std::filesystem::path> worlds;
     const auto worldDir = bunker::WorldDirectory();
@@ -132,13 +627,14 @@ std::vector<std::filesystem::path> DiscoverWorlds() {
     if (worlds.empty()) {
         worlds.push_back(bunker::DefaultWorldPath().filename());
     }
+    std::sort(worlds.begin(), worlds.end());
     return worlds;
 }
 
 bool TryLaunchSiblingExecutable(const char* executableName, std::string& statusText) {
-    const auto candidate = std::filesystem::current_path() / executableName;
+    const auto candidate = FindSiblingExecutable(executableName);
     if (!std::filesystem::exists(candidate)) {
-        statusText = std::string("Executable not found near launcher: ") + candidate.string();
+        statusText = std::string("Executable not found near launcher binary: ") + executableName;
         return false;
     }
 
@@ -231,6 +727,24 @@ std::string BuildLauncherObjectivePreview(const bunker::SessionProfile& sessionP
     return "Water reclaimer online. Shelter 17 now has a stable recovery backbone; expand deeper into the inner spur and wider factory belt.";
 }
 
+const bunker::LanlineDiagnostics& CachedLanlineDiagnostics(const bunker::LanlineSessionState& session, std::string_view runtimeWorldName) {
+    static std::string cachedSessionKey;
+    static std::string cachedWorldName;
+    static double lastProbeTime = -10.0;
+    static bunker::LanlineDiagnostics cachedDiagnostics;
+
+    const std::string probeKey = session.sessionId + "|" + session.updatedAt + "|" + session.hostEndpoint;
+    const std::string normalizedWorldName = bunker::NormalizeWorldReference(runtimeWorldName);
+    const double now = glfwGetTime();
+    if (probeKey != cachedSessionKey || normalizedWorldName != cachedWorldName || (now - lastProbeTime) >= 1.5) {
+        cachedDiagnostics = bunker::ProbeLanlineHost(session, normalizedWorldName);
+        cachedSessionKey = probeKey;
+        cachedWorldName = normalizedWorldName;
+        lastProbeTime = now;
+    }
+    return cachedDiagnostics;
+}
+
 void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char* selectedCharacterLabel, const char* selectedModeLabel, const std::filesystem::path& selectedWorld) {
     const std::string worldReference = bunker::NormalizeWorldReference(selectedWorld.string());
     const auto* worldState = bunker::FindWorldFieldState(sessionProfile, worldReference);
@@ -301,26 +815,54 @@ int main() {
     bunker::NormalizeSessionProfile(sessionProfile);
 
     LauncherState launcherState;
+    bunker::LanlineServicesState lanlineServices = bunker::MakeDefaultLanlineServicesState(std::time(nullptr));
     std::snprintf(launcherState.login, sizeof(launcherState.login), "%s", sessionProfile.account.username.c_str());
     const char* characters[] = {"Scout", "Mechanic", "Commander"};
     const char* sessionModes[] = {"Solo", "LAN Host", "LAN Client"};
-    auto worlds = DiscoverWorlds();
-    std::vector<const char*> worldLabels;
-    worldLabels.reserve(worlds.size());
-    for (const auto& world : worlds) {
-        worldLabels.push_back(world.string().c_str());
-    }
-
-    for (std::size_t index = 0; index < worlds.size(); ++index) {
-        if (bunker::NormalizeWorldReference(worlds[index].string()) == sessionProfile.selectedWorld) {
-            launcherState.selectedWorldIndex = static_cast<int>(index);
-            break;
-        }
-    }
+    RefreshWorldSelectionFromProfile(sessionProfile, launcherState, DiscoverWorlds());
+    launcherState.previousSessionModeIndex = launcherState.sessionModeIndex;
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        const auto worlds = DiscoverWorlds();
+        std::vector<std::string> worldLabelStorage;
+        std::vector<const char*> worldLabels;
+        worldLabelStorage.reserve(worlds.size());
+        worldLabels.reserve(worlds.size());
+        for (const auto& world : worlds) {
+            worldLabelStorage.push_back(world.string());
+        }
+        for (const auto& worldLabel : worldLabelStorage) {
+            worldLabels.push_back(worldLabel.c_str());
+        }
+        launcherState.selectedCharacter = ClampIndex(launcherState.selectedCharacter, IM_ARRAYSIZE(characters));
+        launcherState.sessionModeIndex = ClampIndex(launcherState.sessionModeIndex, IM_ARRAYSIZE(sessionModes));
+        launcherState.selectedWorldIndex = ClampIndex(launcherState.selectedWorldIndex, static_cast<int>(worlds.size()));
         const auto knownLanlineSessions = bunker::DiscoverLanlineSessionSnapshots();
+        launcherState.selectedLanlineSnapshot = knownLanlineSessions.empty()
+            ? -1
+            : ClampIndex(launcherState.selectedLanlineSnapshot, static_cast<int>(knownLanlineSessions.size()));
+        const bool enteredLanClientMode =
+            launcherState.previousSessionModeIndex != static_cast<int>(bunker::SessionMode::LanClient) &&
+            launcherState.sessionModeIndex == static_cast<int>(bunker::SessionMode::LanClient);
+        if (enteredLanClientMode) {
+            const int firstJoinableIndex = FindFirstJoinableSessionIndex(knownLanlineSessions);
+            if (firstJoinableIndex >= 0) {
+                launcherState.selectedLanlineSnapshot = firstJoinableIndex;
+                launcherState.statusText = "Focused first joinable Lanline host snapshot.";
+            } else {
+                launcherState.statusText = "No joinable Lanline host snapshots found yet.";
+            }
+        }
+        launcherState.previousSessionModeIndex = launcherState.sessionModeIndex;
+        bunker::LanlineSessionState activeLanlineSession;
+        const bool hasActiveLanlineSession = bunker::LoadLanlineSessionState(activeLanlineSession);
+        const bunker::LanlineSessionState* servicesSession = hasActiveLanlineSession ? &activeLanlineSession : nullptr;
+        if (launcherState.selectedLanlineSnapshot >= 0 &&
+            launcherState.selectedLanlineSnapshot < static_cast<int>(knownLanlineSessions.size())) {
+            servicesSession = &knownLanlineSessions[static_cast<std::size_t>(launcherState.selectedLanlineSnapshot)];
+        }
+        bunker::SyncLanlineServicesPresence(lanlineServices, servicesSession);
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -352,16 +894,41 @@ int main() {
         ImGui::Text("Session Setup");
         ImGui::Combo("Character", &launcherState.selectedCharacter, characters, IM_ARRAYSIZE(characters));
         ImGui::Combo("Mode", &launcherState.sessionModeIndex, sessionModes, IM_ARRAYSIZE(sessionModes));
+        ImGui::BeginDisabled(worldLabels.empty());
         ImGui::Combo("World", &launcherState.selectedWorldIndex, worldLabels.data(), static_cast<int>(worldLabels.size()));
+        ImGui::EndDisabled();
+        const auto* joinTarget = SelectedJoinTarget(launcherState, knownLanlineSessions);
         ImGui::Text("Profile: %s", profilePath.filename().string().c_str());
         ImGui::Text("Current flow: %s", bunker::ToString(bunker::AppFlowState::Launcher));
+        if (launcherState.sessionModeIndex == static_cast<int>(bunker::SessionMode::LanClient)) {
+            const int joinableCount = CountJoinableSessions(knownLanlineSessions);
+            ImGui::Text("Joinable hosts: %d", joinableCount);
+        }
+        if (joinTarget != nullptr) {
+            ImGui::TextWrapped("Join target: %s | %s | %s",
+                joinTarget->sessionId.c_str(),
+                joinTarget->activeActor.empty() ? "host unresolved" : joinTarget->activeActor.c_str(),
+                joinTarget->hostEndpoint.c_str());
+        } else if (launcherState.sessionModeIndex == static_cast<int>(bunker::SessionMode::LanClient) &&
+            launcherState.selectedLanlineSnapshot >= 0 &&
+            launcherState.selectedLanlineSnapshot < static_cast<int>(knownLanlineSessions.size())) {
+            const auto& selectedSnapshot = knownLanlineSessions[static_cast<std::size_t>(launcherState.selectedLanlineSnapshot)];
+            ImGui::TextWrapped("Selected snapshot is not joinable: %s", JoinabilityReason(selectedSnapshot).c_str());
+            const int firstJoinableIndex = FindFirstJoinableSessionIndex(knownLanlineSessions);
+            if (firstJoinableIndex >= 0 && ImGui::Button("Select First Joinable Host", ImVec2(-1.0f, 0.0f))) {
+                launcherState.selectedLanlineSnapshot = firstJoinableIndex;
+                launcherState.statusText = "Focused first joinable Lanline host snapshot.";
+            }
+        }
 
         if (launcherState.sessionModeIndex != static_cast<int>(bunker::SessionMode::Solo)) {
             ImGui::Separator();
             ImGui::Text("LAN Session");
+            ImGui::BeginDisabled(joinTarget != nullptr);
             ImGui::InputText("Host / IP", launcherState.lanHost, IM_ARRAYSIZE(launcherState.lanHost));
             ImGui::InputText("Port", launcherState.lanPort, IM_ARRAYSIZE(launcherState.lanPort));
-            ImGui::TextDisabled("Discovery/ping sync is architectural for now.");
+            ImGui::EndDisabled();
+            ImGui::TextDisabled("Lanline - optime diagnostics are now live against session snapshots.");
         }
 
         ImGui::Separator();
@@ -383,18 +950,32 @@ int main() {
             sessionProfile,
             characters[launcherState.selectedCharacter],
             sessionModes[launcherState.sessionModeIndex],
-            worlds[static_cast<std::size_t>(launcherState.selectedWorldIndex)]);
+            SelectedWorldPath(worlds, launcherState.selectedWorldIndex));
 
         ImGui::Separator();
         ImGui::Text("Launch Actions");
-        ImGui::BeginDisabled(!launcherState.loggedIn);
+        ImGui::BeginDisabled(!launcherState.loggedIn || worlds.empty());
         if (ImGui::Button("Play BunkerGame", ImVec2(250.0f, 48.0f))) {
+            const auto selectedWorld = SelectedWorldPath(worlds, launcherState.selectedWorldIndex);
             PrepareSelectedCharacter(sessionProfile, launcherState, characters);
             sessionProfile.sessionMode = sessionModes[launcherState.sessionModeIndex];
-            sessionProfile.selectedWorld = bunker::NormalizeWorldReference(worlds[static_cast<std::size_t>(launcherState.selectedWorldIndex)].string());
+            sessionProfile.selectedWorld = joinTarget != nullptr
+                ? bunker::NormalizeWorldReference(joinTarget->worldName)
+                : bunker::NormalizeWorldReference(selectedWorld.string());
             bunker::SaveSessionProfile(sessionProfile, profilePath);
-            SaveLanlineRosterState(launcherState, characters[launcherState.selectedCharacter], worlds[static_cast<std::size_t>(launcherState.selectedWorldIndex)]);
-            if (!bunker::IssueLaunchTicket(sessionProfile.account.accountId, sessionProfile.sessionMode)) {
+            const auto launchSession = SaveLanlineRosterState(
+                launcherState,
+                characters[launcherState.selectedCharacter],
+                selectedWorld,
+                joinTarget);
+            bunker::LaunchTicketInfo launchTicket;
+            launchTicket.accountId = sessionProfile.account.accountId;
+            launchTicket.sessionMode = sessionProfile.sessionMode;
+            launchTicket.characterName = sessionProfile.character.displayName;
+            launchTicket.selectedWorld = sessionProfile.selectedWorld;
+            launchTicket.lanlineSessionId = launchSession.sessionId;
+            launchTicket.hostEndpoint = launchSession.hostEndpoint;
+            if (!bunker::IssueLaunchTicket(launchTicket)) {
                 launcherState.statusText = "Failed to create launcher ticket.";
             } else {
                 TryLaunchSiblingExecutable("BunkerGame.exe", launcherState.statusText);
@@ -402,11 +983,12 @@ int main() {
         }
         ImGui::SameLine();
         if (ImGui::Button("Open BunkerEditor", ImVec2(250.0f, 48.0f))) {
+            const auto selectedWorld = SelectedWorldPath(worlds, launcherState.selectedWorldIndex);
             PrepareSelectedCharacter(sessionProfile, launcherState, characters);
             sessionProfile.sessionMode = sessionModes[launcherState.sessionModeIndex];
-            sessionProfile.selectedWorld = bunker::NormalizeWorldReference(worlds[static_cast<std::size_t>(launcherState.selectedWorldIndex)].string());
+            sessionProfile.selectedWorld = bunker::NormalizeWorldReference(selectedWorld.string());
             bunker::SaveSessionProfile(sessionProfile, profilePath);
-            SaveLanlineRosterState(launcherState, characters[launcherState.selectedCharacter], worlds[static_cast<std::size_t>(launcherState.selectedWorldIndex)]);
+            SaveLanlineRosterState(launcherState, characters[launcherState.selectedCharacter], selectedWorld, nullptr);
             TryLaunchSiblingExecutable("BunkerEditor.exe", launcherState.statusText);
         }
         ImGui::EndDisabled();
@@ -428,7 +1010,7 @@ int main() {
         for (const auto& rosterEntry : BuildLanlineRoster(launcherState, characters[launcherState.selectedCharacter])) {
             ImGui::BulletText("%s", rosterEntry.c_str());
         }
-        ImGui::Text("Session ID: %s", BuildLanlineSessionId(launcherState, worlds[static_cast<std::size_t>(launcherState.selectedWorldIndex)]).c_str());
+        ImGui::Text("Session ID: %s", BuildLanlineSessionId(launcherState, SelectedWorldPath(worlds, launcherState.selectedWorldIndex)).c_str());
         ImGui::TextWrapped("Goal: players should not lose each other inside a LAN session even before full discovery/chat/ping is finished.");
         ImGui::Separator();
         ImGui::Text("Known Lanline Sessions");
@@ -441,14 +1023,110 @@ int main() {
                 if (ImGui::Selectable((session.sessionId + "##lanline_snapshot").c_str(), selected)) {
                     launcherState.selectedLanlineSnapshot = index;
                 }
-                ImGui::TextDisabled("%s | %s | %s", session.mode.c_str(), session.worldName.c_str(), session.hostEndpoint.c_str());
+                ImGui::TextDisabled("%s | %s | %s | slots %d/%d | %s | %s",
+                    session.mode.c_str(),
+                    JoinabilityLabel(session),
+                    session.lifecycleStage.c_str(),
+                    OccupiedLanlineSessionSlots(session),
+                    MaxLanlineSessionSlots(session),
+                    session.worldName.c_str(),
+                    session.hostEndpoint.c_str());
             }
             if (launcherState.selectedLanlineSnapshot >= 0 &&
                 launcherState.selectedLanlineSnapshot < static_cast<int>(knownLanlineSessions.size())) {
                 const auto& selectedSnapshot = knownLanlineSessions[static_cast<std::size_t>(launcherState.selectedLanlineSnapshot)];
+                const auto& diagnostics = CachedLanlineDiagnostics(
+                    selectedSnapshot,
+                    bunker::NormalizeWorldReference(SelectedWorldPath(worlds, launcherState.selectedWorldIndex).string()));
+                ImGui::Separator();
+                ImGui::Text("Selected Session Diagnostics");
+                ImGui::BulletText("Lifecycle: %s", selectedSnapshot.lifecycleStage.c_str());
+                ImGui::BulletText("Joinability: %s", JoinabilityLabel(selectedSnapshot));
+                ImGui::BulletText("Slots: %d / %d occupied",
+                    OccupiedLanlineSessionSlots(selectedSnapshot),
+                    MaxLanlineSessionSlots(selectedSnapshot));
+                ImGui::BulletText("Open slots: %d", AvailableLanlineSessionSlots(selectedSnapshot));
+                ImGui::BulletText("Reserved slots: %d", ReservedLanlineSessionSlots(selectedSnapshot));
+                ImGui::BulletText("Pending slots: %d", PendingLanlineSessionSlots(selectedSnapshot));
+                ImGui::BulletText("Accepted client slots: %d", AcceptedLanlineSessionSlots(selectedSnapshot));
+                ImGui::BulletText("Ready seats: %d", ReadyLanlineSessionSlots(selectedSnapshot));
+                ImGui::BulletText("Active actor: %s", selectedSnapshot.activeActor.c_str());
+                ImGui::BulletText("Pending peer: %s", selectedSnapshot.pendingPeer.empty() ? "none" : selectedSnapshot.pendingPeer.c_str());
+                ImGui::BulletText("Connected peer: %s", selectedSnapshot.connectedPeer.empty() ? "none" : selectedSnapshot.connectedPeer.c_str());
+                ImGui::BulletText("Host: %s", diagnostics.hostReachable ? "reachable" : "offline/unreachable");
+                ImGui::BulletText("Ping: %s",
+                    diagnostics.pingMs >= 0 ? (std::to_string(diagnostics.pingMs) + " ms").c_str() : "n/a");
+                ImGui::BulletText("World match: %s", diagnostics.worldMatch ? "yes" : "no");
+                ImGui::BulletText("Snapshot freshness: %s", diagnostics.snapshotFresh ? "fresh" : "stale");
+                ImGui::BulletText("Presence: %d / %d online", diagnostics.onlinePlayers, diagnostics.totalPlayers);
+                if (!diagnostics.lastError.empty()) {
+                    ImGui::TextDisabled("Details: %s", diagnostics.lastError.c_str());
+                }
+                ImGui::TextWrapped("%s", JoinabilityReason(selectedSnapshot).c_str());
+                ImGui::Separator();
+                ImGui::Text("Lobby Seats");
+                for (std::size_t seatIndex = 0; seatIndex < selectedSnapshot.players.size(); ++seatIndex) {
+                    const auto& playerEntry = selectedSnapshot.players[seatIndex];
+                    ImGui::PushID(static_cast<int>(seatIndex));
+                    ImGui::Text("%s | %s | %s | %s",
+                        playerEntry.displayName.c_str(),
+                        playerEntry.role.c_str(),
+                        LanlineSlotStateLabel(playerEntry),
+                        LanlineReadyLabel(playerEntry));
+                    if (IsLanlineReadyEligibleSlot(playerEntry)) {
+                        ImGui::SameLine();
+                        bunker::LanlineSessionState readySnapshot = selectedSnapshot;
+                        if (ImGui::SmallButton(playerEntry.ready ? "Mark Not Ready" : "Mark Ready")) {
+                            if (ToggleLanlinePlayerReady(readySnapshot, playerEntry.displayName)) {
+                                launcherState.statusText = "Updated Lanline ready state for " + playerEntry.displayName;
+                            }
+                        }
+                    }
+                    ImGui::PopID();
+                }
                 if (ImGui::Button("Use Selected Lanline Session", ImVec2(-1.0f, 32.0f))) {
                     ApplyLanlineSnapshotToLauncher(selectedSnapshot, launcherState, worlds);
                     launcherState.statusText = "Applied Lanline session snapshot: " + selectedSnapshot.sessionId;
+                }
+                if (IsJoinableLanlineSession(selectedSnapshot)) {
+                    if (ImGui::Button("Join Selected Lanline Session", ImVec2(-1.0f, 32.0f))) {
+                        bunker::LanlineSessionState reservedSnapshot = selectedSnapshot;
+                        ReserveLanlinePeerSlot(reservedSnapshot, characters[launcherState.selectedCharacter]);
+                        ApplyLanlineSnapshotToLauncher(selectedSnapshot, launcherState, worlds);
+                        launcherState.sessionModeIndex = static_cast<int>(bunker::SessionMode::LanClient);
+                        launcherState.statusText = "Locked launcher to join target: " + selectedSnapshot.sessionId;
+                    }
+                }
+                bunker::LanlineSessionState armedSnapshot = selectedSnapshot;
+                if (selectedSnapshot.mode == "LAN Host") {
+                    if (IsLanlineMatchStartReady(selectedSnapshot)) {
+                        if (ImGui::Button("Arm Session Start", ImVec2(-1.0f, 32.0f))) {
+                            if (SetLanlineMatchStartArmed(armedSnapshot, true)) {
+                                launcherState.statusText = "Lanline match start armed for session: " + selectedSnapshot.sessionId;
+                            }
+                        }
+                    } else if (selectedSnapshot.lifecycleStage == "MatchStartReady") {
+                        if (ImGui::Button("Return Session To Lobby", ImVec2(-1.0f, 32.0f))) {
+                            if (SetLanlineMatchStartArmed(armedSnapshot, false)) {
+                                launcherState.statusText = "Lanline session returned to lobby state.";
+                            }
+                        }
+                    }
+                }
+                bunker::LanlineSessionState editableSnapshot = selectedSnapshot;
+                if (selectedSnapshot.mode == "LAN Host" && !selectedSnapshot.pendingPeer.empty()) {
+                    if (ImGui::Button("Accept Pending Peer", ImVec2(-1.0f, 32.0f))) {
+                        if (AcceptPendingLanlinePeer(editableSnapshot)) {
+                            launcherState.statusText = "Accepted Lanline peer for session: " + editableSnapshot.sessionId;
+                        }
+                    }
+                }
+                if (!selectedSnapshot.pendingPeer.empty() || !selectedSnapshot.connectedPeer.empty()) {
+                    if (ImGui::Button("Clear Peer Link", ImVec2(-1.0f, 32.0f))) {
+                        if (ClearLanlinePeerLink(editableSnapshot)) {
+                            launcherState.statusText = "Cleared Lanline peer link for session: " + editableSnapshot.sessionId;
+                        }
+                    }
                 }
             }
         }
@@ -457,6 +1135,13 @@ int main() {
         for (const auto& world : worlds) {
             ImGui::BulletText("%s", world.string().c_str());
         }
+        ImGui::Separator();
+        ImGui::Text("Lanline Services");
+        bunker::SessionProfile previewProfile = sessionProfile;
+        previewProfile.selectedWorld = bunker::NormalizeWorldReference(SelectedWorldPath(worlds, launcherState.selectedWorldIndex).string());
+        const auto* previewWorldState = bunker::FindWorldFieldState(previewProfile, previewProfile.selectedWorld);
+        const auto servicesUnlock = bunker::BuildServicesUnlockState(previewProfile, previewWorldState);
+        bunker::DrawLanlineServicesPanel(lanlineServices, servicesUnlock, static_cast<std::int64_t>(std::time(nullptr)));
         ImGui::End();
 
         ImGui::Render();
@@ -467,6 +1152,7 @@ int main() {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+    sessionProfile.selectedWorld = bunker::NormalizeWorldReference(SelectedWorldPath(DiscoverWorlds(), launcherState.selectedWorldIndex).string());
     bunker::SaveSessionProfile(sessionProfile, profilePath);
     glfwDestroyWindow(window);
     glfwTerminate();

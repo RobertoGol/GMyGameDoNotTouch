@@ -40,6 +40,7 @@ endfunction()
 
 add_executable(BunkerGame
     src/GameRuntime.cpp
+    src/LanlineServices.cpp
     src/LanlineSession.cpp
     src/LaunchSession.cpp
     src/main.cpp
@@ -55,6 +56,7 @@ configure_bunker_target(BunkerGame)
 
 add_executable(BunkerLauncher
     Launcher/src/Launcher_Main.cpp
+    src/LanlineServices.cpp
     src/LanlineSession.cpp
     src/LaunchSession.cpp
     ${IMGUI_SRC}

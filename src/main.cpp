@@ -9,14 +9,164 @@
 
 #include "../include/AppPaths.hpp"
 #include "../include/GameRuntime.hpp"
+#include "../include/LanlineSession.hpp"
 #include "../include/LaunchSession.hpp"
 #include "../include/WorldEvents.hpp"
+
+namespace {
+
+void TrimLanlineEventLog(bunker::LanlineSessionState& state, std::size_t maxEntries) {
+    if (state.eventLog.size() > maxEntries) {
+        state.eventLog.erase(state.eventLog.begin(), state.eventLog.begin() + static_cast<std::vector<std::string>::difference_type>(state.eventLog.size() - maxEntries));
+    }
+}
+
+void UpsertLanlinePlayer(bunker::LanlineSessionState& state,
+    const std::string& displayName,
+    const std::string& role,
+    bool online,
+    bool ready = false) {
+    auto playerIt = std::find_if(state.players.begin(), state.players.end(),
+        [&](const bunker::LanlinePlayerEntry& entry) {
+            return entry.displayName == displayName;
+        });
+    if (playerIt == state.players.end()) {
+        state.players.push_back({displayName, role, online, ready});
+        return;
+    }
+    playerIt->role = role;
+    playerIt->online = online;
+    playerIt->ready = ready;
+}
+
+bool IsLanlineAwaitingSlot(const bunker::LanlinePlayerEntry& entry) {
+    return entry.role == "Awaiting";
+}
+
+bool IsLanlineReservedSlot(const bunker::LanlinePlayerEntry& entry) {
+    return entry.role == "Reserved Client";
+}
+
+int FindFirstAwaitingSlotIndex(const bunker::LanlineSessionState& state) {
+    for (int index = 0; index < static_cast<int>(state.players.size()); ++index) {
+        if (IsLanlineAwaitingSlot(state.players[static_cast<std::size_t>(index)])) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+void AcceptLanlineLobbySlot(bunker::LanlineSessionState& state, const std::string& peerName) {
+    for (auto& player : state.players) {
+        if (player.displayName == peerName) {
+            player.role = "Client";
+            player.online = true;
+            player.ready = false;
+            return;
+        }
+    }
+    const int slotIndex = FindFirstAwaitingSlotIndex(state);
+    if (slotIndex >= 0) {
+        auto& slot = state.players[static_cast<std::size_t>(slotIndex)];
+        slot.displayName = peerName;
+        slot.role = "Client";
+        slot.online = true;
+        slot.ready = false;
+        return;
+    }
+    UpsertLanlinePlayer(state, peerName, "Client", true, false);
+}
+
+void SyncLanlineRuntimeLaunchState(const bunker::LaunchTicketInfo& launchTicket, const bunker::SessionProfile& sessionProfile) {
+    bunker::LanlineSessionState state;
+    if (!bunker::LoadLanlineSessionState(state)) {
+        state = bunker::LanlineSessionState{};
+    }
+
+    if (!launchTicket.lanlineSessionId.empty()) {
+        state.sessionId = launchTicket.lanlineSessionId;
+    }
+    if (!launchTicket.sessionMode.empty()) {
+        if (launchTicket.sessionMode == "LAN Host") {
+            state.mode = "LAN Host";
+        } else if (launchTicket.sessionMode == "LAN Client") {
+            state.mode = "LAN Client";
+        } else {
+            state.mode = "Solo";
+        }
+    }
+    if (!sessionProfile.selectedWorld.empty()) {
+        state.worldName = sessionProfile.selectedWorld;
+    } else if (!launchTicket.selectedWorld.empty()) {
+        state.worldName = launchTicket.selectedWorld;
+    }
+    if (!launchTicket.hostEndpoint.empty()) {
+        state.hostEndpoint = launchTicket.hostEndpoint;
+    }
+
+    const std::string actorName = sessionProfile.character.displayName.empty()
+        ? (launchTicket.characterName.empty() ? "Operator" : launchTicket.characterName)
+        : sessionProfile.character.displayName;
+    const std::string actorRole = state.mode == "LAN Host"
+        ? "Host"
+        : (state.mode == "LAN Client" ? "Client" : "Local Operator");
+    state.activeActor = actorName;
+    if (state.mode == "LAN Host") {
+        if (!state.pendingPeer.empty()) {
+            state.connectedPeer = state.pendingPeer;
+            state.pendingPeer.clear();
+            state.lifecycleStage = "HostClientAccepted";
+            AcceptLanlineLobbySlot(state, state.connectedPeer);
+            state.eventLog.push_back("Host accepted Lanline peer " + state.connectedPeer + ".");
+        } else {
+            state.lifecycleStage = "HostRuntimeActive";
+        }
+    } else if (state.mode == "LAN Client") {
+        if (state.pendingPeer.empty()) {
+            state.pendingPeer = actorName;
+        }
+        if (state.connectedPeer.empty()) {
+            state.connectedPeer = "Host";
+        }
+        for (auto& player : state.players) {
+            if (player.displayName == actorName && IsLanlineReservedSlot(player)) {
+                player.role = "Pending Client";
+                break;
+            }
+        }
+        state.lifecycleStage = "ClientRuntimeJoined";
+    } else {
+        state.pendingPeer.clear();
+        state.connectedPeer.clear();
+        state.lifecycleStage = "RuntimeActive";
+    }
+    bool currentReady = false;
+    for (const auto& player : state.players) {
+        if (player.displayName == actorName) {
+            currentReady = player.ready;
+            break;
+        }
+    }
+    UpsertLanlinePlayer(state, actorName, actorRole, true, currentReady);
+
+    state.eventLog.push_back(actorName + " entered BunkerGame runtime via launcher ticket.");
+    state.eventLog.push_back("Lanline lifecycle advanced to " + state.lifecycleStage + ".");
+    if (!state.worldName.empty()) {
+        state.eventLog.push_back("Runtime world confirmed at " + state.worldName + ".");
+    }
+    TrimLanlineEventLog(state, 12);
+    bunker::SaveLanlineSessionState(state);
+    bunker::SaveLanlineSessionState(state, bunker::LanlineSessionSnapshotPath(state.sessionId));
+}
+
+}  // namespace
 
 int main() {
     bunker::EnsureProjectDirectories();
 
+    bunker::LaunchTicketInfo launchTicket;
     std::string launchFailureReason;
-    if (!bunker::ConsumeLaunchTicket(launchFailureReason)) {
+    if (!bunker::ConsumeLaunchTicket(launchTicket, launchFailureReason)) {
         if (!glfwInit()) {
             return -1;
         }
@@ -77,6 +227,7 @@ int main() {
         bunker::SaveSessionProfile(sessionProfile, profilePath);
     }
     bunker::NormalizeSessionProfile(sessionProfile);
+    SyncLanlineRuntimeLaunchState(launchTicket, sessionProfile);
 
     bunker::StaticEraser staticEraser;
     staticEraser.Load(sessionProfile.selectedWorld);

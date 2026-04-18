@@ -18,19 +18,23 @@ long long CurrentUnixSeconds() {
 
 }  // namespace
 
-bool IssueLaunchTicket(const std::string& accountId, const std::string& sessionMode) {
+bool IssueLaunchTicket(const LaunchTicketInfo& ticketInfo) {
     std::ofstream out(LaunchTicketPath(), std::ios::trunc);
     if (!out.is_open()) {
         return false;
     }
 
     out << "issued_at=" << CurrentUnixSeconds() << '\n';
-    out << "account_id=" << accountId << '\n';
-    out << "session_mode=" << sessionMode << '\n';
+    out << "account_id=" << ticketInfo.accountId << '\n';
+    out << "session_mode=" << ticketInfo.sessionMode << '\n';
+    out << "character_name=" << ticketInfo.characterName << '\n';
+    out << "selected_world=" << ticketInfo.selectedWorld << '\n';
+    out << "lanline_session_id=" << ticketInfo.lanlineSessionId << '\n';
+    out << "host_endpoint=" << ticketInfo.hostEndpoint << '\n';
     return static_cast<bool>(out);
 }
 
-bool ConsumeLaunchTicket(std::string& failureReason) {
+bool ConsumeLaunchTicket(LaunchTicketInfo& ticketInfo, std::string& failureReason) {
     const auto ticketPath = LaunchTicketPath();
     std::ifstream in(ticketPath);
     if (!in.is_open()) {
@@ -49,6 +53,18 @@ bool ConsumeLaunchTicket(std::string& failureReason) {
         const std::string value = line.substr(pos + 1);
         if (key == "issued_at") {
             issuedAt = std::atoll(value.c_str());
+        } else if (key == "account_id") {
+            ticketInfo.accountId = value;
+        } else if (key == "session_mode") {
+            ticketInfo.sessionMode = value;
+        } else if (key == "character_name") {
+            ticketInfo.characterName = value;
+        } else if (key == "selected_world") {
+            ticketInfo.selectedWorld = value;
+        } else if (key == "lanline_session_id") {
+            ticketInfo.lanlineSessionId = value;
+        } else if (key == "host_endpoint") {
+            ticketInfo.hostEndpoint = value;
         }
     }
     in.close();
