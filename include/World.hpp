@@ -28,6 +28,12 @@ public:
     void GeneratePrototypeZone();
     void EnsureStarterInfrastructure();
     bool HasObject(const std::string& registryId) const;
+    const MapObject* FindObjectByScriptTag(const std::string& scriptTag) const;
+    MapObject* FindObjectByScriptTag(const std::string& scriptTag);
+    const MapObject* FindObjectByLinkTarget(const std::string& linkTarget) const;
+    MapObject* FindObjectByLinkTarget(const std::string& linkTarget);
+    bool HasScriptTag(const std::string& scriptTag) const;
+    bool HasLinkTarget(const std::string& linkTarget) const;
     bool IsStarterScenarioWorld() const;
     const MapObject* FindNearestInteractive(float x, float y, float radius) const;
 };

@@ -781,6 +781,86 @@ void World::GeneratePrototypeZone() {
     });
 
     AddObject({
+        "[%services_0001]",
+        "Shelter 17 Lanline Service Hub",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        66.8f,
+        -6.8f,
+        0.0f,
+        2.6f,
+        1.8f,
+        2.8f,
+        100.0f,
+        false,
+        true,
+        false,
+        {},
+        "lanline_service_hub",
+        "shelter17_services"
+    });
+
+    AddObject({
+        "[%fey_0001]",
+        "Shelter 17 Fey Ring Gate",
+        InteractionType::Terminal,
+        ObjectCategory::Landmark,
+        69.4f,
+        -5.6f,
+        0.0f,
+        3.0f,
+        2.0f,
+        3.2f,
+        100.0f,
+        false,
+        true,
+        false,
+        {},
+        "fey_ring",
+        "intercity_ring"
+    });
+
+    AddObject({
+        "[%med_0001]",
+        "Field Medical Relay",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        63.5f,
+        -8.7f,
+        0.0f,
+        1.8f,
+        1.4f,
+        2.1f,
+        100.0f,
+        false,
+        true,
+        false,
+        {},
+        "medical_support",
+        "field_medical"
+    });
+
+    AddObject({
+        "[%tankservice_0001]",
+        "BT-72 Tank Service Anchor",
+        InteractionType::Workshop,
+        ObjectCategory::Hangar,
+        61.7f,
+        -9.5f,
+        0.0f,
+        3.4f,
+        2.2f,
+        3.0f,
+        100.0f,
+        false,
+        true,
+        false,
+        {},
+        "tank_service",
+        "bt72_service"
+    });
+
+    AddObject({
         "[%debrief_0001]",
         "Shelter 17 Debrief Console",
         InteractionType::Terminal,
@@ -1258,12 +1338,140 @@ void World::EnsureStarterInfrastructure() {
             "inner_spur_water"
         });
     }
+    if (IsStarterScenarioWorld() && !HasObject("[%services_0001]")) {
+        AddObject({
+            "[%services_0001]",
+            "Shelter 17 Lanline Service Hub",
+            InteractionType::Terminal,
+            ObjectCategory::Terminal,
+            66.8f,
+            -6.8f,
+            0.0f,
+            2.6f,
+            1.8f,
+            2.8f,
+            100.0f,
+            false,
+            true,
+            false,
+            {},
+            "lanline_service_hub",
+            "shelter17_services"
+        });
+    }
+    if (IsStarterScenarioWorld() && !HasObject("[%fey_0001]")) {
+        AddObject({
+            "[%fey_0001]",
+            "Shelter 17 Fey Ring Gate",
+            InteractionType::Terminal,
+            ObjectCategory::Landmark,
+            69.4f,
+            -5.6f,
+            0.0f,
+            3.0f,
+            2.0f,
+            3.2f,
+            100.0f,
+            false,
+            true,
+            false,
+            {},
+            "fey_ring",
+            "intercity_ring"
+        });
+    }
+    if (IsStarterScenarioWorld() && !HasObject("[%med_0001]")) {
+        AddObject({
+            "[%med_0001]",
+            "Field Medical Relay",
+            InteractionType::Terminal,
+            ObjectCategory::Terminal,
+            63.5f,
+            -8.7f,
+            0.0f,
+            1.8f,
+            1.4f,
+            2.1f,
+            100.0f,
+            false,
+            true,
+            false,
+            {},
+            "medical_support",
+            "field_medical"
+        });
+    }
+    if (IsStarterScenarioWorld() && !HasObject("[%tankservice_0001]")) {
+        AddObject({
+            "[%tankservice_0001]",
+            "BT-72 Tank Service Anchor",
+            InteractionType::Workshop,
+            ObjectCategory::Hangar,
+            61.7f,
+            -9.5f,
+            0.0f,
+            3.4f,
+            2.2f,
+            3.0f,
+            100.0f,
+            false,
+            true,
+            false,
+            {},
+            "tank_service",
+            "bt72_service"
+        });
+    }
 }
 
 bool World::HasObject(const std::string& registryId) const {
     return std::any_of(objects.begin(), objects.end(), [&](const MapObject& object) {
         return object.registryId == registryId;
     });
+}
+
+const MapObject* World::FindObjectByScriptTag(const std::string& scriptTag) const {
+    for (const auto& object : objects) {
+        if (object.scriptTag == scriptTag) {
+            return &object;
+        }
+    }
+    return nullptr;
+}
+
+MapObject* World::FindObjectByScriptTag(const std::string& scriptTag) {
+    for (auto& object : objects) {
+        if (object.scriptTag == scriptTag) {
+            return &object;
+        }
+    }
+    return nullptr;
+}
+
+const MapObject* World::FindObjectByLinkTarget(const std::string& linkTarget) const {
+    for (const auto& object : objects) {
+        if (object.linkTarget == linkTarget) {
+            return &object;
+        }
+    }
+    return nullptr;
+}
+
+MapObject* World::FindObjectByLinkTarget(const std::string& linkTarget) {
+    for (auto& object : objects) {
+        if (object.linkTarget == linkTarget) {
+            return &object;
+        }
+    }
+    return nullptr;
+}
+
+bool World::HasScriptTag(const std::string& scriptTag) const {
+    return FindObjectByScriptTag(scriptTag) != nullptr;
+}
+
+bool World::HasLinkTarget(const std::string& linkTarget) const {
+    return FindObjectByLinkTarget(linkTarget) != nullptr;
 }
 
 bool World::IsStarterScenarioWorld() const {

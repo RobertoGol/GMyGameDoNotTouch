@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <ctime>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -143,6 +144,10 @@ struct SupportOrder {
     std::string itemLabel;
     std::string destinationNode = "Shelter 17";
     SupportOrderState state = SupportOrderState::Draft;
+    StoreCurrency paymentCurrency = StoreCurrency::InGame;
+    int priceCredits = 0;
+    std::int64_t createdAtUnix = 0;
+    std::int64_t etaUnix = 0;
 };
 
 struct FeyGateCycle {
@@ -169,6 +174,14 @@ struct LanlineServicesState {
     std::vector<SupportCatalogItem> supportCatalog{};
     std::vector<SupportOrder> supportOrders{};
     std::vector<FeyGateCycle> feyGateCycles{};
+    std::vector<std::string> ownedCosmetics{};
+};
+
+struct LanlineServicesSave {
+    int relayCredits = 420;
+    VoiceSettings voice{};
+    std::vector<SupportOrder> supportOrders{};
+    std::vector<std::string> ownedCosmetics{};
 };
 
 ServicesUnlockState BuildServicesUnlockState(const SessionProfile& profile, const WorldFieldState* worldState);
@@ -176,12 +189,17 @@ bool IsAllowedSupportItem(const SupportCatalogItem& item);
 std::vector<SupportCatalogItem> MakeDefaultSupportCatalog();
 std::vector<FeyGateCycle> MakeDefaultFeyGateCycles(std::int64_t nowUnix);
 LanlineServicesState MakeDefaultLanlineServicesState(std::int64_t nowUnix);
+LanlineServicesState MakeLanlineServicesStateFromSave(const LanlineServicesSave& save, std::int64_t nowUnix);
+LanlineServicesSave BuildLanlineServicesSave(const LanlineServicesState& state);
 ServiceHubMode ResolveLanlineServicesMode(const ServicesUnlockState& unlockState, const LanlineSessionState* sessionState);
 void SyncLanlineServicesPresence(LanlineServicesState& state,
     const LanlineSessionState* sessionState,
     const ServicesUnlockState& unlockState);
 FeyGateState ComputeFeyGateState(const FeyGateCycle& gate, std::int64_t nowUnix);
 std::string FormatCountdown(std::int64_t secondsRemaining);
+std::filesystem::path DefaultLanlineServicesSavePath();
+bool SaveLanlineServicesSave(const LanlineServicesSave& save, const std::filesystem::path& path);
+bool LoadLanlineServicesSave(const std::filesystem::path& path, LanlineServicesSave& outSave);
 void DrawLanlineServicesPanel(LanlineServicesState& state,
     const ServicesUnlockState& unlockState,
     std::int64_t nowUnix);

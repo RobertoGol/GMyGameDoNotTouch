@@ -6,7 +6,7 @@
 - `Этап 2. Каркас архитектуры` — в работе
 - `Этап 3. Вертикальный срез старта` — начат
 - `Этап 4. Базовый боевой и RPG-слой` — в работе
-- `Этап 7. Launcher v1` — почти завершен
+- `Этап 7. Launcher v1` — завершен
 
 Последняя подтвержденная сборка:
 
@@ -76,6 +76,15 @@
 - `2026-04-13`
 - `build_verify_ninja`
 - после добавления раннего `food/toxin SPECIAL` слоя через field ration снова успешно собран `BunkerGame`
+- `2026-04-19`
+- `build_verify_ninja`
+- после доведения `Lanline Services` persistence/world glue снова успешно собраны `BunkerGame`, `BunkerLauncher`, `BunkerEditor`
+- `2026-04-19`
+- `build_verify_ninja_fresh`
+- после launcher hardening (`PrepareSelectedCharacter`, controlled refresh worlds/snapshots, WinAPI launch соседних exe) снова успешно собраны `BunkerGame`, `BunkerLauncher`, `BunkerEditor`
+- `2026-04-19`
+- `build_verify_ninja_fresh`
+- после cleanup root build-артефактов (`CMakeCache.txt`) и подтверждения схемы `main + fallback` сборка осталась рабочей без новых rebuild-ошибок
 - `2026-04-13`
 - `build_verify_ninja`
 - после добавления раннего `Pip-Pad AR / Echo Trace` authored-behavior снова успешно собраны `BunkerGame` и `BunkerEditor`
@@ -355,9 +364,10 @@
 - `LanlineSession` snapshots теперь пишутся в отдельный каталог, а launcher показывает список известных LAN-сессий как ранний browser/discovery слой
 - launcher теперь умеет применять выбранный `Lanline - optime` snapshot к текущим полям host/world/mode, а не только пассивно его показывать
 - browser/discovery для `Lanline - optime` вынесен в общий session-модуль и теперь виден и в launcher, и внутри runtime
-- `launcher stability pass` tightened: выбор мира больше не держится на временных `c_str()`, списки миров и `Lanline` snapshots перечитываются вживую, индексы клампятся безопасно, а запуск `BunkerGame.exe` / `BunkerEditor.exe` теперь привязан к директории самого `BunkerLauncher`, а не к случайному `current_path`
+- `launcher stability pass` tightened: выбор мира больше не держится на временных `c_str()`, списки миров и `Lanline` snapshots теперь обновляются через controlled refresh, индексы клампятся безопасно, `PrepareSelectedCharacter(...)` больше не падает на битом профиле, а запуск `BunkerGame.exe` / `BunkerEditor.exe` идет через WinAPI из директории самого `BunkerLauncher`
 - `Lanline - optime` diagnostics tightened: launcher и runtime теперь показывают live reachability probe, ping-like timing, world match, snapshot freshness и visible session presence поверх уже существующего snapshot/session-state слоя
 - добавлен ранний shell-слой `Lanline Services`: общий UI/state для launcher и runtime с relay friends/chat/voice settings, support request catalog без combat advantages и ранним `Fey Ring Network` schedule board
+- `Lanline Services` доведен до рабочего glue-слоя: появился `LanlineServicesSave` с launcher/runtime save-load, unlock переведен на `tower_sync` через `WorldFieldState`, в мир добавлены authored anchors `lanline_service_hub / fey_ring / medical_support / tank_service`, а `BunkerEditor` получил новые presets и validation warnings под этот сервисный контур
 - session lifecycle для `Lanline - optime` стал явнее: launcher/runtime теперь пишут `lifecycleStage`, `activeActor`, `pendingPeer` и `connectedPeer`, так что host/client flow уже читается как ранний handshake, а не как безликий roster dump
 - launcher-side handshake control tightened: выбранный `Lanline` snapshot теперь можно не только применить, но и host-side принять pending peer или сбросить peer link прямо из `BunkerLauncher`
 - client join-target flow tightened: выбранный host snapshot теперь может быть явно залочен как `Join Selected Lanline Session`, launcher seed'ит join request в target session, а runtime больше не теряет host-side peer link при входе клиента
@@ -369,12 +379,14 @@
 - slot-state machine tightened further: `Lanline` host lobby теперь проходит через `Open -> Reserved Client -> Pending Client -> Client`, где выбор join-target может заранее резервировать место в launcher, а реальный запуск клиента продвигает seat дальше по lifecycle
 - pre-match layer added on top of `Lanline` lobby seats: launcher умеет переключать `ready/not ready` для host/client seats и armed state для host session, а runtime `NET` tab теперь показывает ready-состояние и ловит ready-transitions как отдельные session notifications
 - `Lanline Services` support catalog tightened to dual-currency rules: operational requests (`materials / utility / tank service / medical`) остаются на `Recovery Scrip`, а `skins / cosmetics` вынесены в отдельный `Symbolic Support` поток без боевого преимущества и с жесткой catalog validation
+- `Lanline Services` support UI split completed: launcher/runtime теперь показывают отдельные витрины `Supplies / Tank Service / Medical / Cosmetics` вместо одной смешанной support-вкладки, так что operational и cosmetic flows больше не конфликтуют в одном списке
+- `Fey Ring Network` schedule board tightened further: launcher/runtime теперь разделяют `inter-city` и `inter-server` окна, явно показывают load/stability/next-cycle и держат locked-state messaging по unlock-tier вместо плоского списка маршрутов
+- relay chat moved beyond local echo: `Transmit` в `Lanline Services` теперь пишет в `LanlineSessionState` и snapshot mirror, так что active session chat реально переносится между launcher/runtime через общий session-state слой, хотя voice transport все еще остается shell-only
+- voice layer moved beyond pure settings shell: launcher/runtime теперь могут relay'ить voice activity / push-to-talk state / peak level через `LanlineSessionState`, хотя raw audio transport все еще остается future work
 
 Что еще осталось:
 
-- реальный LAN browser/discovery
-- ping
-- полноценная сетевая диагностика
+- cleanup build-артефактов и сборочной дисциплины репозитория
 
 ## 8. Editor v1
 
@@ -479,7 +491,13 @@
 
 ## 11. LAN foundation
 
-Статус: `НЕ НАЧАТ ПО-СУЩЕСТВУ`
+Статус: `В РАБОТЕ`
+
+Текущий чекпойнт:
+
+- `Lanline - optime` уже живет не только в launcher UX: runtime читает active session-state и snapshot discovery, показывает host/join metadata, world match, snapshot freshness и player/session presence
+- runtime notifications теперь ловят вход/выход игроков, смену lobby-role/ready-state, session world drift, relay chat mirror и voice presence поверх общего `LanlineSessionState`
+- launcher и runtime читают один и тот же session/snapshot слой, так что `Lanline - optime` уже ведет себя как ранняя игровая session-модель, а не как launcher-only seed
 
 ## 12. После вертикального среза
 
@@ -513,6 +531,7 @@
 - уточнены player-facing тексты вокруг debrief и launcher summary: `Shelter 17` теперь показывает recovery-state не только в runtime objective, но и в session flow / debrief messaging
 - mission log `Recovery Backbone` summary больше не опирается на голый recovery index threshold и теперь показывает backbone-state по реальным узлам `Relay Substation + Service Bay + Water Reclaimer`
 - runtime `Lanline - optime` panel выровнен с launcher-side flow: игра теперь явно показывает, что session state seeded из `BunkerLauncher`, дает runtime/world match и показывает richer snapshot metadata
+- runtime `Lanline - optime` known-session browser tightened further: `BunkerGame` теперь показывает по discovered snapshots те же joinability/slots/host reachability/ping/snapshot freshness/presence метаданные, что и launcher, вместо голого списка session ids
 - editor production path tightened: `Save As` и `Set Active` теперь валидируют target world, prefab placement сразу фокусирует новый объект, prefab/concept outputs показывают реальные пути, а concept backlog получил remove/clear flow
 - editor/runtime sync tightened further: workspace reload теперь синхронизирует export target с active runtime world, direct runtime export явно пишет в active world, а `Export Save-As And Set Active` закрывает типовой authoring handoff одним действием
 - early `DATA / archive` flow tightened: стартовый archive terminal больше не дает повторный fake-sync прогресс, а `Pip-Pad DATA` теперь сводит archive/relay/debrief state и reconstruction progress в явный player-facing summary

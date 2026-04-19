@@ -2,6 +2,21 @@
 
 namespace bunker {
 
+bool HasLanlineServicesObjective(const SessionProfile& profile) {
+    const auto* state = FindWorldFieldState(profile, profile.selectedWorld);
+    return state != nullptr && state->towerSyncRecovered;
+}
+
+bool HasFeyRingIntercityObjective(const SessionProfile& profile) {
+    const auto* state = FindWorldFieldState(profile, profile.selectedWorld);
+    return state != nullptr && state->feyRingIntercityUnlocked;
+}
+
+bool HasFeyRingInterserverObjective(const SessionProfile& profile) {
+    const auto* state = FindWorldFieldState(profile, profile.selectedWorld);
+    return state != nullptr && state->feyRingInterserverUnlocked;
+}
+
 std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEraser& staticEraser) {
     const auto* worldState = FindWorldFieldState(profile, profile.selectedWorld);
     const bool railOperational = worldState != nullptr && IsRailFreightOperational(profile, *worldState);

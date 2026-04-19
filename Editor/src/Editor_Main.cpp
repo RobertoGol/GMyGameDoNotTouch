@@ -512,6 +512,66 @@ void ApplyWaterReclaimerDescriptorPreset(bunker::MapObject& object,
     CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
 }
 
+void ApplyServiceHubDescriptorPreset(bunker::MapObject& object,
+                                     char* scriptTagBuffer,
+                                     std::size_t scriptTagSize,
+                                     char* linkTargetBuffer,
+                                     std::size_t linkTargetSize) {
+    object.interaction = bunker::InteractionType::Terminal;
+    object.category = bunker::ObjectCategory::Terminal;
+    object.scriptTag = "lanline_service_hub";
+    if (object.linkTarget.empty()) {
+        object.linkTarget = "shelter17_services";
+    }
+    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
+    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+}
+
+void ApplyFeyRingDescriptorPreset(bunker::MapObject& object,
+                                  char* scriptTagBuffer,
+                                  std::size_t scriptTagSize,
+                                  char* linkTargetBuffer,
+                                  std::size_t linkTargetSize) {
+    object.interaction = bunker::InteractionType::Terminal;
+    object.category = bunker::ObjectCategory::Landmark;
+    object.scriptTag = "fey_ring";
+    if (object.linkTarget.empty()) {
+        object.linkTarget = "intercity_ring";
+    }
+    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
+    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+}
+
+void ApplyMedicalSupportDescriptorPreset(bunker::MapObject& object,
+                                         char* scriptTagBuffer,
+                                         std::size_t scriptTagSize,
+                                         char* linkTargetBuffer,
+                                         std::size_t linkTargetSize) {
+    object.interaction = bunker::InteractionType::Terminal;
+    object.category = bunker::ObjectCategory::Terminal;
+    object.scriptTag = "medical_support";
+    if (object.linkTarget.empty()) {
+        object.linkTarget = "field_medical";
+    }
+    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
+    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+}
+
+void ApplyTankServiceDescriptorPreset(bunker::MapObject& object,
+                                      char* scriptTagBuffer,
+                                      std::size_t scriptTagSize,
+                                      char* linkTargetBuffer,
+                                      std::size_t linkTargetSize) {
+    object.interaction = bunker::InteractionType::Workshop;
+    object.category = bunker::ObjectCategory::Hangar;
+    object.scriptTag = "tank_service";
+    if (object.linkTarget.empty()) {
+        object.linkTarget = "bt72_service";
+    }
+    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
+    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+}
+
 void ApplyRemoteLinkDescriptorPreset(bunker::MapObject& object,
                                      char* scriptTagBuffer,
                                      std::size_t scriptTagSize,
@@ -1495,6 +1555,46 @@ int main() {
                     IM_ARRAYSIZE(selectedLinkTargetEdit));
                 statusText = "Applied remote link descriptor preset.";
             }
+            ImGui::SameLine();
+            if (ImGui::Button("Service Hub", ImVec2(150.0f, 0.0f))) {
+                ApplyServiceHubDescriptorPreset(
+                    selectedObject,
+                    selectedScriptTagEdit,
+                    IM_ARRAYSIZE(selectedScriptTagEdit),
+                    selectedLinkTargetEdit,
+                    IM_ARRAYSIZE(selectedLinkTargetEdit));
+                statusText = "Applied Lanline service hub descriptor preset.";
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Fey Ring", ImVec2(150.0f, 0.0f))) {
+                ApplyFeyRingDescriptorPreset(
+                    selectedObject,
+                    selectedScriptTagEdit,
+                    IM_ARRAYSIZE(selectedScriptTagEdit),
+                    selectedLinkTargetEdit,
+                    IM_ARRAYSIZE(selectedLinkTargetEdit));
+                statusText = "Applied Fey Ring descriptor preset.";
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Medical Support", ImVec2(150.0f, 0.0f))) {
+                ApplyMedicalSupportDescriptorPreset(
+                    selectedObject,
+                    selectedScriptTagEdit,
+                    IM_ARRAYSIZE(selectedScriptTagEdit),
+                    selectedLinkTargetEdit,
+                    IM_ARRAYSIZE(selectedLinkTargetEdit));
+                statusText = "Applied medical support descriptor preset.";
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Tank Service", ImVec2(150.0f, 0.0f))) {
+                ApplyTankServiceDescriptorPreset(
+                    selectedObject,
+                    selectedScriptTagEdit,
+                    IM_ARRAYSIZE(selectedScriptTagEdit),
+                    selectedLinkTargetEdit,
+                    IM_ARRAYSIZE(selectedLinkTargetEdit));
+                statusText = "Applied tank service descriptor preset.";
+            }
             if (ImGui::Button("Echo Trace", ImVec2(150.0f, 0.0f))) {
                 ApplyEchoDescriptorPreset(
                     selectedObject,
@@ -1524,6 +1624,17 @@ int main() {
             }
             if (ImGui::InputFloat("Edit X", &selectedObject.x, 0.5f, 2.0f, "%.1f") && snapToGrid) {
                 selectedObject.x = std::round(selectedObject.x);
+            }
+            if (selectedObject.scriptTag == "fey_ring" && selectedObject.linkTarget.empty()) {
+                ImGui::TextColored(ImVec4(0.92f, 0.65f, 0.24f, 1.0f), "Warning: fey_ring needs a linkTarget.");
+            }
+            if (selectedObject.scriptTag == "lanline_service_hub" && !editorWorld.HasScriptTag("tower_sync")) {
+                ImGui::TextColored(ImVec4(0.92f, 0.65f, 0.24f, 1.0f), "Warning: lanline_service_hub is authored without tower_sync in this world.");
+            }
+            if (selectedObject.scriptTag == "tank_service" &&
+                !editorWorld.HasScriptTag("service_bay") &&
+                selectedObject.category != bunker::ObjectCategory::Hangar) {
+                ImGui::TextColored(ImVec4(0.92f, 0.65f, 0.24f, 1.0f), "Warning: tank_service should live with service_bay coverage or a hangar-category anchor.");
             }
             if (ImGui::InputFloat("Edit Y", &selectedObject.y, 0.5f, 2.0f, "%.1f") && snapToGrid) {
                 selectedObject.y = std::round(selectedObject.y);

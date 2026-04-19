@@ -51,10 +51,21 @@ struct SpecialistEntry {
     bool awakened = false;
 };
 
+struct LanlineServicesProfile {
+    int relayCredits = 420;
+    std::vector<std::string> ownedCosmetics{};
+    std::vector<std::string> pendingSupportOrders{};
+    bool serviceHubKnown = false;
+    bool cosmeticsShopSeen = false;
+};
+
 struct WorldFieldState {
     std::string worldName;
     float etherErosion = 0.0f;
     float infrastructureDecay = 0.0f;
+    bool towerSyncRecovered = false;
+    bool localRelayAvailable = false;
+    bool regionalGridOnline = false;
     bool caravanRouteActive = false;
     bool droneStationsActive = false;
     bool tradeNetworkActive = false;
@@ -93,6 +104,10 @@ struct WorldFieldState {
     int serviceCyclesCompleted = 0;
     bool waterReclaimerActive = false;
     int waterCyclesCompleted = 0;
+    bool feyRingIntercityUnlocked = false;
+    bool feyRingInterserverUnlocked = false;
+    int relayCreditsEarned = 0;
+    int relayCreditsSpent = 0;
 };
 
 struct SkillAwakeningProgress {
@@ -298,6 +313,7 @@ struct SessionProfile {
     std::vector<VehicleProfile> ownedVehicles{};
     std::vector<SpecialistEntry> rescuedSpecialists{};
     std::vector<WorldFieldState> worldFieldStates{};
+    LanlineServicesProfile lanlineServices{};
     ShelterDoctrine doctrine = ShelterDoctrine::Balanced;
     std::string selectedWorld = "start_zone.bwld";
     std::string sessionMode = "Solo";
@@ -371,6 +387,9 @@ inline const WorldFieldState* FindWorldFieldState(const SessionProfile& profile,
 inline void MergeWorldFieldState(WorldFieldState& target, const WorldFieldState& source) {
     target.etherErosion = std::max(target.etherErosion, source.etherErosion);
     target.infrastructureDecay = std::max(target.infrastructureDecay, source.infrastructureDecay);
+    target.towerSyncRecovered = target.towerSyncRecovered || source.towerSyncRecovered;
+    target.localRelayAvailable = target.localRelayAvailable || source.localRelayAvailable;
+    target.regionalGridOnline = target.regionalGridOnline || source.regionalGridOnline;
     target.caravanRouteActive = target.caravanRouteActive || source.caravanRouteActive;
     target.droneStationsActive = target.droneStationsActive || source.droneStationsActive;
     target.tradeNetworkActive = target.tradeNetworkActive || source.tradeNetworkActive;
@@ -409,6 +428,10 @@ inline void MergeWorldFieldState(WorldFieldState& target, const WorldFieldState&
     target.serviceCyclesCompleted = std::max(target.serviceCyclesCompleted, source.serviceCyclesCompleted);
     target.waterReclaimerActive = target.waterReclaimerActive || source.waterReclaimerActive;
     target.waterCyclesCompleted = std::max(target.waterCyclesCompleted, source.waterCyclesCompleted);
+    target.feyRingIntercityUnlocked = target.feyRingIntercityUnlocked || source.feyRingIntercityUnlocked;
+    target.feyRingInterserverUnlocked = target.feyRingInterserverUnlocked || source.feyRingInterserverUnlocked;
+    target.relayCreditsEarned = std::max(target.relayCreditsEarned, source.relayCreditsEarned);
+    target.relayCreditsSpent = std::max(target.relayCreditsSpent, source.relayCreditsSpent);
 }
 
 inline bool HasCollectedTapeId(const SessionProfile& profile, const std::string& tapeId) {
@@ -421,6 +444,11 @@ inline bool HasCollectedTapeId(const SessionProfile& profile, const std::string&
 }
 
 inline bool HasRegionalGridOnline(const SessionProfile& profile) {
+    if (const auto* state = FindWorldFieldState(profile, profile.selectedWorld); state != nullptr) {
+        if (state->regionalGridOnline || state->towerSyncRecovered) {
+            return true;
+        }
+    }
     return profile.story.relayRecovered || HasCollectedTapeId(profile, "[%term_0001]_tower");
 }
 
@@ -621,6 +649,19 @@ inline SessionProfile MakeDefaultSessionProfile() {
     return profile;
 }
 
+inline void NormalizeWorldFieldState(WorldFieldState& state) {
+    if (!state.towerSyncRecovered) {
+        state.localRelayAvailable = false;
+        state.feyRingIntercityUnlocked = false;
+        state.feyRingInterserverUnlocked = false;
+    }
+
+    if (!state.regionalGridOnline && !state.towerSyncRecovered) {
+        state.feyRingIntercityUnlocked = false;
+        state.feyRingInterserverUnlocked = false;
+    }
+}
+
 inline void NormalizeSessionProfile(SessionProfile& profile) {
     profile.selectedWorld = NormalizeWorldReference(profile.selectedWorld);
     profile.fieldCheckpointWorld = profile.fieldCheckpointWorld.empty()
@@ -632,6 +673,7 @@ inline void NormalizeSessionProfile(SessionProfile& profile) {
     for (const auto& worldState : profile.worldFieldStates) {
         WorldFieldState normalizedState = worldState;
         normalizedState.worldName = NormalizeWorldReference(worldState.worldName);
+        NormalizeWorldFieldState(normalizedState);
         auto existing = std::find_if(normalizedWorldStates.begin(), normalizedWorldStates.end(),
             [&](const WorldFieldState& state) { return state.worldName == normalizedState.worldName; });
         if (existing != normalizedWorldStates.end()) {
@@ -641,6 +683,16 @@ inline void NormalizeSessionProfile(SessionProfile& profile) {
         }
     }
     profile.worldFieldStates = std::move(normalizedWorldStates);
+    profile.lanlineServices.relayCredits = std::max(0, profile.lanlineServices.relayCredits);
+    if (const auto* selectedWorldState = FindWorldFieldState(profile, profile.selectedWorld); selectedWorldState != nullptr) {
+        if (!selectedWorldState->towerSyncRecovered) {
+            profile.lanlineServices.serviceHubKnown = false;
+        }
+    }
+    std::sort(profile.lanlineServices.ownedCosmetics.begin(), profile.lanlineServices.ownedCosmetics.end());
+    profile.lanlineServices.ownedCosmetics.erase(
+        std::unique(profile.lanlineServices.ownedCosmetics.begin(), profile.lanlineServices.ownedCosmetics.end()),
+        profile.lanlineServices.ownedCosmetics.end());
 
     if (profile.account.accountId.empty() || !RegistryId::IsValid(profile.account.accountId)) profile.account.accountId = "#10001";
     if (profile.character.characterId.empty() || !RegistryId::IsValid(profile.character.characterId)) profile.character.characterId = "@20001";
@@ -699,6 +751,9 @@ inline bool SaveSessionProfile(const SessionProfile& profile, const fs::path& fi
         << ",L:" << profile.character.special.luck << '\n';
     out << "session_mode=" << profile.sessionMode << '\n';
     out << "selected_world=" << profile.selectedWorld << '\n';
+    out << "lanline_relay_credits=" << profile.lanlineServices.relayCredits << '\n';
+    out << "lanline_service_hub_known=" << (profile.lanlineServices.serviceHubKnown ? 1 : 0) << '\n';
+    out << "lanline_cosmetics_seen=" << (profile.lanlineServices.cosmeticsShopSeen ? 1 : 0) << '\n';
     out << "shelter_doctrine=" << static_cast<int>(profile.doctrine) << '\n';
     out << "field_checkpoint_known=" << (profile.fieldCheckpointKnown ? 1 : 0) << '\n';
     out << "field_checkpoint_x=" << profile.fieldCheckpointX << '\n';
@@ -753,10 +808,19 @@ inline bool SaveSessionProfile(const SessionProfile& profile, const fs::path& fi
     for (const auto& specialist : profile.rescuedSpecialists) {
         out << "specialist=" << specialist.specialistId << ',' << specialist.displayName << ',' << specialist.role << ',' << specialist.assignment << ',' << (specialist.awakened ? 1 : 0) << '\n';
     }
+    for (const auto& cosmeticId : profile.lanlineServices.ownedCosmetics) {
+        out << "lanline_cosmetic=" << cosmeticId << '\n';
+    }
+    for (const auto& orderId : profile.lanlineServices.pendingSupportOrders) {
+        out << "lanline_pending_order=" << orderId << '\n';
+    }
     for (const auto& worldState : profile.worldFieldStates) {
         out << "world_field=" << worldState.worldName << ','
             << worldState.etherErosion << ','
             << worldState.infrastructureDecay << ','
+            << (worldState.towerSyncRecovered ? 1 : 0) << ','
+            << (worldState.localRelayAvailable ? 1 : 0) << ','
+            << (worldState.regionalGridOnline ? 1 : 0) << ','
             << (worldState.caravanRouteActive ? 1 : 0) << ','
             << (worldState.droneStationsActive ? 1 : 0) << ','
             << (worldState.tradeNetworkActive ? 1 : 0) << ','
@@ -794,7 +858,11 @@ inline bool SaveSessionProfile(const SessionProfile& profile, const fs::path& fi
             << (worldState.serviceBayActive ? 1 : 0) << ','
             << worldState.serviceCyclesCompleted << ','
             << (worldState.waterReclaimerActive ? 1 : 0) << ','
-            << worldState.waterCyclesCompleted << '\n';
+            << worldState.waterCyclesCompleted << ','
+            << (worldState.feyRingIntercityUnlocked ? 1 : 0) << ','
+            << (worldState.feyRingInterserverUnlocked ? 1 : 0) << ','
+            << worldState.relayCreditsEarned << ','
+            << worldState.relayCreditsSpent << '\n';
     }
     out << "active_tape_index=" << profile.character.activeTapeIndex << '\n';
     for (const auto& vehicle : profile.ownedVehicles) {
@@ -843,6 +911,9 @@ inline bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProf
         else if (key == "carry_weight") outProfile.character.carryWeight = std::stof(value);
         else if (key == "session_mode") outProfile.sessionMode = value;
         else if (key == "selected_world") outProfile.selectedWorld = value;
+        else if (key == "lanline_relay_credits") outProfile.lanlineServices.relayCredits = std::stoi(value);
+        else if (key == "lanline_service_hub_known") outProfile.lanlineServices.serviceHubKnown = (std::stoi(value) != 0);
+        else if (key == "lanline_cosmetics_seen") outProfile.lanlineServices.cosmeticsShopSeen = (std::stoi(value) != 0);
         else if (key == "shelter_doctrine") outProfile.doctrine = static_cast<ShelterDoctrine>(std::stoi(value));
         else if (key == "field_checkpoint_known") outProfile.fieldCheckpointKnown = (std::stoi(value) != 0);
         else if (key == "field_checkpoint_x") outProfile.fieldCheckpointX = std::stof(value);
@@ -945,6 +1016,10 @@ inline bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProf
                 }
                 outProfile.rescuedSpecialists.push_back(specialist);
             }
+        } else if (key == "lanline_cosmetic") {
+            outProfile.lanlineServices.ownedCosmetics.push_back(value);
+        } else if (key == "lanline_pending_order") {
+            outProfile.lanlineServices.pendingSupportOrders.push_back(value);
         } else if (key == "world_field") {
             const auto first = value.find(',');
             const auto second = value.find(',', first == std::string::npos ? first : first + 1);
@@ -956,49 +1031,18 @@ inline bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProf
                 const auto seventh = value.find(',', sixth == std::string::npos ? sixth : sixth + 1);
                 const auto eighth = value.find(',', seventh == std::string::npos ? seventh : seventh + 1);
                 if (third == std::string::npos) {
-                    outProfile.worldFieldStates.push_back({
-                        value.substr(0, first),
-                        std::stof(value.substr(first + 1, second - first - 1)),
-                        0.0f,
-                        false,
-                        false,
-                        false,
-                        false,
-                        false,
-                        false,
-                        false,
-                        0.0f,
-                        false,
-                        0,
-                        0,
-                        0,
-                        std::stoi(value.substr(second + 1)),
-                        0,
-                        0,
-                        0,
-                        0});
+                    WorldFieldState state{};
+                    state.worldName = value.substr(0, first);
+                    state.etherErosion = std::stof(value.substr(first + 1, second - first - 1));
+                    state.purgeCycles = std::stoi(value.substr(second + 1));
+                    outProfile.worldFieldStates.push_back(state);
                 } else if (fourth == std::string::npos) {
-                    outProfile.worldFieldStates.push_back({
-                        value.substr(0, first),
-                        std::stof(value.substr(first + 1, second - first - 1)),
-                        std::stof(value.substr(second + 1, third - second - 1)),
-                        false,
-                        false,
-                        false,
-                        false,
-                        false,
-                        false,
-                        false,
-                        0.0f,
-                        false,
-                        0,
-                        0,
-                        0,
-                        std::stoi(value.substr(third + 1)),
-                        0,
-                        0,
-                        0,
-                        0});
+                    WorldFieldState state{};
+                    state.worldName = value.substr(0, first);
+                    state.etherErosion = std::stof(value.substr(first + 1, second - first - 1));
+                    state.infrastructureDecay = std::stof(value.substr(second + 1, third - second - 1));
+                    state.purgeCycles = std::stoi(value.substr(third + 1));
+                    outProfile.worldFieldStates.push_back(state);
                 } else {
                     WorldFieldState state{};
                     state.worldName = value.substr(0, first);
@@ -1020,18 +1064,23 @@ inline bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProf
                         }
 
                         if (parts.size() >= 8) {
-                            state.caravanRouteActive = std::stoi(parts[3]) != 0;
-                            state.droneStationsActive = std::stoi(parts[4]) != 0;
-                            state.tradeNetworkActive = std::stoi(parts[5]) != 0;
+                            const bool hasLanlineFields = parts.size() >= 37;
+                            const std::size_t baseOffset = hasLanlineFields ? 6 : 3;
+                            state.towerSyncRecovered = hasLanlineFields ? (std::stoi(parts[3]) != 0) : false;
+                            state.localRelayAvailable = hasLanlineFields ? (std::stoi(parts[4]) != 0) : false;
+                            state.regionalGridOnline = hasLanlineFields ? (std::stoi(parts[5]) != 0) : false;
+                            state.caravanRouteActive = std::stoi(parts[baseOffset]) != 0;
+                            state.droneStationsActive = std::stoi(parts[baseOffset + 1]) != 0;
+                            state.tradeNetworkActive = std::stoi(parts[baseOffset + 2]) != 0;
 
-                            if (parts.size() >= 20) {
-                                state.railFreightActive = std::stoi(parts[6]) != 0;
-                                state.orbitalUplinkActive = std::stoi(parts[7]) != 0;
-                                state.railFortressActive = std::stoi(parts[8]) != 0;
-                                state.recoveryFabricatorActive = std::stoi(parts[9]) != 0;
-                                const bool hasGateToken = parts.size() >= 21;
-                                state.industrialGateUnlocked = hasGateToken ? (std::stoi(parts[10]) != 0) : false;
-                                const std::size_t baseIndex = hasGateToken ? 11 : 10;
+                            if (parts.size() >= baseOffset + 27) {
+                                state.railFreightActive = std::stoi(parts[baseOffset + 3]) != 0;
+                                state.orbitalUplinkActive = std::stoi(parts[baseOffset + 4]) != 0;
+                                state.railFortressActive = std::stoi(parts[baseOffset + 5]) != 0;
+                                state.recoveryFabricatorActive = std::stoi(parts[baseOffset + 6]) != 0;
+                                const bool hasGateToken = parts.size() >= baseOffset + 28;
+                                state.industrialGateUnlocked = hasGateToken ? (std::stoi(parts[baseOffset + 7]) != 0) : false;
+                                const std::size_t baseIndex = hasGateToken ? (baseOffset + 8) : (baseOffset + 7);
                                 state.routeContamination = std::stof(parts[baseIndex]);
                                 state.routeOverrun = std::stoi(parts[baseIndex + 1]) != 0;
                                 state.caravanRunsCompleted = std::stoi(parts[baseIndex + 2]);
@@ -1062,20 +1111,24 @@ inline bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProf
                                 state.serviceCyclesCompleted = parts.size() >= baseIndex + 28 ? std::stoi(parts[baseIndex + 27]) : 0;
                                 state.waterReclaimerActive = parts.size() >= baseIndex + 29 ? (std::stoi(parts[baseIndex + 28]) != 0) : false;
                                 state.waterCyclesCompleted = parts.size() >= baseIndex + 30 ? std::stoi(parts[baseIndex + 29]) : 0;
+                                state.feyRingIntercityUnlocked = parts.size() >= baseIndex + 31 ? (std::stoi(parts[baseIndex + 30]) != 0) : false;
+                                state.feyRingInterserverUnlocked = parts.size() >= baseIndex + 32 ? (std::stoi(parts[baseIndex + 31]) != 0) : false;
+                                state.relayCreditsEarned = parts.size() >= baseIndex + 33 ? std::stoi(parts[baseIndex + 32]) : 0;
+                                state.relayCreditsSpent = parts.size() >= baseIndex + 34 ? std::stoi(parts[baseIndex + 33]) : 0;
                             } else if (parts.size() >= 18) {
-                                state.railFreightActive = std::stoi(parts[6]) != 0;
-                                state.orbitalUplinkActive = std::stoi(parts[7]) != 0;
-                                state.railFortressActive = std::stoi(parts[8]) != 0;
+                                state.railFreightActive = std::stoi(parts[baseOffset + 3]) != 0;
+                                state.orbitalUplinkActive = std::stoi(parts[baseOffset + 4]) != 0;
+                                state.railFortressActive = std::stoi(parts[baseOffset + 5]) != 0;
                                 state.industrialGateUnlocked = false;
-                                state.routeContamination = std::stof(parts[9]);
-                                state.routeOverrun = std::stoi(parts[10]) != 0;
-                                state.caravanRunsCompleted = std::stoi(parts[11]);
-                                state.droneRunsCompleted = std::stoi(parts[12]);
-                                state.tradeCyclesCompleted = std::stoi(parts[13]);
-                                state.purgeCycles = std::stoi(parts[14]);
-                                state.railRunsCompleted = std::stoi(parts[15]);
-                                state.orbitalScansCompleted = std::stoi(parts[16]);
-                                state.railFortressDeployments = std::stoi(parts[17]);
+                                state.routeContamination = std::stof(parts[baseOffset + 6]);
+                                state.routeOverrun = std::stoi(parts[baseOffset + 7]) != 0;
+                                state.caravanRunsCompleted = std::stoi(parts[baseOffset + 8]);
+                                state.droneRunsCompleted = std::stoi(parts[baseOffset + 9]);
+                                state.tradeCyclesCompleted = std::stoi(parts[baseOffset + 10]);
+                                state.purgeCycles = std::stoi(parts[baseOffset + 11]);
+                                state.railRunsCompleted = std::stoi(parts[baseOffset + 12]);
+                                state.orbitalScansCompleted = std::stoi(parts[baseOffset + 13]);
+                                state.railFortressDeployments = std::stoi(parts[baseOffset + 14]);
                                 state.fabricatorCyclesCompleted = 0;
                                 state.recoveryMilestonesClaimed = 0;
                                 state.campFortificationLevel = 0;

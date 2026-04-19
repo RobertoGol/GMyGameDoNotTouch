@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <string>
 
 #include "MapObject.hpp"
@@ -73,6 +74,46 @@ inline void ServiceSelectedVehicle(SessionProfile& profile, HangarState& hangar)
     vehicle.durability = 100.0f;
     vehicle.fuelOrCharge = 100.0f;
     hangar.lastAction = "Serviced vehicle: " + vehicle.displayName;
+}
+
+inline bool ConsumeTankServiceKit(SessionProfile& profile,
+                                  const std::string& itemId,
+                                  TankModuleSlotType subsystem,
+                                  std::string* eventText = nullptr) {
+    for (auto& entry : profile.character.inventory) {
+        if (entry.itemId != itemId || entry.count <= 0) {
+            continue;
+        }
+
+        --entry.count;
+        auto& damage = profile.partnerTank.damage;
+        switch (subsystem) {
+            case TankModuleSlotType::Turret:
+                damage.turret = std::min(100.0f, damage.turret + 30.0f);
+                break;
+            case TankModuleSlotType::PowerCore:
+                damage.powerCore = std::min(100.0f, damage.powerCore + 30.0f);
+                break;
+            case TankModuleSlotType::Sensor:
+                damage.sensors = std::min(100.0f, damage.sensors + 30.0f);
+                break;
+            case TankModuleSlotType::Bucket:
+                damage.bucket = std::min(100.0f, damage.bucket + 30.0f);
+                break;
+            default:
+                damage.hull = std::min(100.0f, damage.hull + 20.0f);
+                break;
+        }
+        if (eventText != nullptr) {
+            *eventText = "Tank service kit applied successfully.";
+        }
+        return true;
+    }
+
+    if (eventText != nullptr) {
+        *eventText = "Required tank service kit not found.";
+    }
+    return false;
 }
 
 }  // namespace bunker

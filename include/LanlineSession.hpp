@@ -14,6 +14,22 @@ struct LanlinePlayerEntry {
     bool ready = false;
 };
 
+struct LanlineRelayMessage {
+    std::string channelId = "session";
+    std::string author = "Operator";
+    std::string timeLabel = "now";
+    std::string body{};
+};
+
+struct LanlineVoicePresence {
+    std::string handle = "Operator";
+    bool voiceEnabled = true;
+    bool pushToTalk = true;
+    bool speaking = false;
+    float peakLevel = 0.0f;
+    std::string timeLabel = "now";
+};
+
 struct LanlineSessionState {
     std::string sessionId = "lanline_local";
     std::string mode = "Solo";
@@ -25,6 +41,8 @@ struct LanlineSessionState {
     std::string pendingPeer;
     std::string connectedPeer;
     std::vector<LanlinePlayerEntry> players{};
+    std::vector<LanlineRelayMessage> relayMessages{};
+    std::vector<LanlineVoicePresence> voicePresence{};
     std::vector<std::string> eventLog{};
 };
 

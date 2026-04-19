@@ -39,4 +39,44 @@ bool AwardExperience(SessionProfile& profile, int amount, std::string* eventText
     return leveledUp;
 }
 
+int CurrentRelayCredits(const SessionProfile& profile) {
+    return std::max(0, profile.lanlineServices.relayCredits);
+}
+
+bool AwardRelayCredits(SessionProfile& profile, int amount, std::string* eventText) {
+    if (amount <= 0) {
+        return false;
+    }
+    auto* worldState = FindWorldFieldState(profile, profile.selectedWorld, true);
+    profile.lanlineServices.relayCredits += amount;
+    if (worldState != nullptr) {
+        worldState->relayCreditsEarned += amount;
+    }
+    if (eventText != nullptr) {
+        *eventText = "Relay credits banked.";
+    }
+    return true;
+}
+
+bool SpendRelayCredits(SessionProfile& profile, int amount, std::string* eventText) {
+    if (amount <= 0) {
+        return false;
+    }
+    if (profile.lanlineServices.relayCredits < amount) {
+        if (eventText != nullptr) {
+            *eventText = "Not enough relay credits.";
+        }
+        return false;
+    }
+    auto* worldState = FindWorldFieldState(profile, profile.selectedWorld, true);
+    profile.lanlineServices.relayCredits -= amount;
+    if (worldState != nullptr) {
+        worldState->relayCreditsSpent += amount;
+    }
+    if (eventText != nullptr) {
+        *eventText = "Relay credits spent.";
+    }
+    return true;
+}
+
 }  // namespace bunker

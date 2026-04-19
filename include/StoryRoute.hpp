@@ -15,5 +15,8 @@ struct StoryRouteEntry {
 
 std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEraser& staticEraser);
 std::vector<StoryRouteEntry> BuildStarterRoute(const SessionProfile& profile, const StaticEraser& staticEraser);
+bool HasLanlineServicesObjective(const SessionProfile& profile);
+bool HasFeyRingIntercityObjective(const SessionProfile& profile);
+bool HasFeyRingInterserverObjective(const SessionProfile& profile);
 
 }  // namespace bunker

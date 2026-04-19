@@ -65,9 +65,18 @@ struct GameState {
     float fieldWorkbenchCooldown = 0.0f;
     float workshopServiceCooldown = 0.0f;
     float heavyCarryTimer = 0.0f;
+    float supportRefreshTimer = 0.0f;
+    float feyRingRefreshTimer = 0.0f;
     float tankThermalLoad = 12.0f;
+    bool lanlineServicesVisible = false;
+    bool feyRingScheduleVisible = false;
+    bool supportTerminalNearby = false;
+    bool tankServiceNearby = false;
+    bool medicalSupportNearby = false;
     WeatherAnomaly weather = WeatherAnomaly::Clear;
     std::string lastEvent = "Cryostasis breached. Reorient and recover the bunker route.";
+    std::string lastSupportAction = "No support activity.";
+    std::string lastPortalAction = "No portal updates.";
     std::vector<std::string> radioMessages = {
         "SYSTEM: 'Cryo wing unstable. Search for your missing Pip-Pad.'",
         "ARCHIVE: 'One reactor core is missing. One body is missing. Records are incomplete.'",

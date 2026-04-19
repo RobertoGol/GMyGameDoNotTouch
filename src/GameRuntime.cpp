@@ -1,4 +1,5 @@
 #include "../include/GameRuntime.hpp"
+#include "../include/HangarSystem.hpp"
 #include "../include/LanlineServices.hpp"
 #include "../include/LanlineSession.hpp"
 
@@ -191,6 +192,18 @@ std::string DescribeTerminalSync(const MapObject& object) {
     if (object.scriptTag == "water_reclaimer") {
         return "Water reclaimer notes mirrored. Frontier recovery reserves updated.";
     }
+    if (object.scriptTag == "lanline_service_hub") {
+        return "Lanline service hub mirrored. Shelter 17 service catalog now resolves through authored relay infrastructure.";
+    }
+    if (object.scriptTag == "fey_ring") {
+        return "Fey Ring route mirrored. Transit windows registered to the relay map.";
+    }
+    if (object.scriptTag == "medical_support") {
+        return "Medical support node mirrored. Field treatment requests now route through authored relay anchors.";
+    }
+    if (object.scriptTag == "tank_service") {
+        return "Tank service anchor mirrored. BT-72 maintenance route updated.";
+    }
     if (object.scriptTag == "specialist_cryo") {
         return "Cryo specialist registry mirrored. Shelter staffing ledger updated.";
     }
@@ -328,6 +341,49 @@ const std::vector<std::string>& UpdateLanlineRuntimeNotifications(const LanlineS
         }
     }
 
+    if (session->relayMessages.size() > previousSession.relayMessages.size()) {
+        for (std::size_t index = previousSession.relayMessages.size(); index < session->relayMessages.size(); ++index) {
+            const auto& relayMessage = session->relayMessages[index];
+            pushNotification("Relay chat [" + relayMessage.channelId + "] " +
+                relayMessage.author + ": " + relayMessage.body);
+        }
+    }
+
+    for (const auto& voicePresence : session->voicePresence) {
+        const auto previousVoiceIt = std::find_if(
+            previousSession.voicePresence.begin(),
+            previousSession.voicePresence.end(),
+            [&](const LanlineVoicePresence& previousVoice) {
+                return previousVoice.handle == voicePresence.handle;
+            });
+        if (previousVoiceIt == previousSession.voicePresence.end()) {
+            pushNotification("Voice presence linked: " + voicePresence.handle + ".");
+            continue;
+        }
+        if (voicePresence.speaking != previousVoiceIt->speaking) {
+            pushNotification(voicePresence.handle +
+                (voicePresence.speaking ? " started voice transmission." : " stopped voice transmission."));
+        }
+        const bool peakChangedMeaningfully =
+            std::abs(voicePresence.peakLevel - previousVoiceIt->peakLevel) >= 0.2f;
+        if (voicePresence.speaking && peakChangedMeaningfully) {
+            pushNotification(voicePresence.handle + " voice peak now at " +
+                std::to_string(static_cast<int>(voicePresence.peakLevel * 100.0f)) + "%.");
+        }
+    }
+
+    for (const auto& previousVoice : previousSession.voicePresence) {
+        const auto currentVoiceIt = std::find_if(
+            session->voicePresence.begin(),
+            session->voicePresence.end(),
+            [&](const LanlineVoicePresence& currentVoice) {
+                return currentVoice.handle == previousVoice.handle;
+            });
+        if (currentVoiceIt == session->voicePresence.end()) {
+            pushNotification("Voice presence expired: " + previousVoice.handle + ".");
+        }
+    }
+
     previousSession = *session;
     hadPreviousSession = true;
     return notifications;
@@ -443,6 +499,58 @@ int ReadyLanlineSessionSlots(const LanlineSessionState& session) {
     return ready;
 }
 
+int MaxLanlineSessionSlots(const LanlineSessionState& session) {
+    if (session.mode != "LAN Host") {
+        return 0;
+    }
+    return std::max(1, static_cast<int>(session.players.size()));
+}
+
+int OccupiedLanlineSessionSlots(const LanlineSessionState& session) {
+    int occupied = 0;
+    for (const auto& player : session.players) {
+        if (session.mode == "LAN Host" && IsLanlineAwaitingSlot(player)) {
+            continue;
+        }
+        if (player.role != "Awaiting") {
+            occupied += 1;
+        }
+    }
+    return occupied;
+}
+
+int AvailableLanlineSessionSlots(const LanlineSessionState& session) {
+    return std::max(0, MaxLanlineSessionSlots(session) - OccupiedLanlineSessionSlots(session));
+}
+
+bool IsJoinableLanlineSession(const LanlineSessionState& session) {
+    if (session.mode != "LAN Host") {
+        return false;
+    }
+    if (!session.connectedPeer.empty()) {
+        return false;
+    }
+    return session.lifecycleStage == "HostLobbyOpen" ||
+        session.lifecycleStage == "HostJoinPending" ||
+        session.lifecycleStage == "HostRuntimeActive";
+}
+
+const char* JoinabilityLabel(const LanlineSessionState& session) {
+    if (session.mode != "LAN Host") {
+        return "non-host";
+    }
+    if (!session.connectedPeer.empty()) {
+        return "linked";
+    }
+    if (!session.pendingPeer.empty()) {
+        return "pending";
+    }
+    if (session.lifecycleStage == "HostLobbyOpen" || session.lifecycleStage == "HostRuntimeActive") {
+        return "joinable";
+    }
+    return "locked";
+}
+
 bool RecoveryFabricatorReady(const SessionProfile& profile, const WorldFieldState& worldState) {
     return IsRecoveryFabricatorOperational(profile, worldState);
 }
@@ -520,6 +628,21 @@ MapObject* FindObjectByRegistryId(World& world, const std::string& registryId) {
         }
     }
     return nullptr;
+}
+
+bool IsNearTaggedObject(const World& world,
+    float playerX,
+    float playerY,
+    const std::string& scriptTag,
+    float maxDistance) {
+    const auto* object = world.FindObjectByScriptTag(scriptTag);
+    if (object == nullptr) {
+        return false;
+    }
+
+    const float dx = object->x - playerX;
+    const float dy = object->y - playerY;
+    return (dx * dx + dy * dy) <= (maxDistance * maxDistance);
 }
 
 float DistanceSqToTankAnchor(const SessionProfile& profile, const MapObject& object) {
@@ -878,6 +1001,10 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         AwardExperience(profile, 20, &progressionEvent);
         const std::string routeTarget = nearest->linkTarget.empty() ? "regional_grid" : nearest->linkTarget;
         const int purged = static_cast<int>(std::round(ReduceSelectedWorldEtherErosion(profile, 14.0f, true)));
+        auto& worldState = EnsureSelectedWorldFieldState(profile);
+        worldState.towerSyncRecovered = true;
+        worldState.localRelayAvailable = true;
+        worldState.regionalGridOnline = true;
         gameState.lastEvent = "Tower relay synchronized. Regional scan and power route tagged -> " + routeTarget + ". " + progressionEvent;
         if (purged > 0) {
             gameState.lastEvent += " Ether bloom purged by " + std::to_string(purged) + "%.";
@@ -1285,6 +1412,82 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
             worldState.waterReclaimerActive = false;
             gameState.lastEvent = "Inner spur water reclaimer returned to standby.";
         }
+        return true;
+    }
+
+    if (nearest->scriptTag == "lanline_service_hub") {
+        auto& worldState = EnsureSelectedWorldFieldState(profile);
+        if (!worldState.towerSyncRecovered) {
+            gameState.lastEvent = "Lanline Services stay locked until the first tower is synchronized.";
+            return true;
+        }
+        worldState.localRelayAvailable = true;
+        profile.lanlineServices.serviceHubKnown = true;
+        gameState.lanlineServicesVisible = true;
+        gameState.lastSupportAction = nearest->linkTarget.empty()
+            ? "Lanline service hub handshake complete."
+            : "Lanline service hub handshake complete -> " + nearest->linkTarget + ".";
+        gameState.lastEvent = gameState.lastSupportAction;
+        return true;
+    }
+
+    if (nearest->scriptTag == "tank_service") {
+        auto& worldState = EnsureSelectedWorldFieldState(profile);
+        if (!worldState.serviceBayActive) {
+            gameState.lastEvent = "Tank service anchor is authored, but the service bay backbone is still offline.";
+            return true;
+        }
+        std::string repairEvent;
+        if (ConsumeTankServiceKit(profile, "track_patch", TankModuleSlotType::Turret, &repairEvent) ||
+            ConsumeTankServiceKit(profile, "servo_patch", TankModuleSlotType::Turret, &repairEvent) ||
+            ConsumeTankServiceKit(profile, "engine_seal", TankModuleSlotType::PowerCore, &repairEvent) ||
+            ConsumeTankServiceKit(profile, "lens_pack", TankModuleSlotType::Sensor, &repairEvent)) {
+            gameState.lastSupportAction = "BT-72 serviced through authored tank service anchor.";
+            gameState.lastEvent = gameState.lastSupportAction + " " + repairEvent;
+        } else {
+            gameState.lastEvent = "Tank service anchor ready. Bring a compatible service kit from Lanline support or field salvage.";
+        }
+        return true;
+    }
+
+    if (nearest->scriptTag == "medical_support") {
+        auto& worldState = EnsureSelectedWorldFieldState(profile);
+        if (!worldState.localRelayAvailable) {
+            gameState.lastEvent = "Medical support terminal has no relay authorization yet. Sync the tower first.";
+            return true;
+        }
+        profile.character.hp = std::min(profile.character.maxHp, profile.character.hp + 35.0f);
+        profile.character.mp = std::min(profile.character.maxMp, profile.character.mp + 15.0f);
+        gameState.lastSupportAction = "Medical support request completed.";
+        gameState.lastEvent = "Medical support anchor stabilized the operator and replenished field reserves.";
+        return true;
+    }
+
+    if (nearest->scriptTag == "fey_ring") {
+        auto& worldState = EnsureSelectedWorldFieldState(profile);
+        if (!worldState.localRelayAvailable) {
+            gameState.lastEvent = "Fey Ring routing remains sealed until Lanline Services come online through tower sync.";
+            return true;
+        }
+        if (!worldState.feyRingIntercityUnlocked) {
+            worldState.feyRingIntercityUnlocked = true;
+            gameState.feyRingScheduleVisible = true;
+            gameState.lastPortalAction = nearest->linkTarget.empty()
+                ? "Intercity Fey Ring schedule mirrored."
+                : "Intercity Fey Ring schedule mirrored -> " + nearest->linkTarget + ".";
+            gameState.lastEvent = gameState.lastPortalAction;
+            return true;
+        }
+        if (!worldState.feyRingInterserverUnlocked &&
+            worldState.relaySubstationActive &&
+            worldState.orbitalUplinkActive) {
+            worldState.feyRingInterserverUnlocked = true;
+            gameState.lastPortalAction = "Interserver Fey Ring route windows unlocked through relay + orbital chain.";
+            gameState.lastEvent = gameState.lastPortalAction;
+            return true;
+        }
+        gameState.feyRingScheduleVisible = true;
+        gameState.lastEvent = "Fey Ring schedule refreshed. Watch for the next transit window.";
         return true;
     }
 
@@ -3737,9 +3940,22 @@ void DrawPipPad(const World& world,
             hasSessionState ? &sessionState : nullptr,
             profile.selectedWorld,
             gameState);
+        static bool lanlineServicesLoaded = false;
         static LanlineServicesState lanlineServices = MakeDefaultLanlineServicesState(std::time(nullptr));
-        SyncLanlineServicesPresence(lanlineServices, hasSessionState ? &sessionState : nullptr);
+        if (!lanlineServicesLoaded) {
+            LanlineServicesSave lanlineSave{};
+            if (LoadLanlineServicesSave(DefaultLanlineServicesSavePath(), lanlineSave)) {
+                lanlineServices = MakeLanlineServicesStateFromSave(lanlineSave, std::time(nullptr));
+            }
+            lanlineServicesLoaded = true;
+        }
         const auto servicesUnlock = BuildServicesUnlockState(profile, currentWorldFieldState);
+        SyncLanlineServicesPresence(lanlineServices, hasSessionState ? &sessionState : nullptr, servicesUnlock);
+        gameState.supportTerminalNearby = IsNearTaggedObject(world, player.x, player.y, "lanline_service_hub", 4.0f);
+        gameState.tankServiceNearby = IsNearTaggedObject(world, player.x, player.y, "tank_service", 4.0f);
+        gameState.medicalSupportNearby = IsNearTaggedObject(world, player.x, player.y, "medical_support", 4.0f);
+        gameState.feyRingScheduleVisible = gameState.feyRingScheduleVisible ||
+            IsNearTaggedObject(world, player.x, player.y, "fey_ring", 4.0f);
         ImGui::Text("Lanline - optime");
         if (!hasSessionState) {
             ImGui::TextDisabled("No active Lanline session state found. Launch through BunkerLauncher to seed roster and snapshot data.");
@@ -3796,6 +4012,37 @@ void DrawPipPad(const World& world,
                 }
             }
             ImGui::Separator();
+            ImGui::Text("Relay Chat Mirror");
+            if (sessionState.relayMessages.empty()) {
+                ImGui::TextDisabled("No relay chat mirrored into this session yet.");
+            } else {
+                const std::size_t startIndex = sessionState.relayMessages.size() > 6
+                    ? sessionState.relayMessages.size() - 6
+                    : 0;
+                for (std::size_t index = startIndex; index < sessionState.relayMessages.size(); ++index) {
+                    const auto& relayMessage = sessionState.relayMessages[index];
+                    ImGui::BulletText("[%s] %s @ %s: %s",
+                        relayMessage.channelId.c_str(),
+                        relayMessage.author.c_str(),
+                        relayMessage.timeLabel.c_str(),
+                        relayMessage.body.c_str());
+                }
+            }
+            ImGui::Separator();
+            ImGui::Text("Voice Presence");
+            if (sessionState.voicePresence.empty()) {
+                ImGui::TextDisabled("No Lanline voice presence mirrored into this session yet.");
+            } else {
+                for (const auto& voicePresence : sessionState.voicePresence) {
+                    ImGui::BulletText("%s | %s | PTT %s | peak %d%% | %s",
+                        voicePresence.handle.c_str(),
+                        voicePresence.speaking ? "transmitting" : "idle",
+                        voicePresence.pushToTalk ? "on" : "off",
+                        static_cast<int>(voicePresence.peakLevel * 100.0f),
+                        voicePresence.timeLabel.c_str());
+                }
+            }
+            ImGui::Separator();
             ImGui::Text("Runtime Notifications");
             if (runtimeNotifications.empty()) {
                 ImGui::TextDisabled("No runtime Lanline notifications yet.");
@@ -3812,12 +4059,31 @@ void DrawPipPad(const World& world,
             } else {
                 for (const auto& knownSession : knownSessions) {
                     const auto normalizedKnownWorld = NormalizeWorldReference(knownSession.worldName);
-                    ImGui::BulletText("%s | %s | %s | %s",
+                    const auto& knownDiagnostics = CachedLanlineDiagnostics(knownSession, profile.selectedWorld);
+                    ImGui::BulletText("%s | %s | %s | %s | %s",
                         knownSession.sessionId.c_str(),
                         knownSession.mode.c_str(),
                         knownSession.lifecycleStage.c_str(),
+                        JoinabilityLabel(knownSession),
                         normalizedKnownWorld.c_str(),
                         knownSession.hostEndpoint.c_str());
+                    ImGui::TextDisabled("  Slots %d/%d | Host %s | Ping %s | Match %s | Snapshot %s | Presence %d/%d",
+                        OccupiedLanlineSessionSlots(knownSession),
+                        MaxLanlineSessionSlots(knownSession),
+                        knownDiagnostics.hostReachable ? "reachable" : "offline",
+                        knownDiagnostics.pingMs >= 0 ? (std::to_string(knownDiagnostics.pingMs) + " ms").c_str() : "n/a",
+                        knownDiagnostics.worldMatch ? "yes" : "no",
+                        knownDiagnostics.snapshotFresh ? "fresh" : "stale",
+                        knownDiagnostics.onlinePlayers,
+                        knownDiagnostics.totalPlayers);
+                    if (IsJoinableLanlineSession(knownSession)) {
+                        ImGui::TextDisabled("  Open slots: %d | Pending: %d | Reserved: %d | Accepted: %d | Ready: %d",
+                            AvailableLanlineSessionSlots(knownSession),
+                            PendingLanlineSessionSlots(knownSession),
+                            ReservedLanlineSessionSlots(knownSession),
+                            AcceptedLanlineSessionSlots(knownSession),
+                            ReadyLanlineSessionSlots(knownSession));
+                    }
                 }
             }
             ImGui::Separator();
@@ -3825,7 +4091,18 @@ void DrawPipPad(const World& world,
         }
         ImGui::Separator();
         ImGui::Text("Lanline Services");
+        ImGui::BulletText("Service hub nearby: %s", gameState.supportTerminalNearby ? "yes" : "no");
+        ImGui::BulletText("Tank service nearby: %s", gameState.tankServiceNearby ? "yes" : "no");
+        ImGui::BulletText("Medical support nearby: %s", gameState.medicalSupportNearby ? "yes" : "no");
+        ImGui::BulletText("Fey schedule visible: %s", gameState.feyRingScheduleVisible ? "yes" : "no");
+        if (!gameState.lastSupportAction.empty()) {
+            ImGui::TextWrapped("Support action: %s", gameState.lastSupportAction.c_str());
+        }
+        if (!gameState.lastPortalAction.empty()) {
+            ImGui::TextWrapped("Portal action: %s", gameState.lastPortalAction.c_str());
+        }
         DrawLanlineServicesPanel(lanlineServices, servicesUnlock, static_cast<std::int64_t>(std::time(nullptr)));
+        SaveLanlineServicesSave(BuildLanlineServicesSave(lanlineServices), DefaultLanlineServicesSavePath());
     }
 
     ImGui::Separator();

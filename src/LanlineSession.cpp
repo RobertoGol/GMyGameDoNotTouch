@@ -74,6 +74,22 @@ bool IsFreshTimestamp(std::string_view timestamp, int maxAgeSeconds) {
     return now >= sessionTime && (now - sessionTime) <= maxAgeSeconds;
 }
 
+void TrimRelayMessages(LanlineSessionState& state, std::size_t maxMessages) {
+    if (state.relayMessages.size() > maxMessages) {
+        state.relayMessages.erase(
+            state.relayMessages.begin(),
+            state.relayMessages.begin() + static_cast<std::vector<LanlineRelayMessage>::difference_type>(state.relayMessages.size() - maxMessages));
+    }
+}
+
+void TrimVoicePresence(LanlineSessionState& state, std::size_t maxEntries) {
+    if (state.voicePresence.size() > maxEntries) {
+        state.voicePresence.erase(
+            state.voicePresence.begin(),
+            state.voicePresence.begin() + static_cast<std::vector<LanlineVoicePresence>::difference_type>(state.voicePresence.size() - maxEntries));
+    }
+}
+
 struct WinsockSession {
     bool initialized = false;
 
@@ -114,6 +130,22 @@ bool SaveLanlineSessionState(const LanlineSessionState& state, const std::filesy
     out << "connected_peer=" << state.connectedPeer << '\n';
     for (const auto& player : state.players) {
         out << "player=" << player.displayName << "|" << player.role << "|" << (player.online ? 1 : 0) << "|" << (player.ready ? 1 : 0) << '\n';
+    }
+    for (const auto& relayMessage : state.relayMessages) {
+        out << "relay_message="
+            << relayMessage.channelId << "|"
+            << relayMessage.author << "|"
+            << relayMessage.timeLabel << "|"
+            << relayMessage.body << '\n';
+    }
+    for (const auto& voicePresence : state.voicePresence) {
+        out << "voice_presence="
+            << voicePresence.handle << "|"
+            << (voicePresence.voiceEnabled ? 1 : 0) << "|"
+            << (voicePresence.pushToTalk ? 1 : 0) << "|"
+            << (voicePresence.speaking ? 1 : 0) << "|"
+            << voicePresence.peakLevel << "|"
+            << voicePresence.timeLabel << '\n';
     }
     for (const auto& eventLine : state.eventLog) {
         out << "event=" << eventLine << '\n';
@@ -169,10 +201,43 @@ bool LoadLanlineSessionState(const std::filesystem::path& path, LanlineSessionSt
                     third == std::string::npos ? (value.substr(second + 1) != "0") : (value.substr(second + 1, third - second - 1) != "0"),
                     third == std::string::npos ? false : (value.substr(third + 1) != "0")});
             }
+        } else if (key == "relay_message") {
+            const auto first = value.find('|');
+            const auto second = value.find('|', first == std::string::npos ? first : first + 1);
+            const auto third = value.find('|', second == std::string::npos ? second : second + 1);
+            if (first != std::string::npos && second != std::string::npos && third != std::string::npos) {
+                state.relayMessages.push_back({
+                    value.substr(0, first),
+                    value.substr(first + 1, second - first - 1),
+                    value.substr(second + 1, third - second - 1),
+                    value.substr(third + 1)});
+            }
+        } else if (key == "voice_presence") {
+            const auto first = value.find('|');
+            const auto second = value.find('|', first == std::string::npos ? first : first + 1);
+            const auto third = value.find('|', second == std::string::npos ? second : second + 1);
+            const auto fourth = value.find('|', third == std::string::npos ? third : third + 1);
+            const auto fifth = value.find('|', fourth == std::string::npos ? fourth : fourth + 1);
+            if (first != std::string::npos &&
+                second != std::string::npos &&
+                third != std::string::npos &&
+                fourth != std::string::npos &&
+                fifth != std::string::npos) {
+                state.voicePresence.push_back({
+                    value.substr(0, first),
+                    value.substr(first + 1, second - first - 1) != "0",
+                    value.substr(second + 1, third - second - 1) != "0",
+                    value.substr(third + 1, fourth - third - 1) != "0",
+                    std::stof(value.substr(fourth + 1, fifth - fourth - 1)),
+                    value.substr(fifth + 1)});
+            }
         } else if (key == "event") {
             state.eventLog.push_back(value);
         }
     }
+
+    TrimRelayMessages(state, 32);
+    TrimVoicePresence(state, 16);
 
     return true;
 }
