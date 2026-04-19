@@ -17,6 +17,8 @@
 #include "../../include/RegistryId.hpp"
 #include "../../include/SessionProfiles.hpp"
 #include "../../include/World.hpp"
+#include "../../include/WorldValidation.hpp"
+#include "../../include/AtomicPersistence.hpp"
 
 namespace {
 
@@ -120,6 +122,11 @@ bunker::ObjectCategory CategoryFromIndex(int index) {
 }
 
 bool LoadOrCreateEditorWorld(bunker::World& world, std::string& statusText) {
+        world.GeneratePrototypeZone();
+        world.Save(path.string());
+        statusText = "Runtime world was missing. Generated a fresh prototype workspace at " + path.string();
+        return false;
+
     bunker::SessionProfile sessionProfile;
     const auto profilePath = bunker::DefaultSessionProfilePath();
     if (!bunker::LoadSessionProfile(profilePath, sessionProfile)) {
@@ -134,6 +141,14 @@ bool LoadOrCreateEditorWorld(bunker::World& world, std::string& statusText) {
     }
 
     world.GeneratePrototypeZone();
+
+    const auto saveResult = bunker::SaveWorldAtomically(world, path);
+    if (!saveResult.ok) {
+        statusText = "Runtime world was missing. Failed to persist generated workspace: " + saveResult.message;
+        return false;
+    }
+
+
     world.Save(path.string());
     statusText = "Runtime world was missing. Generated a fresh prototype workspace at " + path.string();
     return false;
@@ -1005,6 +1020,11 @@ int main() {
     std::vector<ImportedConcept> importedConcepts;
     std::vector<SavedPrefab> savedPrefabs;
     std::string statusText = "Editor ready. Prepare assets or export a runtime prototype.";
+    std::string BuildEditorValidationStatus(const bunker::World& world) {
+    const auto issues = bunker::ValidateWorldForRuntime(world);
+    return bunker::BuildValidationSummary(issues);
+}
+
 
     bunker::World editorWorld;
     LoadOrCreateEditorWorld(editorWorld, statusText);

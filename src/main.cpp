@@ -12,6 +12,9 @@
 #include "../include/LanlineSession.hpp"
 #include "../include/LaunchSession.hpp"
 #include "../include/WorldEvents.hpp"
+#include "../include/AtomicPersistence.hpp"
+
+
 
 namespace {
 
@@ -212,9 +215,9 @@ int main() {
             glfwSwapBuffers(deniedWindow);
         }
 
-        ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
-        ImGui::DestroyContext();
+        ImGui::DestroyContext(); 
         glfwDestroyWindow(deniedWindow);
         glfwTerminate();
         return 0;
@@ -223,8 +226,11 @@ int main() {
     bunker::SessionProfile sessionProfile;
     const auto profilePath = bunker::DefaultSessionProfilePath();
     if (!bunker::LoadSessionProfile(profilePath, sessionProfile)) {
-        sessionProfile = bunker::MakeDefaultSessionProfile();
-        bunker::SaveSessionProfile(sessionProfile, profilePath);
+    sessionProfile = bunker::MakeDefaultSessionProfile();
+    const auto initialProfileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
+    if (!initialProfileSave.ok) {
+        std::fprintf(stderr, "Initial profile save failed: %s\n", initialProfileSave.message.c_str());
+    }
     }
     bunker::NormalizeSessionProfile(sessionProfile);
     SyncLanlineRuntimeLaunchState(launchTicket, sessionProfile);
