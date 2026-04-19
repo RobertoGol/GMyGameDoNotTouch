@@ -1,20 +1,24 @@
 #include "../include/GameRuntime.hpp"
+#include "../include/GameplayDescriptorRegistry.hpp"
 #include "../include/HangarSystem.hpp"
+#include "../include/LanlineLobbyLogic.hpp"
 #include "../include/LanlineServices.hpp"
 #include "../include/LanlineSession.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <string_view>
+
+#include "GameRuntimePipPad.hpp"
 
 #include "imgui.h"
 
 namespace bunker {
 
 namespace {
-
-bool IsLanlineReadyEligibleSlot(const LanlinePlayerEntry& entry);
 
 bool TankNeedsRepair(const SessionProfile& profile) {
     const auto& damage = profile.partnerTank.damage;
@@ -140,78 +144,46 @@ const char* RecoveryStatusLabel(const SessionProfile& profile, const WorldFieldS
     return profile.story.returnedToBase ? "Recovery buildout active" : "Starter route";
 }
 
+const char* TryGetTerminalSyncText(std::string_view tag) {
+    static constexpr std::array<std::pair<std::string_view, const char*>, 24> kSyncTexts{{
+        {"tower_sync", "Tower sync complete. Regional grid reach expanded."},
+        {"power_pylon", "Pylon registry mirrored. Grid restoration route updated."},
+        {"drone_station", "Drone station ledger mirrored. Sweep routes registered to Pip-Pad."},
+        {"rail_depot", "Rail freight depot records mirrored. Heavy spur logistics registered."},
+        {"orbital_uplink", "Orbital uplink records mirrored. Long-range scan queue registered."},
+        {"rail_fortress_hub", "Rail Fortress patrol package mirrored. Spur security doctrine updated."},
+        {"recovery_fabricator", "Recovery fabricator recipes mirrored. Shelter supply pipeline updated."},
+        {"industrial_gate", "Industrial gate overrides mirrored. Inner spur access route logged."},
+        {"industrial_survey", "Industrial survey notes mirrored. Inner spur reconnaissance queue updated."},
+        {"industrial_outpost", "Inner spur outpost records mirrored. Forward recovery foothold logged."},
+        {"assembly_cell", "Assembly cell notes mirrored. Local recovery production registered."},
+        {"foundry_line", "Foundry line records mirrored. Heavy fabrication route registered."},
+        {"reactor_yard", "Reactor yard records mirrored. Heavy energy recovery route registered."},
+        {"capacitor_bank", "Capacitor bank records mirrored. Buffered grid discharge route registered."},
+        {"relay_substation", "Relay substation notes mirrored. Backbone return flow updated."},
+        {"service_bay", "Service bay notes mirrored. BT-72 support route updated."},
+        {"water_reclaimer", "Water reclaimer notes mirrored. Frontier recovery reserves updated."},
+        {"lanline_service_hub", "Lanline service hub mirrored. Shelter 17 service catalog now resolves through authored relay infrastructure."},
+        {"fey_ring", "Fey Ring route mirrored. Transit windows registered to the relay map."},
+        {"medical_support", "Medical support node mirrored. Field treatment requests now route through authored relay anchors."},
+        {"tank_service", "Tank service anchor mirrored. BT-72 maintenance route updated."},
+        {"specialist_cryo", "Cryo specialist registry mirrored. Shelter staffing ledger updated."},
+        {"echo_trace", "Residual echo trace mirrored to Pip-Pad."},
+        {"workshop_service", "Workshop terminal mirrored. BT-72 service route and repair notes updated."},
+    }};
+
+    const std::string_view normalizedTag = NormalizeGameplayDescriptorTag(tag);
+    for (const auto& [entryTag, text] : kSyncTexts) {
+        if (entryTag == normalizedTag) {
+            return text;
+        }
+    }
+    return nullptr;
+}
+
 std::string DescribeTerminalSync(const MapObject& object) {
-    if (object.scriptTag == "tower_sync") {
-        return "Tower sync complete. Regional grid reach expanded.";
-    }
-    if (object.scriptTag == "power_pylon") {
-        return "Pylon registry mirrored. Grid restoration route updated.";
-    }
-    if (object.scriptTag == "drone_station") {
-        return "Drone station ledger mirrored. Sweep routes registered to Pip-Pad.";
-    }
-    if (object.scriptTag == "rail_freight") {
-        return "Rail freight depot records mirrored. Heavy spur logistics registered.";
-    }
-    if (object.scriptTag == "orbital_uplink") {
-        return "Orbital uplink records mirrored. Long-range scan queue registered.";
-    }
-    if (object.scriptTag == "rail_fortress") {
-        return "Rail Fortress patrol package mirrored. Spur security doctrine updated.";
-    }
-    if (object.scriptTag == "recovery_fabricator") {
-        return "Recovery fabricator recipes mirrored. Shelter supply pipeline updated.";
-    }
-    if (object.scriptTag == "industrial_gate") {
-        return "Industrial gate overrides mirrored. Inner spur access route logged.";
-    }
-    if (object.scriptTag == "industrial_survey") {
-        return "Industrial survey notes mirrored. Inner spur reconnaissance queue updated.";
-    }
-    if (object.scriptTag == "industrial_outpost") {
-        return "Inner spur outpost records mirrored. Forward recovery foothold logged.";
-    }
-    if (object.scriptTag == "assembly_cell") {
-        return "Assembly cell notes mirrored. Local recovery production registered.";
-    }
-    if (object.scriptTag == "foundry_line") {
-        return "Foundry line records mirrored. Heavy fabrication route registered.";
-    }
-    if (object.scriptTag == "reactor_yard") {
-        return "Reactor yard records mirrored. Heavy energy recovery route registered.";
-    }
-    if (object.scriptTag == "capacitor_bank") {
-        return "Capacitor bank records mirrored. Buffered grid discharge route registered.";
-    }
-    if (object.scriptTag == "relay_substation") {
-        return "Relay substation notes mirrored. Backbone return flow updated.";
-    }
-    if (object.scriptTag == "service_bay") {
-        return "Service bay notes mirrored. BT-72 support route updated.";
-    }
-    if (object.scriptTag == "water_reclaimer") {
-        return "Water reclaimer notes mirrored. Frontier recovery reserves updated.";
-    }
-    if (object.scriptTag == "lanline_service_hub") {
-        return "Lanline service hub mirrored. Shelter 17 service catalog now resolves through authored relay infrastructure.";
-    }
-    if (object.scriptTag == "fey_ring") {
-        return "Fey Ring route mirrored. Transit windows registered to the relay map.";
-    }
-    if (object.scriptTag == "medical_support") {
-        return "Medical support node mirrored. Field treatment requests now route through authored relay anchors.";
-    }
-    if (object.scriptTag == "tank_service") {
-        return "Tank service anchor mirrored. BT-72 maintenance route updated.";
-    }
-    if (object.scriptTag == "specialist_cryo") {
-        return "Cryo specialist registry mirrored. Shelter staffing ledger updated.";
-    }
-    if (object.scriptTag == "echo_trace") {
-        return "Residual echo trace mirrored to Pip-Pad.";
-    }
-    if (object.scriptTag == "workshop_service") {
-        return "Workshop terminal mirrored. BT-72 service route and repair notes updated.";
+    if (const char* text = TryGetTerminalSyncText(object.scriptTag)) {
+        return text;
     }
     return object.scriptTag.empty()
         ? "Terminal sync complete. Additional archive fragments copied to Pip-Pad."
@@ -325,7 +297,7 @@ const std::vector<std::string>& UpdateLanlineRuntimeNotifications(const LanlineS
             pushNotification(playerEntry.displayName +
                 (playerEntry.online ? " came online in Lanline." : " went offline in Lanline."));
         }
-        if (IsLanlineReadyEligibleSlot(playerEntry) && playerEntry.ready != previousIt->ready) {
+        if (bunker::IsLanlineReadyEligibleSlot(playerEntry) && playerEntry.ready != previousIt->ready) {
             pushNotification(playerEntry.displayName +
                 (playerEntry.ready ? " is now ready for Lanline deployment." : " is no longer ready for Lanline deployment."));
         }
@@ -411,128 +383,6 @@ bool OrbitalUplinkReady(const SessionProfile& profile, const WorldFieldState& wo
 
 bool RailFortressReady(const SessionProfile& profile, const WorldFieldState& worldState) {
     return IsRailFortressOperational(profile, worldState);
-}
-
-bool IsLanlineAwaitingSlot(const LanlinePlayerEntry& entry) {
-    return entry.role == "Awaiting";
-}
-
-bool IsLanlinePendingSlot(const LanlinePlayerEntry& entry) {
-    return entry.role == "Pending Client";
-}
-
-bool IsLanlineReservedSlot(const LanlinePlayerEntry& entry) {
-    return entry.role == "Reserved Client";
-}
-
-bool IsLanlineAcceptedSlot(const LanlinePlayerEntry& entry) {
-    return entry.role == "Client";
-}
-
-bool IsLanlineReadyEligibleSlot(const LanlinePlayerEntry& entry) {
-    return entry.role == "Host" || entry.role == "Client" || entry.role == "Local Operator";
-}
-
-const char* LanlineSlotStateLabel(const LanlinePlayerEntry& entry) {
-    if (IsLanlineAwaitingSlot(entry)) {
-        return "Open";
-    }
-    if (IsLanlinePendingSlot(entry)) {
-        return "Pending";
-    }
-    if (IsLanlineReservedSlot(entry)) {
-        return "Reserved";
-    }
-    if (IsLanlineAcceptedSlot(entry)) {
-        return "Accepted";
-    }
-    if (entry.online) {
-        return "Active";
-    }
-    return "Reserved";
-}
-
-const char* LanlineReadyLabel(const LanlinePlayerEntry& entry) {
-    if (!IsLanlineReadyEligibleSlot(entry)) {
-        return "-";
-    }
-    return entry.ready ? "Ready" : "Not Ready";
-}
-
-int PendingLanlineSessionSlots(const LanlineSessionState& session) {
-    int pending = 0;
-    for (const auto& player : session.players) {
-        if (IsLanlinePendingSlot(player)) {
-            pending += 1;
-        }
-    }
-    return pending;
-}
-
-int ReservedLanlineSessionSlots(const LanlineSessionState& session) {
-    int reserved = 0;
-    for (const auto& player : session.players) {
-        if (IsLanlineReservedSlot(player)) {
-            reserved += 1;
-        }
-    }
-    return reserved;
-}
-
-int AcceptedLanlineSessionSlots(const LanlineSessionState& session) {
-    int accepted = 0;
-    for (const auto& player : session.players) {
-        if (IsLanlineAcceptedSlot(player)) {
-            accepted += 1;
-        }
-    }
-    return accepted;
-}
-
-int ReadyLanlineSessionSlots(const LanlineSessionState& session) {
-    int ready = 0;
-    for (const auto& player : session.players) {
-        if (IsLanlineReadyEligibleSlot(player) && player.ready) {
-            ready += 1;
-        }
-    }
-    return ready;
-}
-
-int MaxLanlineSessionSlots(const LanlineSessionState& session) {
-    if (session.mode != "LAN Host") {
-        return 0;
-    }
-    return std::max(1, static_cast<int>(session.players.size()));
-}
-
-int OccupiedLanlineSessionSlots(const LanlineSessionState& session) {
-    int occupied = 0;
-    for (const auto& player : session.players) {
-        if (session.mode == "LAN Host" && IsLanlineAwaitingSlot(player)) {
-            continue;
-        }
-        if (player.role != "Awaiting") {
-            occupied += 1;
-        }
-    }
-    return occupied;
-}
-
-int AvailableLanlineSessionSlots(const LanlineSessionState& session) {
-    return std::max(0, MaxLanlineSessionSlots(session) - OccupiedLanlineSessionSlots(session));
-}
-
-bool IsJoinableLanlineSession(const LanlineSessionState& session) {
-    if (session.mode != "LAN Host") {
-        return false;
-    }
-    if (!session.connectedPeer.empty()) {
-        return false;
-    }
-    return session.lifecycleStage == "HostLobbyOpen" ||
-        session.lifecycleStage == "HostJoinPending" ||
-        session.lifecycleStage == "HostRuntimeActive";
 }
 
 const char* JoinabilityLabel(const LanlineSessionState& session) {
@@ -984,7 +834,9 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return false;
     }
 
-    if (nearest->scriptTag == "tower_sync") {
+    const std::string_view scriptTag = NormalizeGameplayDescriptorTag(nearest->scriptTag);
+
+    if (scriptTag == "tower_sync") {
         if (TryApplyTankEnergySiphon(
                 *nearest,
                 player,
@@ -1012,7 +864,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "remote_link") {
+    if (scriptTag == "remote_link") {
         const std::string target = nearest->linkTarget.empty() ? "gate_control" : nearest->linkTarget;
         gameState.lastEvent = player.insideTank
             ? "Remote link established from cockpit. Control target -> " + target + "."
@@ -1020,7 +872,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "power_pylon") {
+    if (scriptTag == "power_pylon") {
         if (!IsRegionalGridOnline(profile)) {
             gameState.lastEvent = "Pylon restoration requires a live relay backbone first.";
             return true;
@@ -1049,7 +901,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "drone_station") {
+    if (scriptTag == "drone_station") {
         if (!IsRegionalGridOnline(profile)) {
             gameState.lastEvent = "Drone station needs a live grid before boot sequence can begin.";
             return true;
@@ -1072,7 +924,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "rail_depot") {
+    if (scriptTag == "rail_depot") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.railFreightActive) {
             if (!IsRegionalGridOnline(profile)) {
@@ -1095,7 +947,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "orbital_uplink") {
+    if (scriptTag == "orbital_uplink") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.orbitalUplinkActive) {
             if (!IsRegionalGridOnline(profile) || !worldState.railFreightActive) {
@@ -1118,7 +970,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "rail_fortress_hub") {
+    if (scriptTag == "rail_fortress_hub") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.railFortressActive) {
             if (!worldState.railFreightActive || !worldState.orbitalUplinkActive) {
@@ -1141,7 +993,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "recovery_fabricator") {
+    if (scriptTag == "recovery_fabricator") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.recoveryFabricatorActive) {
             if (!IsRegionalGridOnline(profile) || !worldState.railFreightActive) {
@@ -1164,7 +1016,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "industrial_gate") {
+    if (scriptTag == "industrial_gate") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (worldState.industrialGateUnlocked) {
             gameState.lastEvent = nearest->linkTarget.empty()
@@ -1194,7 +1046,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "industrial_survey") {
+    if (scriptTag == "industrial_survey") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.industrialGateUnlocked) {
             gameState.lastEvent = "Industrial survey beacon is outside the current recovery perimeter. Unlock the gate first.";
@@ -1221,7 +1073,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "industrial_outpost") {
+    if (scriptTag == "industrial_outpost") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.industrialGateUnlocked || !worldState.industrialSurveyActive) {
             gameState.lastEvent = "Inner spur outpost needs the gate unlocked and active survey coverage first.";
@@ -1245,7 +1097,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "assembly_cell") {
+    if (scriptTag == "assembly_cell") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.industrialOutpostActive || !worldState.industrialSurveyActive) {
             gameState.lastEvent = "Assembly cell needs a live inner spur outpost and survey coverage first.";
@@ -1269,7 +1121,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "foundry_line") {
+    if (scriptTag == "foundry_line") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.assemblyCellActive || !worldState.industrialOutpostActive || !worldState.railFortressActive) {
             gameState.lastEvent = "Foundry line needs an active assembly cell, inner spur outpost, and Rail Fortress cover first.";
@@ -1293,7 +1145,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "reactor_yard") {
+    if (scriptTag == "reactor_yard") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.foundryLineActive || !worldState.assemblyCellActive || !worldState.orbitalUplinkActive) {
             gameState.lastEvent = "Reactor yard needs an active foundry line, assembly cell, and orbital uplink first.";
@@ -1317,7 +1169,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "capacitor_bank") {
+    if (scriptTag == "capacitor_bank") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.reactorYardActive || !worldState.foundryLineActive || !worldState.orbitalUplinkActive) {
             gameState.lastEvent = "Capacitor bank needs an active reactor yard, foundry line, and orbital uplink first.";
@@ -1341,7 +1193,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "relay_substation") {
+    if (scriptTag == "relay_substation") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.capacitorBankActive || !worldState.reactorYardActive || !worldState.industrialOutpostActive) {
             gameState.lastEvent = "Relay substation needs an active capacitor bank, reactor yard, and inner spur outpost first.";
@@ -1367,7 +1219,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "service_bay") {
+    if (scriptTag == "service_bay") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.relaySubstationActive || !worldState.foundryLineActive || !worldState.industrialOutpostActive) {
             gameState.lastEvent = "Service bay needs a live relay substation, foundry line, and inner spur outpost first.";
@@ -1391,7 +1243,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "water_reclaimer") {
+    if (scriptTag == "water_reclaimer") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.serviceBayActive || !worldState.relaySubstationActive || !worldState.recoveryFabricatorActive) {
             gameState.lastEvent = "Water reclaimer needs a live service bay, relay substation, and recovery fabricator first.";
@@ -1415,7 +1267,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "lanline_service_hub") {
+    if (scriptTag == "lanline_service_hub") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.towerSyncRecovered) {
             gameState.lastEvent = "Lanline Services stay locked until the first tower is synchronized.";
@@ -1431,7 +1283,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "tank_service") {
+    if (scriptTag == "tank_service") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.serviceBayActive) {
             gameState.lastEvent = "Tank service anchor is authored, but the service bay backbone is still offline.";
@@ -1450,7 +1302,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "medical_support") {
+    if (scriptTag == "medical_support") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.localRelayAvailable) {
             gameState.lastEvent = "Medical support terminal has no relay authorization yet. Sync the tower first.";
@@ -1463,7 +1315,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "fey_ring") {
+    if (scriptTag == "fey_ring") {
         auto& worldState = EnsureSelectedWorldFieldState(profile);
         if (!worldState.localRelayAvailable) {
             gameState.lastEvent = "Fey Ring routing remains sealed until Lanline Services come online through tower sync.";
@@ -1491,13 +1343,13 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "archive_sync") {
+    if (scriptTag == "archive_sync") {
         AddCollectedTapeIfMissing(profile, nearest->registryId, nearest->displayName);
         gameState.lastEvent = "Archive sync complete. Personnel and recovery records mirrored to Pip-Pad.";
         return true;
     }
 
-    if (nearest->scriptTag == "echo_trace") {
+    if (scriptTag == "echo_trace") {
         if (!profile.story.pipPadRecovered) {
             gameState.lastEvent = "Pip-Pad AR layer required before echo traces can be reconstructed.";
             return true;
@@ -1517,7 +1369,7 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "specialist_cryo") {
+    if (scriptTag == "specialist_cryo") {
         const std::string role = nearest->linkTarget.empty() ? "specialist" : nearest->linkTarget;
         AddRescuedSpecialist(profile, nearest->registryId, nearest->displayName, role);
         AddCollectedTapeIfMissing(profile, nearest->registryId + "_personnel", nearest->displayName + " // Personnel Recovery");
@@ -1525,13 +1377,13 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         return true;
     }
 
-    if (nearest->scriptTag == "terminal_sync") {
+    if (scriptTag == "terminal_sync") {
         AddCollectedTapeIfMissing(profile, nearest->registryId, nearest->displayName);
         gameState.lastEvent = "Terminal sync complete. General system notes mirrored to Pip-Pad.";
         return true;
     }
 
-    if (nearest->scriptTag == "workshop_service") {
+    if (scriptTag == "workshop_service") {
         return false;
     }
 
@@ -2837,8 +2689,8 @@ void HandleInteraction(const MapObject* nearest,
     }
 
     if (HandleScriptTagInteraction(nearest, world, player, profile, gameState) &&
-        nearest->scriptTag != "workshop_service") {
-        if (nearest->scriptTag == "specialist_cryo") {
+        NormalizeGameplayDescriptorTag(nearest->scriptTag) != "workshop_service") {
+        if (NormalizeGameplayDescriptorTag(nearest->scriptTag) == "specialist_cryo") {
             staticEraser.Erase(nearest->registryId);
             staticEraser.Save(profile.selectedWorld);
             world.RemoveObject(nearest->registryId);
@@ -3184,6 +3036,431 @@ bool WantsContextKey(const MapObject* nearest) {
     return nearest != nullptr && IsContextualAction(*nearest);
 }
 
+#if 0
+void DrawPipPadTabBar(int& activeTab) {
+    const char* tabs[] = {"STAT", "INV", "DATA", "MAP", "QUEST", "NET", "SERV"};
+    for (int index = 0; index < IM_ARRAYSIZE(tabs); ++index) {
+        if (index > 0) {
+            ImGui::SameLine();
+        }
+        if (ImGui::Button(tabs[index], ImVec2(132.0f, 34.0f))) {
+            activeTab = index;
+        }
+    }
+}
+
+void DrawPipPadStatTab(const SessionProfile& profile, const GameState& gameState) {
+    const int statS = EffectiveStatValue(profile, gameState, 'S');
+    const int statP = EffectiveStatValue(profile, gameState, 'P');
+    const int statE = EffectiveStatValue(profile, gameState, 'E');
+    const int statC = EffectiveStatValue(profile, gameState, 'C');
+    const int statI = EffectiveStatValue(profile, gameState, 'I');
+    const int statA = EffectiveStatValue(profile, gameState, 'A');
+    const int statL = EffectiveStatValue(profile, gameState, 'L');
+
+    ImGui::Text("Operator: %s", profile.character.displayName.c_str());
+    ImGui::Text("Account: %s", profile.account.username.c_str());
+    ImGui::Text("Level: %d", profile.character.level);
+    ImGui::Text("Experience: %d", profile.character.experience);
+    ImGui::Text("HP %.0f / %.0f", profile.character.hp, profile.character.maxHp);
+    ImGui::Text("MP %.0f / %.0f", profile.character.mp, profile.character.maxMp);
+    ImGui::Text("Status: %s", profile.character.hp > 0.0f ? (profile.character.mp <= 10.0f ? "Fatigued" : "Operational") : "Downed");
+    ImGui::Text("Weather: %s", ToString(gameState.weather));
+    ImGui::Text("Ether Pressure: %.0f%% (%s)", CurrentEtherErosion(profile), EtherErosionBand(CurrentEtherErosion(profile)));
+    ImGui::Text("Current Load: %.1f kg", CurrentInventoryWeight(profile));
+    ImGui::Text("Carry Weight Budget: %.0f kg", profile.character.carryWeight);
+    ImGui::Text("Field Medkits: %s", HasInventoryItem(profile, "cryo_medkit") ? "Available" : "None");
+    if (gameState.rationEffectTimer > 0.0f) {
+        ImGui::Text("Toxic Ration: %.0fs", gameState.rationEffectTimer);
+    }
+    ImGui::Separator();
+    ImGui::Text("SPECIAL");
+    ImGui::BulletText("S %d", statS);
+    ImGui::BulletText("P %d", statP);
+    ImGui::BulletText("E %d", statE);
+    ImGui::BulletText("C %d", statC);
+    ImGui::BulletText("I %d", statI);
+    ImGui::BulletText("A %d", statA);
+    ImGui::BulletText("L %d", statL);
+}
+
+void DrawPipPadInventoryTab(SessionProfile& profile, GameState& gameState) {
+    ImGui::Text("Inventory Manifest");
+    ImGui::Separator();
+    ImGui::BeginChild("InventoryList", ImVec2(0.0f, 320.0f), true);
+    for (const auto& item : profile.character.inventory) {
+        ImGui::BulletText("%s x%d", item.itemId.c_str(), item.count);
+    }
+    ImGui::EndChild();
+    if (ImGui::Button("Consume Field Ration")) {
+        if (!TryConsumeFieldRation(profile, gameState)) {
+            gameState.lastEvent = "No field ration available.";
+        }
+    }
+    if (HasInventoryItem(profile, "recipe_repair_patch")) {
+        if (ImGui::Button("Craft Repair Patch")) {
+            if (HasInventoryItem(profile, "steel_scrap") && HasInventoryItem(profile, "copper_wire")) {
+                ConsumeInventoryItem(profile, "steel_scrap", 1);
+                ConsumeInventoryItem(profile, "copper_wire", 1);
+                AddInventoryItem(profile, "repair_patch", 1, 0.2f);
+                gameState.lastEvent = "Repair Patch fabricated from awakened field recipe.";
+            } else {
+                gameState.lastEvent = "Crafting requires steel_scrap and copper_wire.";
+            }
+        }
+        ImGui::TextDisabled("Recipe unlocked: steel_scrap + copper_wire -> repair_patch");
+    } else {
+        const int fieldServiceUses = profile.character.awakening.fieldServiceUses;
+        const int cyclesRemaining = std::max(0, 3 - fieldServiceUses);
+        ImGui::TextDisabled("Awakened repair recipe dormant: %d/3 field service cycles logged", std::min(fieldServiceUses, 3));
+        if (cyclesRemaining > 0) {
+            ImGui::TextDisabled("Field service needs %d more cycle%s to surface the recipe.", cyclesRemaining, cyclesRemaining == 1 ? "" : "s");
+        }
+    }
+    auto* worldFieldState = FindWorldFieldState(profile, profile.selectedWorld, true);
+    if (worldFieldState != nullptr && worldFieldState->tradeNetworkActive) {
+        ImGui::Separator();
+        ImGui::Text("Trade Network");
+        ImGui::TextDisabled("Trade vouchers: %s", HasInventoryItem(profile, "trade_voucher") ? "available" : "none");
+        if (ImGui::Button("Redeem Medkit")) {
+            if (ConsumeInventoryItem(profile, "trade_voucher", 1)) {
+                AddInventoryItem(profile, "cryo_medkit", 1, 0.5f);
+                gameState.lastEvent = "Trade voucher exchanged for one cryo_medkit.";
+            } else {
+                gameState.lastEvent = "No trade voucher available.";
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Redeem Power Cell")) {
+            if (ConsumeInventoryItem(profile, "trade_voucher", 1)) {
+                AddInventoryItem(profile, "power_cell", 1, 0.3f);
+                gameState.lastEvent = "Trade voucher exchanged for one power_cell.";
+            } else {
+                gameState.lastEvent = "No trade voucher available.";
+            }
+        }
+        if (ImGui::Button("Redeem Ammo Bundle")) {
+            if (ConsumeInventoryItem(profile, "trade_voucher", 1)) {
+                AddInventoryItem(profile, "#%it_ptrs_ammo", 2, 0.7f);
+                gameState.lastEvent = "Trade voucher exchanged for an ammo bundle.";
+            } else {
+                gameState.lastEvent = "No trade voucher available.";
+            }
+        }
+    }
+    ImGui::TextWrapped("Field action: press H to use one cryo medkit if available.");
+}
+
+void DrawPipPadDataTab(PlayerState& player, SessionProfile& profile, GameState& gameState) {
+    ImGui::Text("Vehicle Telemetry");
+    ImGui::Text("Partner Tank: %s", profile.partnerTank.callSign.c_str());
+    ImGui::Text("Class: %s", ToString(profile.partnerTank.tankClass));
+    ImGui::Text("Sync Mode: %s", CurrentTankSyncMode(profile.partnerTank).c_str());
+    ImGui::Text("Trust Link: %.0f%%", profile.partnerTank.trustLink * 100.0f);
+    ImGui::Text("Utility Module: %s", CurrentUtilityModuleLabel(profile));
+    if (TankUsesTowCoupler(profile)) {
+        ImGui::TextDisabled("Tow Coupler: +logistics, -mobility, +thermal load");
+    } else if (TankUsesRamShield(profile)) {
+        ImGui::TextDisabled("Ram Shield: +impact, +survivability");
+    } else {
+        ImGui::TextDisabled("Bucket Rig: debris clearing and field works");
+    }
+    if (profile.partnerTank.worldPositionKnown) {
+        ImGui::Text("Anchor: %.1f %.1f", profile.partnerTank.worldX, profile.partnerTank.worldY);
+    } else {
+        ImGui::TextDisabled("Anchor: unknown");
+    }
+    ImGui::ProgressBar(profile.partnerTank.energyReserve / 100.0f, ImVec2(-1.0f, 18.0f), "Energy");
+    ImGui::ProgressBar(profile.partnerTank.ammoReserve / 100.0f, ImVec2(-1.0f, 18.0f), "Ammo");
+    ImGui::Text("Workshop Log: %s", gameState.workshopServiceCooldown > 0.0f ? "Recent repair cycle complete" : "No recent workshop cycle");
+    ImGui::BulletText("Workshop Engineer: %s", HasAssignedSpecialistRole(profile, "engineer", "workshop") ? "assigned" : "standard crew");
+    ImGui::BulletText("Field Engineer: %s", HasAssignedSpecialistRole(profile, "engineer", "scavenger_support") ? "assigned" : "not assigned");
+    ImGui::BulletText("Repair Recipe: %s", HasInventoryItem(profile, "recipe_repair_patch") ? "awakened" : "still dormant");
+    ImGui::Separator();
+    ImGui::Text("Tank Integrity");
+    ImGui::ProgressBar(profile.partnerTank.damage.hull / 100.0f, ImVec2(-1.0f, 16.0f), "Hull");
+    ImGui::ProgressBar(profile.partnerTank.damage.bucket / 100.0f, ImVec2(-1.0f, 16.0f), "Bucket");
+    ImGui::ProgressBar(profile.partnerTank.damage.sensors / 100.0f, ImVec2(-1.0f, 16.0f), "Sensors");
+    ImGui::Separator();
+    ImGui::Text("Passive Skills");
+    for (auto& skill : profile.character.passiveSkills) {
+        if (!skill.unlocked) {
+            ImGui::TextDisabled("%s [LOCKED]", skill.displayName.c_str());
+            continue;
+        }
+        ImGui::Checkbox(skill.displayName.c_str(), &skill.equipped);
+    }
+    ImGui::Separator();
+    if (profile.story.tankLinked && ImGui::Button("Swap Utility Module")) {
+        ToggleTankUtilityModule(profile, player, gameState);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Field Service")) {
+        TryRunFieldWorkbench(player, profile, gameState);
+    }
+    if (gameState.fieldWorkbenchCooldown > 0.0f) {
+        ImGui::TextDisabled("Field Service Cooldown: %.0fs", gameState.fieldWorkbenchCooldown);
+    } else {
+        ImGui::TextDisabled("Field Service ready when BT-72 is stationary.");
+    }
+    ImGui::Separator();
+
+    int damagedArchiveCount = 0;
+    int reconstructedArchiveCount = 0;
+    for (const auto& tape : profile.character.collectedTapes) {
+        if (tape.damaged && !tape.reconstructed) {
+            damagedArchiveCount += 1;
+        }
+        if (tape.reconstructed) {
+            reconstructedArchiveCount += 1;
+        }
+    }
+
+    ImGui::Text("DATA / Archive Summary");
+    ImGui::BulletText("Archive Sync: %s", profile.story.archiveRecovered ? "mirrored" : "missing");
+    ImGui::BulletText("Relay Packet: %s", profile.story.relayRecovered ? "captured" : "missing");
+    ImGui::BulletText("Debrief Record: %s", HasCollectedTape(profile, "debrief_shelter17") ? "archived" : "missing");
+    ImGui::BulletText("Archive Sync Count: %d", profile.character.awakening.archiveSyncs);
+    ImGui::BulletText("Damaged Carriers: %d", damagedArchiveCount);
+    ImGui::BulletText("Reconstructed Carriers: %d", reconstructedArchiveCount);
+    ImGui::Separator();
+    ImGui::Text("Archive Carriers");
+    for (std::size_t index = 0; index < profile.character.collectedTapes.size(); ++index) {
+        auto& tape = profile.character.collectedTapes[index];
+        std::string tapeLabel = tape.title;
+        if (tape.damaged && !tape.reconstructed) {
+            tapeLabel += " [DAMAGED]";
+        } else {
+            tapeLabel += tape.played ? " [LISTENED]" : " [NEW]";
+        }
+        if (ImGui::Selectable(tapeLabel.c_str(), profile.character.activeTapeIndex == static_cast<int>(index))) {
+            profile.character.activeTapeIndex = static_cast<int>(index);
+            if (!tape.damaged || tape.reconstructed) {
+                tape.played = true;
+                gameState.lastEvent = "Tape opened: " + tape.title;
+            } else {
+                gameState.lastEvent = "Tape is damaged. Reconstruction required before playback.";
+            }
+        }
+    }
+    if (HasActiveTape(profile.character)) {
+        auto& activeTape = profile.character.collectedTapes[static_cast<std::size_t>(profile.character.activeTapeIndex)];
+        if (activeTape.damaged && !activeTape.reconstructed) {
+            ImGui::Separator();
+            ImGui::TextWrapped("Damaged archive detected. Reconstruction will spend 12 MP to restore readable fragments.");
+            if (ImGui::Button("Reconstruct Data")) {
+                if (profile.character.mp < 12.0f) {
+                    gameState.lastEvent = "Not enough MP to reconstruct damaged data.";
+                } else {
+                    profile.character.mp = std::max(0.0f, profile.character.mp - 12.0f);
+                    activeTape.reconstructed = true;
+                    activeTape.damaged = false;
+                    activeTape.played = true;
+                    activeTape.title += " // Reconstructed";
+                    std::string progressionEvent;
+                    AwardExperience(profile, 20, &progressionEvent);
+                    gameState.lastEvent = "Data reconstruction complete for " + activeTape.title + ". " + progressionEvent;
+                }
+            }
+        }
+    }
+    ImGui::Separator();
+    ImGui::Text("Tape Bonus");
+    ImGui::TextWrapped("%s", ActiveTapeBonusLabel(profile.character, player.insideTank).c_str());
+}
+
+void DrawPipPadMapTab(const World& world) {
+    ImGui::Text("Local Survey");
+    ImGui::Text("Zone: %s", world.metadata.name.c_str());
+    ImGui::Text("Objective: %s", world.metadata.objective.c_str());
+    ImGui::Separator();
+    ImGui::BeginChild("MapList", ImVec2(0.0f, 300.0f), true);
+    for (const auto& object : world.objects) {
+        ImGui::BulletText("%s | %.1f %.1f | HP %.0f", object.displayName.c_str(), object.x, object.y, object.health);
+    }
+    ImGui::EndChild();
+}
+
+void DrawPipPadNetTab(const SessionProfile& profile, GameState& gameState) {
+    LanlineSessionState sessionState;
+    const bool hasSessionState = LoadLanlineSessionState(sessionState);
+    const auto& runtimeNotifications = UpdateLanlineRuntimeNotifications(
+        hasSessionState ? &sessionState : nullptr,
+        profile.selectedWorld,
+        gameState);
+    ImGui::Text("Lanline - optime");
+    if (!hasSessionState) {
+        ImGui::TextDisabled("No active Lanline session state found. Launch through BunkerLauncher to seed roster and snapshot data.");
+        if (!runtimeNotifications.empty()) {
+            ImGui::Separator();
+            ImGui::Text("Runtime Notifications");
+            for (const auto& notification : runtimeNotifications) {
+                ImGui::BulletText("%s", notification.c_str());
+            }
+        }
+        return;
+    }
+
+    const std::string sessionWorldReference = NormalizeWorldReference(sessionState.worldName);
+    const bool worldMatchesRuntime = sessionWorldReference == profile.selectedWorld;
+    const auto& diagnostics = CachedLanlineDiagnostics(sessionState, profile.selectedWorld);
+    ImGui::Text("Session ID: %s", sessionState.sessionId.c_str());
+    ImGui::Text("Mode: %s", sessionState.mode.c_str());
+    ImGui::Text("Lifecycle: %s", sessionState.lifecycleStage.c_str());
+    ImGui::Text("Active Actor: %s", sessionState.activeActor.c_str());
+    ImGui::Text("Pending Peer: %s", sessionState.pendingPeer.empty() ? "none" : sessionState.pendingPeer.c_str());
+    ImGui::Text("Connected Peer: %s", sessionState.connectedPeer.empty() ? "none" : sessionState.connectedPeer.c_str());
+    ImGui::Text("Reserved Slots: %d", bunker::ReservedLanlineSessionSlots(sessionState));
+    ImGui::Text("Pending Slots: %d", bunker::PendingLanlineSessionSlots(sessionState));
+    ImGui::Text("Accepted Client Slots: %d", bunker::AcceptedLanlineSessionSlots(sessionState));
+    ImGui::Text("Ready Seats: %d", bunker::ReadyLanlineSessionSlots(sessionState));
+    ImGui::Text("World: %s", sessionWorldReference.c_str());
+    ImGui::Text("Host: %s", sessionState.hostEndpoint.c_str());
+    ImGui::Text("Updated: %s", sessionState.updatedAt.c_str());
+    ImGui::Text("Runtime World Match: %s", worldMatchesRuntime ? "yes" : "no");
+    ImGui::BulletText("Host reachable: %s", diagnostics.hostReachable ? "yes" : "no");
+    ImGui::BulletText("Ping: %s",
+        diagnostics.pingMs >= 0 ? (std::to_string(diagnostics.pingMs) + " ms").c_str() : "n/a");
+    ImGui::BulletText("Snapshot freshness: %s", diagnostics.snapshotFresh ? "fresh" : "stale");
+    ImGui::BulletText("Presence: %d / %d online", diagnostics.onlinePlayers, diagnostics.totalPlayers);
+    if (!diagnostics.lastError.empty()) {
+        ImGui::TextDisabled("%s", diagnostics.lastError.c_str());
+    }
+    ImGui::Separator();
+    ImGui::Text("Session Roster");
+    for (const auto& playerEntry : sessionState.players) {
+        ImGui::BulletText("%s | %s | %s | %s | %s",
+            playerEntry.displayName.c_str(),
+            playerEntry.role.c_str(),
+            playerEntry.online ? "Online" : "Offline",
+            bunker::LanlineSlotStateLabel(playerEntry),
+            bunker::LanlineReadyLabel(playerEntry));
+    }
+    ImGui::Separator();
+    ImGui::Text("Session Log");
+    if (sessionState.eventLog.empty()) {
+        ImGui::TextDisabled("No Lanline events recorded yet.");
+    } else {
+        for (const auto& eventLine : sessionState.eventLog) {
+            ImGui::BulletText("%s", eventLine.c_str());
+        }
+    }
+    ImGui::Separator();
+    ImGui::Text("Relay Chat Mirror");
+    if (sessionState.relayMessages.empty()) {
+        ImGui::TextDisabled("No relay chat mirrored into this session yet.");
+    } else {
+        const std::size_t startIndex = sessionState.relayMessages.size() > 6
+            ? sessionState.relayMessages.size() - 6
+            : 0;
+        for (std::size_t index = startIndex; index < sessionState.relayMessages.size(); ++index) {
+            const auto& relayMessage = sessionState.relayMessages[index];
+            ImGui::BulletText("[%s] %s @ %s: %s",
+                relayMessage.channelId.c_str(),
+                relayMessage.author.c_str(),
+                relayMessage.timeLabel.c_str(),
+                relayMessage.body.c_str());
+        }
+    }
+    ImGui::Separator();
+    ImGui::Text("Voice Presence");
+    if (sessionState.voicePresence.empty()) {
+        ImGui::TextDisabled("No Lanline voice presence mirrored into this session yet.");
+    } else {
+        for (const auto& voicePresence : sessionState.voicePresence) {
+            ImGui::BulletText("%s | %s | PTT %s | peak %d%% | %s",
+                voicePresence.handle.c_str(),
+                voicePresence.speaking ? "transmitting" : "idle",
+                voicePresence.pushToTalk ? "on" : "off",
+                static_cast<int>(voicePresence.peakLevel * 100.0f),
+                voicePresence.timeLabel.c_str());
+        }
+    }
+    ImGui::Separator();
+    ImGui::Text("Runtime Notifications");
+    if (runtimeNotifications.empty()) {
+        ImGui::TextDisabled("No runtime Lanline notifications yet.");
+    } else {
+        for (const auto& notification : runtimeNotifications) {
+            ImGui::BulletText("%s", notification.c_str());
+        }
+    }
+    ImGui::Separator();
+    const auto knownSessions = DiscoverLanlineSessionSnapshots();
+    ImGui::Text("Known Sessions");
+    if (knownSessions.empty()) {
+        ImGui::TextDisabled("No session snapshots discovered.");
+    } else {
+        for (const auto& knownSession : knownSessions) {
+            const auto normalizedKnownWorld = NormalizeWorldReference(knownSession.worldName);
+            const auto& knownDiagnostics = CachedLanlineDiagnostics(knownSession, profile.selectedWorld);
+            ImGui::BulletText("%s | %s | %s | %s | %s",
+                knownSession.sessionId.c_str(),
+                knownSession.mode.c_str(),
+                knownSession.lifecycleStage.c_str(),
+                JoinabilityLabel(knownSession),
+                normalizedKnownWorld.c_str(),
+                knownSession.hostEndpoint.c_str());
+            ImGui::TextDisabled("  Slots %d/%d | Host %s | Ping %s | Match %s | Snapshot %s | Presence %d/%d",
+                bunker::OccupiedLanlineSessionSlots(knownSession),
+                bunker::MaxLanlineSessionSlots(knownSession),
+                knownDiagnostics.hostReachable ? "reachable" : "offline",
+                knownDiagnostics.pingMs >= 0 ? (std::to_string(knownDiagnostics.pingMs) + " ms").c_str() : "n/a",
+                knownDiagnostics.worldMatch ? "yes" : "no",
+                knownDiagnostics.snapshotFresh ? "fresh" : "stale",
+                knownDiagnostics.onlinePlayers,
+                knownDiagnostics.totalPlayers);
+            if (bunker::IsJoinableLanlineSession(knownSession)) {
+                ImGui::TextDisabled("  Open slots: %d | Pending: %d | Reserved: %d | Accepted: %d | Ready: %d",
+                    bunker::AvailableLanlineSessionSlots(knownSession),
+                    bunker::PendingLanlineSessionSlots(knownSession),
+                    bunker::ReservedLanlineSessionSlots(knownSession),
+                    bunker::AcceptedLanlineSessionSlots(knownSession),
+                    bunker::ReadyLanlineSessionSlots(knownSession));
+            }
+        }
+    }
+    ImGui::Separator();
+    ImGui::TextWrapped("Lanline - optime keeps a visible session roster and snapshot trail even without Steam/Xbox auth.");
+}
+
+void DrawPipPadServicesTab(const World& world, const PlayerState& player, SessionProfile& profile, GameState& gameState) {
+    const auto* currentWorldFieldState = FindWorldFieldState(profile, profile.selectedWorld);
+    static bool lanlineServicesLoaded = false;
+    static LanlineServicesState lanlineServices = MakeDefaultLanlineServicesState(std::time(nullptr));
+    if (!lanlineServicesLoaded) {
+        LanlineServicesSave lanlineSave{};
+        if (LoadLanlineServicesSave(DefaultLanlineServicesSavePath(), lanlineSave)) {
+            lanlineServices = MakeLanlineServicesStateFromSave(lanlineSave, std::time(nullptr));
+        }
+        lanlineServicesLoaded = true;
+    }
+
+    LanlineSessionState sessionState;
+    const bool hasSessionState = LoadLanlineSessionState(sessionState);
+    const auto servicesUnlock = BuildServicesUnlockState(profile, currentWorldFieldState);
+    SyncLanlineServicesPresence(lanlineServices, hasSessionState ? &sessionState : nullptr, servicesUnlock);
+    gameState.supportTerminalNearby = IsNearTaggedObject(world, player.x, player.y, "lanline_service_hub", 4.0f);
+    gameState.tankServiceNearby = IsNearTaggedObject(world, player.x, player.y, "tank_service", 4.0f);
+    gameState.medicalSupportNearby = IsNearTaggedObject(world, player.x, player.y, "medical_support", 4.0f);
+    gameState.feyRingScheduleVisible = gameState.feyRingScheduleVisible ||
+        IsNearTaggedObject(world, player.x, player.y, "fey_ring", 4.0f);
+    ImGui::Text("Lanline Services");
+    ImGui::BulletText("Service hub nearby: %s", gameState.supportTerminalNearby ? "yes" : "no");
+    ImGui::BulletText("Tank service nearby: %s", gameState.tankServiceNearby ? "yes" : "no");
+    ImGui::BulletText("Medical support nearby: %s", gameState.medicalSupportNearby ? "yes" : "no");
+    ImGui::BulletText("Fey schedule visible: %s", gameState.feyRingScheduleVisible ? "yes" : "no");
+    if (!gameState.lastSupportAction.empty()) {
+        ImGui::TextWrapped("Support action: %s", gameState.lastSupportAction.c_str());
+    }
+    if (!gameState.lastPortalAction.empty()) {
+        ImGui::TextWrapped("Portal action: %s", gameState.lastPortalAction.c_str());
+    }
+    DrawLanlineServicesPanel(lanlineServices, servicesUnlock, static_cast<std::int64_t>(std::time(nullptr)));
+    SaveLanlineServicesSave(BuildLanlineServicesSave(lanlineServices), DefaultLanlineServicesSavePath());
+}
+#endif
+
 void DrawPipPad(const World& world,
     PlayerState& player,
     SessionProfile& profile,
@@ -3200,239 +3477,18 @@ void DrawPipPad(const World& world,
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.1f, 0.7f, 0.3f, 0.7f));
     ImGui::Begin("PIP-PAD // Recovery Shell", nullptr, ImGuiWindowFlags_NoCollapse);
 
-    const char* tabs[] = {"STAT", "INV", "DATA", "MAP", "QUEST", "NET", "SERV"};
-    for (int index = 0; index < IM_ARRAYSIZE(tabs); ++index) {
-        if (index > 0) {
-            ImGui::SameLine();
-        }
-        if (ImGui::Button(tabs[index], ImVec2(132.0f, 34.0f))) {
-            activeTab = index;
-        }
-    }
+    DrawPipPadTabBar(activeTab);
 
     ImGui::Separator();
-    const int statS = EffectiveStatValue(profile, gameState, 'S');
-    const int statP = EffectiveStatValue(profile, gameState, 'P');
-    const int statE = EffectiveStatValue(profile, gameState, 'E');
-    const int statC = EffectiveStatValue(profile, gameState, 'C');
-    const int statI = EffectiveStatValue(profile, gameState, 'I');
-    const int statA = EffectiveStatValue(profile, gameState, 'A');
-    const int statL = EffectiveStatValue(profile, gameState, 'L');
 
     if (activeTab == 0) {
-        ImGui::Text("Operator: %s", profile.character.displayName.c_str());
-        ImGui::Text("Account: %s", profile.account.username.c_str());
-        ImGui::Text("Level: %d", profile.character.level);
-        ImGui::Text("Experience: %d", profile.character.experience);
-        ImGui::Text("HP %.0f / %.0f", profile.character.hp, profile.character.maxHp);
-        ImGui::Text("MP %.0f / %.0f", profile.character.mp, profile.character.maxMp);
-        ImGui::Text("Status: %s", profile.character.hp > 0.0f ? (profile.character.mp <= 10.0f ? "Fatigued" : "Operational") : "Downed");
-        ImGui::Text("Weather: %s", ToString(gameState.weather));
-        ImGui::Text("Ether Pressure: %.0f%% (%s)", CurrentEtherErosion(profile), EtherErosionBand(CurrentEtherErosion(profile)));
-        ImGui::Text("Current Load: %.1f kg", CurrentInventoryWeight(profile));
-        ImGui::Text("Carry Weight Budget: %.0f kg", profile.character.carryWeight);
-        ImGui::Text("Field Medkits: %s", HasInventoryItem(profile, "cryo_medkit") ? "Available" : "None");
-        if (gameState.rationEffectTimer > 0.0f) {
-            ImGui::Text("Toxic Ration: %.0fs", gameState.rationEffectTimer);
-        }
-        ImGui::Separator();
-        ImGui::Text("SPECIAL");
-        ImGui::BulletText("S %d", statS);
-        ImGui::BulletText("P %d", statP);
-        ImGui::BulletText("E %d", statE);
-        ImGui::BulletText("C %d", statC);
-        ImGui::BulletText("I %d", statI);
-        ImGui::BulletText("A %d", statA);
-        ImGui::BulletText("L %d", statL);
+        DrawPipPadStatTab(profile, gameState);
     } else if (activeTab == 1) {
-        ImGui::Text("Inventory Manifest");
-        ImGui::Separator();
-        ImGui::BeginChild("InventoryList", ImVec2(0.0f, 320.0f), true);
-        for (const auto& item : profile.character.inventory) {
-            ImGui::BulletText("%s x%d", item.itemId.c_str(), item.count);
-        }
-        ImGui::EndChild();
-        if (ImGui::Button("Consume Field Ration")) {
-            if (!TryConsumeFieldRation(profile, gameState)) {
-                gameState.lastEvent = "No field ration available.";
-            }
-        }
-        if (HasInventoryItem(profile, "recipe_repair_patch")) {
-            if (ImGui::Button("Craft Repair Patch")) {
-                if (HasInventoryItem(profile, "steel_scrap") && HasInventoryItem(profile, "copper_wire")) {
-                    ConsumeInventoryItem(profile, "steel_scrap", 1);
-                    ConsumeInventoryItem(profile, "copper_wire", 1);
-                    AddInventoryItem(profile, "repair_patch", 1, 0.2f);
-                    gameState.lastEvent = "Repair Patch fabricated from awakened field recipe.";
-                } else {
-                    gameState.lastEvent = "Crafting requires steel_scrap and copper_wire.";
-                }
-            }
-            ImGui::TextDisabled("Recipe unlocked: steel_scrap + copper_wire -> repair_patch");
-        } else {
-            const int fieldServiceUses = profile.character.awakening.fieldServiceUses;
-            const int cyclesRemaining = std::max(0, 3 - fieldServiceUses);
-            ImGui::TextDisabled("Awakened repair recipe dormant: %d/3 field service cycles logged", std::min(fieldServiceUses, 3));
-            if (cyclesRemaining > 0) {
-                ImGui::TextDisabled("Field service needs %d more cycle%s to surface the recipe.", cyclesRemaining, cyclesRemaining == 1 ? "" : "s");
-            }
-        }
-        auto* worldFieldState = FindWorldFieldState(profile, profile.selectedWorld, true);
-        if (worldFieldState != nullptr && worldFieldState->tradeNetworkActive) {
-            ImGui::Separator();
-            ImGui::Text("Trade Network");
-            ImGui::TextDisabled("Trade vouchers: %s", HasInventoryItem(profile, "trade_voucher") ? "available" : "none");
-            if (ImGui::Button("Redeem Medkit")) {
-                if (ConsumeInventoryItem(profile, "trade_voucher", 1)) {
-                    AddInventoryItem(profile, "cryo_medkit", 1, 0.5f);
-                    gameState.lastEvent = "Trade voucher exchanged for one cryo_medkit.";
-                } else {
-                    gameState.lastEvent = "No trade voucher available.";
-                }
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Redeem Power Cell")) {
-                if (ConsumeInventoryItem(profile, "trade_voucher", 1)) {
-                    AddInventoryItem(profile, "power_cell", 1, 0.3f);
-                    gameState.lastEvent = "Trade voucher exchanged for one power_cell.";
-                } else {
-                    gameState.lastEvent = "No trade voucher available.";
-                }
-            }
-            if (ImGui::Button("Redeem Ammo Bundle")) {
-                if (ConsumeInventoryItem(profile, "trade_voucher", 1)) {
-                    AddInventoryItem(profile, "#%it_ptrs_ammo", 2, 0.7f);
-                    gameState.lastEvent = "Trade voucher exchanged for an ammo bundle.";
-                } else {
-                    gameState.lastEvent = "No trade voucher available.";
-                }
-            }
-        }
-        ImGui::TextWrapped("Field action: press H to use one cryo medkit if available.");
+        DrawPipPadInventoryTab(profile, gameState);
     } else if (activeTab == 2) {
-        ImGui::Text("Vehicle Telemetry");
-        ImGui::Text("Partner Tank: %s", profile.partnerTank.callSign.c_str());
-        ImGui::Text("Class: %s", ToString(profile.partnerTank.tankClass));
-        ImGui::Text("Sync Mode: %s", CurrentTankSyncMode(profile.partnerTank).c_str());
-        ImGui::Text("Trust Link: %.0f%%", profile.partnerTank.trustLink * 100.0f);
-        ImGui::Text("Utility Module: %s", CurrentUtilityModuleLabel(profile));
-        if (TankUsesTowCoupler(profile)) {
-            ImGui::TextDisabled("Tow Coupler: +logistics, -mobility, +thermal load");
-        } else if (TankUsesRamShield(profile)) {
-            ImGui::TextDisabled("Ram Shield: +impact, +survivability");
-        } else {
-            ImGui::TextDisabled("Bucket Rig: debris clearing and field works");
-        }
-        if (profile.partnerTank.worldPositionKnown) {
-            ImGui::Text("Anchor: %.1f %.1f", profile.partnerTank.worldX, profile.partnerTank.worldY);
-        } else {
-            ImGui::TextDisabled("Anchor: unknown");
-        }
-        ImGui::ProgressBar(profile.partnerTank.energyReserve / 100.0f, ImVec2(-1.0f, 18.0f), "Energy");
-        ImGui::ProgressBar(profile.partnerTank.ammoReserve / 100.0f, ImVec2(-1.0f, 18.0f), "Ammo");
-        ImGui::Text("Workshop Log: %s", gameState.workshopServiceCooldown > 0.0f ? "Recent repair cycle complete" : "No recent workshop cycle");
-        ImGui::BulletText("Workshop Engineer: %s", HasAssignedSpecialistRole(profile, "engineer", "workshop") ? "assigned" : "standard crew");
-        ImGui::BulletText("Field Engineer: %s", HasAssignedSpecialistRole(profile, "engineer", "scavenger_support") ? "assigned" : "not assigned");
-        ImGui::BulletText("Repair Recipe: %s", HasInventoryItem(profile, "recipe_repair_patch") ? "awakened" : "still dormant");
-        ImGui::Separator();
-        ImGui::Text("Tank Integrity");
-        ImGui::ProgressBar(profile.partnerTank.damage.hull / 100.0f, ImVec2(-1.0f, 16.0f), "Hull");
-        ImGui::ProgressBar(profile.partnerTank.damage.bucket / 100.0f, ImVec2(-1.0f, 16.0f), "Bucket");
-        ImGui::ProgressBar(profile.partnerTank.damage.sensors / 100.0f, ImVec2(-1.0f, 16.0f), "Sensors");
-        ImGui::Separator();
-        ImGui::Text("Passive Skills");
-        for (auto& skill : profile.character.passiveSkills) {
-            if (!skill.unlocked) {
-                ImGui::TextDisabled("%s [LOCKED]", skill.displayName.c_str());
-                continue;
-            }
-            ImGui::Checkbox(skill.displayName.c_str(), &skill.equipped);
-        }
-        ImGui::Separator();
-        if (profile.story.tankLinked && ImGui::Button("Swap Utility Module")) {
-            ToggleTankUtilityModule(profile, player, gameState);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Field Service")) {
-            TryRunFieldWorkbench(player, profile, gameState);
-        }
-        if (gameState.fieldWorkbenchCooldown > 0.0f) {
-            ImGui::TextDisabled("Field Service Cooldown: %.0fs", gameState.fieldWorkbenchCooldown);
-        } else {
-            ImGui::TextDisabled("Field Service ready when BT-72 is stationary.");
-        }
-        ImGui::Separator();
-        int damagedArchiveCount = 0;
-        int reconstructedArchiveCount = 0;
-        for (const auto& tape : profile.character.collectedTapes) {
-            if (tape.damaged && !tape.reconstructed) {
-                damagedArchiveCount += 1;
-            }
-            if (tape.reconstructed) {
-                reconstructedArchiveCount += 1;
-            }
-        }
-        ImGui::Text("DATA / Archive Summary");
-        ImGui::BulletText("Archive Sync: %s", profile.story.archiveRecovered ? "mirrored" : "missing");
-        ImGui::BulletText("Relay Packet: %s", profile.story.relayRecovered ? "captured" : "missing");
-        ImGui::BulletText("Debrief Record: %s", HasCollectedTape(profile, "debrief_shelter17") ? "archived" : "missing");
-        ImGui::BulletText("Archive Sync Count: %d", profile.character.awakening.archiveSyncs);
-        ImGui::BulletText("Damaged Carriers: %d", damagedArchiveCount);
-        ImGui::BulletText("Reconstructed Carriers: %d", reconstructedArchiveCount);
-        ImGui::Separator();
-        ImGui::Text("Archive Carriers");
-        for (std::size_t index = 0; index < profile.character.collectedTapes.size(); ++index) {
-            auto& tape = profile.character.collectedTapes[index];
-            std::string tapeLabel = tape.title;
-            if (tape.damaged && !tape.reconstructed) {
-                tapeLabel += " [DAMAGED]";
-            } else {
-                tapeLabel += tape.played ? " [LISTENED]" : " [NEW]";
-            }
-            if (ImGui::Selectable(tapeLabel.c_str(), profile.character.activeTapeIndex == static_cast<int>(index))) {
-                profile.character.activeTapeIndex = static_cast<int>(index);
-                if (!tape.damaged || tape.reconstructed) {
-                    tape.played = true;
-                    gameState.lastEvent = "Tape opened: " + tape.title;
-                } else {
-                    gameState.lastEvent = "Tape is damaged. Reconstruction required before playback.";
-                }
-            }
-        }
-        if (HasActiveTape(profile.character)) {
-            auto& activeTape = profile.character.collectedTapes[static_cast<std::size_t>(profile.character.activeTapeIndex)];
-            if (activeTape.damaged && !activeTape.reconstructed) {
-                ImGui::Separator();
-                ImGui::TextWrapped("Damaged archive detected. Reconstruction will spend 12 MP to restore readable fragments.");
-                if (ImGui::Button("Reconstruct Data")) {
-                    if (profile.character.mp < 12.0f) {
-                        gameState.lastEvent = "Not enough MP to reconstruct damaged data.";
-                    } else {
-                        profile.character.mp = std::max(0.0f, profile.character.mp - 12.0f);
-                        activeTape.reconstructed = true;
-                        activeTape.damaged = false;
-                        activeTape.played = true;
-                        activeTape.title += " // Reconstructed";
-                        std::string progressionEvent;
-                        AwardExperience(profile, 20, &progressionEvent);
-                        gameState.lastEvent = "Data reconstruction complete for " + activeTape.title + ". " + progressionEvent;
-                    }
-                }
-            }
-        }
-        ImGui::Separator();
-        ImGui::Text("Tape Bonus");
-        ImGui::TextWrapped("%s", ActiveTapeBonusLabel(profile.character, player.insideTank).c_str());
+        DrawPipPadDataTab(player, profile, gameState);
     } else if (activeTab == 3) {
-        ImGui::Text("Local Survey");
-        ImGui::Text("Zone: %s", world.metadata.name.c_str());
-        ImGui::Text("Objective: %s", world.metadata.objective.c_str());
-        ImGui::Separator();
-        ImGui::BeginChild("MapList", ImVec2(0.0f, 300.0f), true);
-        for (const auto& object : world.objects) {
-            ImGui::BulletText("%s | %.1f %.1f | HP %.0f", object.displayName.c_str(), object.x, object.y, object.health);
-        }
-        ImGui::EndChild();
+        DrawPipPadMapTab(world);
     } else if (activeTab == 4) {
         const float recoveryIndex = ShelterRecoveryIndex(profile);
         auto* worldFieldState = FindWorldFieldState(profile, profile.selectedWorld, true);
@@ -3933,176 +3989,9 @@ void DrawPipPad(const World& world,
                 ? "Shelter 17 has a live recovery backbone. The next priority is expanding into deeper industrial territory."
                 : "Shelter 17 is still rebuilding. Keep restoring grid, logistics, and production nodes to raise the recovery index.");
     } else if (activeTab == 5) {
-        LanlineSessionState sessionState;
-        const bool hasSessionState = LoadLanlineSessionState(sessionState);
-        const auto* currentWorldFieldState = FindWorldFieldState(profile, profile.selectedWorld);
-        const auto& runtimeNotifications = UpdateLanlineRuntimeNotifications(
-            hasSessionState ? &sessionState : nullptr,
-            profile.selectedWorld,
-            gameState);
-        static bool lanlineServicesLoaded = false;
-        static LanlineServicesState lanlineServices = MakeDefaultLanlineServicesState(std::time(nullptr));
-        if (!lanlineServicesLoaded) {
-            LanlineServicesSave lanlineSave{};
-            if (LoadLanlineServicesSave(DefaultLanlineServicesSavePath(), lanlineSave)) {
-                lanlineServices = MakeLanlineServicesStateFromSave(lanlineSave, std::time(nullptr));
-            }
-            lanlineServicesLoaded = true;
-        }
-        const auto servicesUnlock = BuildServicesUnlockState(profile, currentWorldFieldState);
-        SyncLanlineServicesPresence(lanlineServices, hasSessionState ? &sessionState : nullptr, servicesUnlock);
-        gameState.supportTerminalNearby = IsNearTaggedObject(world, player.x, player.y, "lanline_service_hub", 4.0f);
-        gameState.tankServiceNearby = IsNearTaggedObject(world, player.x, player.y, "tank_service", 4.0f);
-        gameState.medicalSupportNearby = IsNearTaggedObject(world, player.x, player.y, "medical_support", 4.0f);
-        gameState.feyRingScheduleVisible = gameState.feyRingScheduleVisible ||
-            IsNearTaggedObject(world, player.x, player.y, "fey_ring", 4.0f);
-        ImGui::Text("Lanline - optime");
-        if (!hasSessionState) {
-            ImGui::TextDisabled("No active Lanline session state found. Launch through BunkerLauncher to seed roster and snapshot data.");
-            if (!runtimeNotifications.empty()) {
-                ImGui::Separator();
-                ImGui::Text("Runtime Notifications");
-                for (const auto& notification : runtimeNotifications) {
-                    ImGui::BulletText("%s", notification.c_str());
-                }
-            }
-        } else {
-            const std::string sessionWorldReference = NormalizeWorldReference(sessionState.worldName);
-            const bool worldMatchesRuntime = sessionWorldReference == profile.selectedWorld;
-            const auto& diagnostics = CachedLanlineDiagnostics(sessionState, profile.selectedWorld);
-            ImGui::Text("Session ID: %s", sessionState.sessionId.c_str());
-            ImGui::Text("Mode: %s", sessionState.mode.c_str());
-            ImGui::Text("Lifecycle: %s", sessionState.lifecycleStage.c_str());
-            ImGui::Text("Active Actor: %s", sessionState.activeActor.c_str());
-            ImGui::Text("Pending Peer: %s", sessionState.pendingPeer.empty() ? "none" : sessionState.pendingPeer.c_str());
-            ImGui::Text("Connected Peer: %s", sessionState.connectedPeer.empty() ? "none" : sessionState.connectedPeer.c_str());
-            ImGui::Text("Reserved Slots: %d", ReservedLanlineSessionSlots(sessionState));
-            ImGui::Text("Pending Slots: %d", PendingLanlineSessionSlots(sessionState));
-            ImGui::Text("Accepted Client Slots: %d", AcceptedLanlineSessionSlots(sessionState));
-            ImGui::Text("Ready Seats: %d", ReadyLanlineSessionSlots(sessionState));
-            ImGui::Text("World: %s", sessionWorldReference.c_str());
-            ImGui::Text("Host: %s", sessionState.hostEndpoint.c_str());
-            ImGui::Text("Updated: %s", sessionState.updatedAt.c_str());
-            ImGui::Text("Runtime World Match: %s", worldMatchesRuntime ? "yes" : "no");
-            ImGui::BulletText("Host reachable: %s", diagnostics.hostReachable ? "yes" : "no");
-            ImGui::BulletText("Ping: %s",
-                diagnostics.pingMs >= 0 ? (std::to_string(diagnostics.pingMs) + " ms").c_str() : "n/a");
-            ImGui::BulletText("Snapshot freshness: %s", diagnostics.snapshotFresh ? "fresh" : "stale");
-            ImGui::BulletText("Presence: %d / %d online", diagnostics.onlinePlayers, diagnostics.totalPlayers);
-            if (!diagnostics.lastError.empty()) {
-                ImGui::TextDisabled("%s", diagnostics.lastError.c_str());
-            }
-            ImGui::Separator();
-            ImGui::Text("Session Roster");
-            for (const auto& playerEntry : sessionState.players) {
-                ImGui::BulletText("%s | %s | %s | %s | %s",
-                    playerEntry.displayName.c_str(),
-                    playerEntry.role.c_str(),
-                    playerEntry.online ? "Online" : "Offline",
-                    LanlineSlotStateLabel(playerEntry),
-                    LanlineReadyLabel(playerEntry));
-            }
-            ImGui::Separator();
-            ImGui::Text("Session Log");
-            if (sessionState.eventLog.empty()) {
-                ImGui::TextDisabled("No Lanline events recorded yet.");
-            } else {
-                for (const auto& eventLine : sessionState.eventLog) {
-                    ImGui::BulletText("%s", eventLine.c_str());
-                }
-            }
-            ImGui::Separator();
-            ImGui::Text("Relay Chat Mirror");
-            if (sessionState.relayMessages.empty()) {
-                ImGui::TextDisabled("No relay chat mirrored into this session yet.");
-            } else {
-                const std::size_t startIndex = sessionState.relayMessages.size() > 6
-                    ? sessionState.relayMessages.size() - 6
-                    : 0;
-                for (std::size_t index = startIndex; index < sessionState.relayMessages.size(); ++index) {
-                    const auto& relayMessage = sessionState.relayMessages[index];
-                    ImGui::BulletText("[%s] %s @ %s: %s",
-                        relayMessage.channelId.c_str(),
-                        relayMessage.author.c_str(),
-                        relayMessage.timeLabel.c_str(),
-                        relayMessage.body.c_str());
-                }
-            }
-            ImGui::Separator();
-            ImGui::Text("Voice Presence");
-            if (sessionState.voicePresence.empty()) {
-                ImGui::TextDisabled("No Lanline voice presence mirrored into this session yet.");
-            } else {
-                for (const auto& voicePresence : sessionState.voicePresence) {
-                    ImGui::BulletText("%s | %s | PTT %s | peak %d%% | %s",
-                        voicePresence.handle.c_str(),
-                        voicePresence.speaking ? "transmitting" : "idle",
-                        voicePresence.pushToTalk ? "on" : "off",
-                        static_cast<int>(voicePresence.peakLevel * 100.0f),
-                        voicePresence.timeLabel.c_str());
-                }
-            }
-            ImGui::Separator();
-            ImGui::Text("Runtime Notifications");
-            if (runtimeNotifications.empty()) {
-                ImGui::TextDisabled("No runtime Lanline notifications yet.");
-            } else {
-                for (const auto& notification : runtimeNotifications) {
-                    ImGui::BulletText("%s", notification.c_str());
-                }
-            }
-            ImGui::Separator();
-            const auto knownSessions = DiscoverLanlineSessionSnapshots();
-            ImGui::Text("Known Sessions");
-            if (knownSessions.empty()) {
-                ImGui::TextDisabled("No session snapshots discovered.");
-            } else {
-                for (const auto& knownSession : knownSessions) {
-                    const auto normalizedKnownWorld = NormalizeWorldReference(knownSession.worldName);
-                    const auto& knownDiagnostics = CachedLanlineDiagnostics(knownSession, profile.selectedWorld);
-                    ImGui::BulletText("%s | %s | %s | %s | %s",
-                        knownSession.sessionId.c_str(),
-                        knownSession.mode.c_str(),
-                        knownSession.lifecycleStage.c_str(),
-                        JoinabilityLabel(knownSession),
-                        normalizedKnownWorld.c_str(),
-                        knownSession.hostEndpoint.c_str());
-                    ImGui::TextDisabled("  Slots %d/%d | Host %s | Ping %s | Match %s | Snapshot %s | Presence %d/%d",
-                        OccupiedLanlineSessionSlots(knownSession),
-                        MaxLanlineSessionSlots(knownSession),
-                        knownDiagnostics.hostReachable ? "reachable" : "offline",
-                        knownDiagnostics.pingMs >= 0 ? (std::to_string(knownDiagnostics.pingMs) + " ms").c_str() : "n/a",
-                        knownDiagnostics.worldMatch ? "yes" : "no",
-                        knownDiagnostics.snapshotFresh ? "fresh" : "stale",
-                        knownDiagnostics.onlinePlayers,
-                        knownDiagnostics.totalPlayers);
-                    if (IsJoinableLanlineSession(knownSession)) {
-                        ImGui::TextDisabled("  Open slots: %d | Pending: %d | Reserved: %d | Accepted: %d | Ready: %d",
-                            AvailableLanlineSessionSlots(knownSession),
-                            PendingLanlineSessionSlots(knownSession),
-                            ReservedLanlineSessionSlots(knownSession),
-                            AcceptedLanlineSessionSlots(knownSession),
-                            ReadyLanlineSessionSlots(knownSession));
-                    }
-                }
-            }
-            ImGui::Separator();
-            ImGui::TextWrapped("Lanline - optime keeps a visible session roster and snapshot trail even without Steam/Xbox auth.");
-        }
-        ImGui::Separator();
-        ImGui::Text("Lanline Services");
-        ImGui::BulletText("Service hub nearby: %s", gameState.supportTerminalNearby ? "yes" : "no");
-        ImGui::BulletText("Tank service nearby: %s", gameState.tankServiceNearby ? "yes" : "no");
-        ImGui::BulletText("Medical support nearby: %s", gameState.medicalSupportNearby ? "yes" : "no");
-        ImGui::BulletText("Fey schedule visible: %s", gameState.feyRingScheduleVisible ? "yes" : "no");
-        if (!gameState.lastSupportAction.empty()) {
-            ImGui::TextWrapped("Support action: %s", gameState.lastSupportAction.c_str());
-        }
-        if (!gameState.lastPortalAction.empty()) {
-            ImGui::TextWrapped("Portal action: %s", gameState.lastPortalAction.c_str());
-        }
-        DrawLanlineServicesPanel(lanlineServices, servicesUnlock, static_cast<std::int64_t>(std::time(nullptr)));
-        SaveLanlineServicesSave(BuildLanlineServicesSave(lanlineServices), DefaultLanlineServicesSavePath());
+        DrawPipPadNetTab(profile, gameState);
+    } else if (activeTab == 6) {
+        DrawPipPadServicesTab(world, player, profile, gameState);
     }
 
     ImGui::Separator();

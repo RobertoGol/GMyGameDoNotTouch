@@ -1,0 +1,7 @@
+-Wno-everything
+-Iinclude
+-Iexternal
+-Iexternal/glfw/include
+-Iexternal/imgui
+-Iexternal/imgui/backends
+-std=c++20

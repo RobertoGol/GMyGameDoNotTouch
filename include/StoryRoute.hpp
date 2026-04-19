@@ -20,3 +20,4 @@ bool HasFeyRingIntercityObjective(const SessionProfile& profile);
 bool HasFeyRingInterserverObjective(const SessionProfile& profile);
 
 }  // namespace bunker
+ 

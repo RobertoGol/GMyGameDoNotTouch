@@ -9,6 +9,7 @@
 
 #include "../include/AppPaths.hpp"
 #include "../include/GameRuntime.hpp"
+#include "../include/LanlineLobbyLogic.hpp"
 #include "../include/LanlineSession.hpp"
 #include "../include/LaunchSession.hpp"
 #include "../include/WorldEvents.hpp"
@@ -42,23 +43,6 @@ void UpsertLanlinePlayer(bunker::LanlineSessionState& state,
     playerIt->ready = ready;
 }
 
-bool IsLanlineAwaitingSlot(const bunker::LanlinePlayerEntry& entry) {
-    return entry.role == "Awaiting";
-}
-
-bool IsLanlineReservedSlot(const bunker::LanlinePlayerEntry& entry) {
-    return entry.role == "Reserved Client";
-}
-
-int FindFirstAwaitingSlotIndex(const bunker::LanlineSessionState& state) {
-    for (int index = 0; index < static_cast<int>(state.players.size()); ++index) {
-        if (IsLanlineAwaitingSlot(state.players[static_cast<std::size_t>(index)])) {
-            return index;
-        }
-    }
-    return -1;
-}
-
 void AcceptLanlineLobbySlot(bunker::LanlineSessionState& state, const std::string& peerName) {
     for (auto& player : state.players) {
         if (player.displayName == peerName) {
@@ -68,7 +52,7 @@ void AcceptLanlineLobbySlot(bunker::LanlineSessionState& state, const std::strin
             return;
         }
     }
-    const int slotIndex = FindFirstAwaitingSlotIndex(state);
+    const int slotIndex = bunker::FindFirstAwaitingSlotIndex(state);
     if (slotIndex >= 0) {
         auto& slot = state.players[static_cast<std::size_t>(slotIndex)];
         slot.displayName = peerName;
@@ -132,10 +116,10 @@ void SyncLanlineRuntimeLaunchState(const bunker::LaunchTicketInfo& launchTicket,
             state.connectedPeer = "Host";
         }
         for (auto& player : state.players) {
-            if (player.displayName == actorName && IsLanlineReservedSlot(player)) {
-                player.role = "Pending Client";
-                break;
-            }
+        if (player.displayName == actorName && bunker::IsLanlineReservedSlot(player)) {
+            player.role = "Pending Client";
+            break;
+        }
         }
         state.lifecycleStage = "ClientRuntimeJoined";
     } else {
@@ -205,8 +189,8 @@ int main() {
             ImGui::TextWrapped("%s", launchFailureReason.c_str());
             ImGui::Separator();
             ImGui::TextWrapped("BunkerGame is expected to be started by BunkerLauncher. BunkerEditor remains optional for players.");
-            if (ImGui::Button("Close")) {
-                glfwSetWindowShouldClose(deniedWindow, GLFW_TRUE);
+                if (ImGui::Button("Close")) {
+            glfwSetWindowShouldClose(deniedWindow, GLFW_TRUE);
             }
             ImGui::End();
 
@@ -220,10 +204,11 @@ int main() {
         ImGui::DestroyContext(); 
         glfwDestroyWindow(deniedWindow);
         glfwTerminate();
-        return 0;
+         
+                return 0;
     }
 
-    bunker::SessionProfile sessionProfile;
+        bunker::SessionProfile sessionProfile;
     const auto profilePath = bunker::DefaultSessionProfilePath();
     if (!bunker::LoadSessionProfile(profilePath, sessionProfile)) {
     sessionProfile = bunker::MakeDefaultSessionProfile();
@@ -261,7 +246,10 @@ int main() {
     const auto worldPath = bunker::ResolveWorldPath(sessionProfile.selectedWorld);
     if (!world.Load(worldPath.string())) {
         world.GeneratePrototypeZone();
-        world.Save(worldPath.string());
+        const auto initialWorldSave = bunker::SaveWorldAtomically(world, worldPath);
+        if (!initialWorldSave.ok) {
+            std::fprintf(stderr, "Initial world save failed: %s\n", initialWorldSave.message.c_str());
+        }
     }
     world.EnsureStarterInfrastructure();
     bunker::ApplyStaticEraser(world, staticEraser);
@@ -474,10 +462,15 @@ int main() {
 
         const bool saveNow = glfwGetKey(window, GLFW_KEY_F5) == GLFW_PRESS;
         if (saveNow && !gameState.savePressed) {
-            world.Save(worldPath.string());
-            bunker::SaveSessionProfile(sessionProfile, profilePath);
+            const auto worldSave = bunker::SaveWorldAtomically(world, worldPath);
+            const auto profileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
             staticEraser.Save(sessionProfile.selectedWorld);
-            gameState.lastEvent = "Field save committed.";
+            if (worldSave.ok && profileSave.ok) {
+                gameState.lastEvent = "Field save committed.";
+            } else {
+                gameState.lastEvent = "Field save failed: " +
+                    std::string(!worldSave.ok ? worldSave.message : profileSave.message);
+            }
         }
         gameState.savePressed = saveNow;
 
@@ -754,9 +747,15 @@ int main() {
         glfwSwapBuffers(window);
     }
 
-    world.Save(worldPath.string());
-    bunker::SaveSessionProfile(sessionProfile, profilePath);
+    const auto finalWorldSave = bunker::SaveWorldAtomically(world, worldPath);
+    const auto finalProfileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
     staticEraser.Save(sessionProfile.selectedWorld);
+    if (!finalWorldSave.ok) {
+        std::fprintf(stderr, "Final world save failed: %s\n", finalWorldSave.message.c_str());
+    }
+    if (!finalProfileSave.ok) {
+        std::fprintf(stderr, "Final profile save failed: %s\n", finalProfileSave.message.c_str());
+    }
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

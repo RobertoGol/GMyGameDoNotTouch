@@ -1,5 +1,31 @@
 # Next
 
+## Живой статус
+
+Этот верхний блок теперь главный.
+Старый длинный текст ниже оставлен как архив контекста, чтобы ничего не терялось.
+### Еще осталось из старого плана
+
+- верхний блок старого плана сейчас закрыт
+
+### Закрыто в этом проходе
+
+- канонизирован общий `scriptTag` registry: editor/runtime/validation теперь понимают одинаковые теги и legacy-aliases
+- `WorldValidation` больше не считает каждый семантический `linkTarget` битой ссылкой; жёстко проверяются только ссылки, похожие на `registryId`
+- editor presets переведены на канонические теги для `tower_sync`, `workshop_service`, `rail_depot`, `rail_fortress_hub`, `industrial_gate`, `fey_ring`, `tank_service`
+- runtime interaction и terminal sync теперь понимают alias-теги без ручного ремонта старых world-файлов
+- smoke-check покрывает alias normalization и validation contract
+- `World::Load` теперь канонизирует legacy `scriptTag`, а `World::FindObjectByScriptTag` / `HasScriptTag` работают через normalized lookup
+- editor warnings по `fey_ring` / `lanline_service_hub` / `tank_service` тоже учитывают legacy-aliases, а не только новые теги
+- `GameplayDescriptorRegistry` вынесен из header в [src/GameplayDescriptorRegistry.cpp], `WorldValidation` вынесен в [src/WorldValidation.cpp]
+
+### Правило на следующие проходы
+
+Сначала закрываем пункты из этого верхнего блока.
+Старые заметки ниже не удаляются, а служат архивом и пояснением.
+
+Продуктовая граница `Lanline` зафиксирована отдельно: `LANLINE_BOUNDARY.md`.
+
 Старое содержимое `Next.md` разложено по отдельным файлам, чтобы этот файл больше не был гигантской свалкой текста.
 
 Смотри:
@@ -159,219 +185,12 @@ Authoring direction: editor уже заточен под gameplay authoring, а 
 Systemic progression: story, skills, tank/recovery/service loops растут вместе.
 Launch discipline: launcher ticket — это зрелая мысль.
 Готовые куски кода, которые я бы вставил прямо сейчас
-1) Убрать длинный if/else из DescribeTerminalSync в GameRuntime.cpp
 
-Это маленький, но очень правильный шаг: поведение становится легче расширять и меньше шансов сломать цепочку.
+Этот блок уже внедрён в проект и очищен из `Next.md`, чтобы не хранить здесь устаревшие дубли кода:
 
-#include <array>
-#include <string_view>
-
-namespace bunker {
-namespace {
-
-const char* TryGetTerminalSyncText(std::string_view tag) {
-    static constexpr std::array<std::pair<std::string_view, const char*>, 22> kSyncTexts{{
-        {"tower_sync", "Tower sync complete. Regional grid reach expanded."},
-        {"power_pylon", "Pylon registry mirrored. Grid restoration route updated."},
-        {"drone_station", "Drone station ledger mirrored. Sweep routes registered to Pip-Pad."},
-        {"rail_freight", "Rail freight depot records mirrored. Heavy spur logistics registered."},
-        {"orbital_uplink", "Orbital uplink records mirrored. Long-range scan queue registered."},
-        {"rail_fortress", "Rail Fortress patrol package mirrored. Spur security doctrine updated."},
-        {"recovery_fabricator", "Recovery fabricator recipes mirrored. Shelter supply pipeline updated."},
-        {"industrial_gate", "Industrial gate overrides mirrored. Inner spur access route logged."},
-        {"industrial_survey", "Industrial survey notes mirrored. Inner spur reconnaissance queue updated."},
-        {"industrial_outpost", "Inner spur outpost records mirrored. Forward recovery foothold logged."},
-        {"assembly_cell", "Assembly cell notes mirrored. Local recovery production registered."},
-        {"foundry_line", "Foundry line records mirrored. Heavy fabrication route registered."},
-        {"reactor_yard", "Reactor yard records mirrored. Heavy energy recovery route registered."},
-        {"capacitor_bank", "Capacitor bank records mirrored. Buffered grid discharge route registered."},
-        {"relay_substation", "Relay substation notes mirrored. Backbone return flow updated."},
-        {"service_bay", "Service bay notes mirrored. BT-72 support route updated."},
-        {"water_reclaimer", "Water reclaimer notes mirrored. Frontier recovery reserves updated."},
-        {"lanline_service_hub", "Lanline service hub mirrored. Shelter 17 service catalog now resolves through authored relay infrastructure."},
-        {"fey_ring", "Fey Ring route mirrored. Transit windows registered to the relay map."},
-        {"medical_support", "Medical support node mirrored. Field treatment requests now route through authored relay anchors."},
-        {"tank_service", "Tank service anchor mirrored. BT-72 maintenance route updated."},
-        {"specialist_cryo", "Cryo specialist registry mirrored. Shelter staffing ledger updated."}
-    }};
-
-    for (const auto& [key, text] : kSyncTexts) {
-        if (key == tag) {
-            return text;
-        }
-    }
-    return nullptr;
-}
-
-std::string DescribeTerminalSync(const MapObject& object) {
-    if (const char* text = TryGetTerminalSyncText(object.scriptTag)) {
-        return text;
-    }
-    if (object.scriptTag == "echo_trace") {
-        return "Residual echo trace mirrored to Pip-Pad.";
-    }
-    if (object.scriptTag == "workshop_service") {
-        return "Workshop terminal mirrored. BT-72 service route and repair notes updated.";
-    }
-    return object.scriptTag.empty()
-        ? "Terminal sync complete. Additional archive fragments copied to Pip-Pad."
-        : "Terminal sync complete: " + object.scriptTag;
-}
-
-} // namespace
-} // namespace bunker
-2) Добавить валидацию мира перед сохранением
-
-Файл: include/WorldValidation.hpp
-
-#pragma once
-
-#include <string>
-#include <string_view>
-#include <unordered_set>
-#include <vector>
-
-#include "World.hpp"
-
-namespace bunker {
-
-enum class ValidationSeverity {
-    Warning,
-    Error
-};
-
-struct ValidationIssue {
-    ValidationSeverity severity = ValidationSeverity::Warning;
-    std::string code;
-    std::string objectId;
-    std::string message;
-};
-
-inline bool ScriptTagRequiresLinkTarget(std::string_view scriptTag) {
-    return scriptTag == "remote_link";
-}
-
-inline std::vector<ValidationIssue> ValidateWorld(const World& world) {
-    std::vector<ValidationIssue> issues;
-    std::unordered_set<std::string> registryIds;
-
-    for (const auto& obj : world.objects) {
-        if (obj.registryId.empty()) {
-            issues.push_back({
-                ValidationSeverity::Error,
-                "missing_registry_id",
-                "",
-                "Object has empty registryId."
-            });
-        } else if (!registryIds.insert(obj.registryId).second) {
-            issues.push_back({
-                ValidationSeverity::Error,
-                "duplicate_registry_id",
-                obj.registryId,
-                "Duplicate registryId detected: " + obj.registryId
-            });
-        }
-
-        if (obj.displayName.empty()) {
-            issues.push_back({
-                ValidationSeverity::Warning,
-                "missing_display_name",
-                obj.registryId,
-                "Object has empty displayName."
-            });
-        }
-
-        if (ScriptTagRequiresLinkTarget(obj.scriptTag) && obj.linkTarget.empty()) {
-            issues.push_back({
-                ValidationSeverity::Error,
-                "missing_link_target",
-                obj.registryId,
-                "scriptTag '" + obj.scriptTag + "' requires linkTarget."
-            });
-        }
-
-        if (!obj.linkTarget.empty() && !world.HasObject(obj.linkTarget)) {
-            issues.push_back({
-                ValidationSeverity::Error,
-                "broken_link_target",
-                obj.registryId,
-                "linkTarget '" + obj.linkTarget + "' does not resolve to any registryId."
-            });
-        }
-
-        if (obj.interaction == InteractionType::Transition && obj.linkTarget.empty()) {
-            issues.push_back({
-                ValidationSeverity::Warning,
-                "transition_without_target",
-                obj.registryId,
-                "Transition object has no linkTarget."
-            });
-        }
-    }
-
-    return issues;
-}
-
-inline int CountValidationErrors(const std::vector<ValidationIssue>& issues) {
-    int count = 0;
-    for (const auto& issue : issues) {
-        if (issue.severity == ValidationSeverity::Error) {
-            ++count;
-        }
-    }
-    return count;
-}
-
-} // namespace bunker
-
-Минимальная интеграция в editor перед save:
-
-#include "../include/WorldValidation.hpp"
-
-// перед world.Save(...)
-const auto issues = bunker::ValidateWorld(world);
-const int errorCount = bunker::CountValidationErrors(issues);
-
-if (errorCount > 0) {
-    saveStatusText = "World validation failed: " + std::to_string(errorCount) + " blocking errors.";
-} else if (world.Save(currentWorldPath.string())) {
-    saveStatusText = "World saved successfully.";
-} else {
-    saveStatusText = "World save failed.";
-}
-3) Сделать атомарные сохранения мира и профиля
-
-Файл: include/AtomicPersistence.hpp
-
-#pragma once
-
-#include <filesystem>
-#include <functional>
-#include <string>
-#include <system_error>
-
-#include "SessionProfiles.hpp"
-#include "World.hpp"
-
-namespace bunker {
-
-namespace fs = std::filesystem;
-
-struct SaveStatus {
-    bool ok = false;
-    std::string message;
-};
-
-inline SaveStatus AtomicWriteFile(
-    const fs::path& finalPath,
-    const std::function<bool(const fs::path&)>& writer) {
-
-    std::error_code ec;
-    if (!finalPath.parent_path().empty()) {
-        fs::create_directories(finalPath.parent_path(), ec);
-    }
-
-    const fs::path tempPath = finalPath.string() + ".tmp";
+- table-driven `DescribeTerminalSync` / `TryGetTerminalSyncText`
+- `WorldValidation`
+- `AtomicPersistence`
     const fs::path backupPath = finalPath.string() + ".bak";
 
     fs::remove(tempPath, ec);
@@ -975,3 +794,1085 @@ matchmaking/online account layer поверх LAN-first контура
 replay/photo mode
 полноценный mod SDK
 
+Под такие ограничения тебе сейчас нужен не “идеальный большой рефакторинг”, а план с максимальной отдачей на 1 запрос, 1 патч, 1 файл. Иначе лимиты Codex/Windsurf/ChatGPT сгорят раньше, чем код станет заметно лучше.
+
+Что это значит на практике
+
+Тебе сейчас нельзя:
+
+скармливать ИИ весь репозиторий целиком,
+просить “полностью перепиши архитектуру”,
+запускать длинные многошаговые сессии с контекстом на десятки файлов,
+тратить дни на красивые, но не критичные фичи.
+
+Тебе сейчас нужно:
+
+брать только самые дорогие узкие места,
+работать по 1 файлу за раз,
+просить у ИИ только diff / patch / конкретный код,
+сначала дожать “демо-стабильность”, потом уже красоту.
+Лучшая стратегия под твои лимиты
+Роль инструментов
+ChatGPT
+
+Используй как:
+
+архитектора,
+ревьюера,
+генератор точных планов,
+генератор маленьких вставляемых кусков кода,
+редактор prompt'ов для Codex/Windsurf.
+Codex / Windsurf
+
+Используй как:
+
+исполнителя точечных изменений,
+генератора патчей по одному файлу,
+помощника по рутинному распилу.
+Локально сам
+
+Делай:
+
+grep / поиск по проекту,
+сборку,
+запуск,
+фиксацию ошибок,
+проверку что патч правда скомпилировался.
+
+То есть не ИИ “ведёт проект”, а ты ведёшь проект, а ИИ закрывает узкие ручные задачи.
+
+Что делать за твои 5 дней
+Цель
+
+Не “сделать всё”, а получить:
+
+более чистый код,
+меньше риска сломать сейвы,
+стабильный запуск через launcher,
+editor с базовой валидацией,
+showable demo build.
+День 1 — только критический фундамент
+
+Сделай 3 вещи и больше ничего.
+
+1. Валидация мира перед сохранением/export
+
+Это даст огромную отдачу сразу:
+
+ловит битые registryId,
+duplicate ids,
+пустые displayName,
+broken linkTarget,
+несовпадения scriptTag / interaction.
+
+Это одна из самых выгодных задач в проекте.
+
+2. Атомарные сохранения
+
+Чтобы не убивать мир/профиль кривым выходом.
+Сначала world save, потом profile save через temp file + rename.
+
+3. Registry для scriptTag
+
+Не весь runtime переписывать.
+Только сделать единый реестр соответствий:
+
+scriptTag
+label
+preferred interaction
+preferred category
+requiresLinkTarget
+
+Это сразу улучшит:
+
+editor,
+validation,
+будущий runtime dispatch.
+
+Итог дня 1: проект уже станет заметно взрослее, даже без новых фич.
+
+День 2 — распил самого больного места без войны со всем проектом
+
+Не трогай весь GameRuntime.cpp.
+Только 2 самых жирных участка:
+
+1. Вынеси DrawPipPad(...)
+
+Сделай отдельные функции по вкладкам:
+
+stats
+inventory
+data
+map
+quests
+net
+services
+2. Вынеси DescribeTerminalSync и похожие string-driven куски
+
+Даже если не весь interaction dispatch, хотя бы самые длинные if/else.
+
+Почему именно это:
+это даст сильный выигрыш по читаемости и почти не требует ломать core-loop.
+
+День 3 — разгрузка SessionProfiles.hpp
+
+Не надо пока делать идеальную систему миграций.
+
+Сделай минимум:
+
+Вынести из header:
+SaveSessionProfile
+LoadSessionProfile
+parse helpers
+normalize helpers
+
+Оставь в .hpp:
+
+только типы,
+несколько маленьких inline query-функций, если без них совсем неудобно.
+
+Почему это выгодно:
+профиль — это одна из осей проекта. Когда persistence сидит в giant header, всё дорожает:
+
+правки,
+чтение,
+компиляция,
+риск ошибок.
+День 4 — demo path
+
+Тут не рефакторинг, а продукт.
+
+Сделай один гарантированный маршрут показа:
+
+запуск из launcher
+выбор мира
+вход в игру
+стартовая зона
+Pip-Pad
+tank/service или tower sync
+один recovery payoff
+один Lanline/service payoff
+Параллельно
+сделай “demo world”
+сделай “reset profile”
+убери всё, что может случайно сломать показ
+
+То есть не “весь проект теперь идеален”, а “демо проходит без стыда”.
+
+День 5 — только polish и сборка
+Сделай:
+smoke test сценарий на бумаге,
+release-like сборку,
+быстрый список известных багов,
+короткий README “как запускать демо”.
+Не делай:
+новые подсистемы,
+большие переписывания,
+новые экраны ради красоты.
+Что не делать при лимитах
+
+Вот прям запрещённые действия под твою ситуацию:
+
+Не проси ИИ читать весь репозиторий заново каждый раз.
+Не кидай по 10 файлов в один запрос.
+Не проси “перепиши архитектуру полностью”.
+Не проси “сделай production-ready всё”.
+Не трать лимиты на стилистику и косметику раньше валидации/сейвов/демо.
+Не давай ИИ самому выбирать, что менять во всём проекте.
+Не запускай длинные циклы “ещё улучши / ещё улучши / ещё улучши”.
+Как экономить лимиты максимально жёстко
+Правило 1: один запрос = один файл
+
+Пример хорошего режима:
+
+сначала сам находишь нужный участок,
+копируешь только его,
+просишь только точечный патч.
+
+Не “проанализируй весь GameRuntime.cpp”, а:
+
+вот функция DrawPipPad, разбей её на 7 функций без изменения поведения, верни только готовый код/patch
+
+Правило 2: проси diff, а не объяснение
+
+Самый экономный формат:
+
+Прочитай только этот фрагмент.
+Не объясняй долго.
+Верни unified diff.
+Не меняй имена публичных типов.
+Не добавляй новых зависимостей.
+
+Правило 3: сначала локальный поиск, потом ИИ
+
+Ищи сам:
+
+rg "DrawPipPad"
+rg "SaveSessionProfile"
+rg "scriptTag"
+rg "linkTarget"
+rg "Lanline"
+
+ИИ не должен тратить токены на поиск того, что тебе rg покажет за секунду.
+
+Правило 4: не загружай контекст повторно
+
+Один раз сформулируй для себя краткое описание проекта, и дальше просто вставляй его в коротком виде:
+
+C++20 game project with Game/Launcher/Editor.
+Need small safe refactor, no behavior changes, minimal dependencies.
+
+Этого обычно хватает.
+
+Готовые экономные prompt-шаблоны
+1. Для распила функции
+Read only the code I pasted below.
+Task: split this function into smaller static helpers without changing behavior.
+Constraints:
+- keep C++20
+- no new libraries
+- preserve public interfaces
+- keep naming style close to existing code
+- return only the final code or unified diff
+2. Для валидации мира
+Read only this header and the World/Object structures below.
+Task: write a minimal WorldValidation.hpp that checks:
+- empty registryId
+- duplicate registryId
+- broken linkTarget
+- empty displayName
+- scriptTag rules for requiresLinkTarget
+Constraints:
+- no exceptions
+- C++20
+- header-only is acceptable
+- return paste-ready code only
+3. Для atomic save
+Read only the save/load related code below.
+Task: add atomic save using temp file + rename.
+Constraints:
+- preserve existing save format
+- keep std::filesystem
+- no external libs
+- return minimal patch only
+4. Для SessionProfiles
+Read only this header.
+Task: move persistence and normalization code out of the header into cpp files.
+Do not redesign the entire system.
+Keep public structs stable.
+Return:
+1) proposed file split
+2) exact code for the new .hpp/.cpp pieces
+3) minimal include changes
+Приоритет задач по отдаче на лимит
+
+Если совсем мало запросов, делай строго в таком порядке:
+
+WorldValidation.hpp
+AtomicPersistence.hpp
+GameplayDescriptorRegistry.hpp
+распил DrawPipPad
+вынос SaveSessionProfile/LoadSessionProfile
+общий LanlineLobbyLogic.hpp
+
+Это самые выгодные шесть задач.
+
+Что с VPN и трафиком
+
+Если VPN реально ограничен по времени и трафику, то избегай:
+
+повторных полных клонов,
+скачивания крупных артефактов/зависимостей,
+лишних IDE/cloud sync операций,
+тяжелых AI-индексаций всего репозитория.
+
+Практично делать так:
+
+один локальный клон,
+по возможности shallow fetch,
+не гонять лишние бинарники,
+не открывать облачные ассистенты на весь workspace, если можно скормить только файл.
+Самая правильная мысль под твою ситуацию
+
+Тебе сейчас нужен не “максимально умный процесс”, а максимально дешёвый по лимитам процесс.
+
+То есть цель ближайших дней:
+
+не сделать проект идеальным,
+а сделать его заметно надёжнее и показабельнее за минимум запросов.
+Мой честный совет по тактике
+
+Работай так:
+
+Пачка 1
+world validation
+atomic save
+Пачка 2
+descriptor registry
+DescribeTerminalSync
+Пачка 3
+DrawPipPad split
+Пачка 4
+SessionProfiles persistence split
+Пачка 5
+demo world + reset profile + smoke test
+
+Это лучший баланс между:
+
+пользой,
+риском,
+числом AI-запросов,
+временем,
+шансом успеть до конца этих 5 дней.
+
+это важно — тогда я не буду опираться на старую картину. Сначала быстро пересниму текущую структуру репозитория и уже после этого дам точные шаги в формате: какой файл удалить, какой добавить, полный путь и готовый код.
+
+Thought for 2m 52s
+
+Не забыл. Как раз поэтому сейчас дам тебе формат “сделай руками и сразу получишь выигрыш”.
+
+После обновления репа безопаснее идти только добавочными шагами, ничего не удаляя на первом проходе: у тебя всё ещё один большой Editor/src/Editor_Main.cpp на 2041 строку, один Launcher/src/Launcher_Main.cpp, SessionProfiles.hpp остаётся большим header’ом на 1267 строк с inline SaveSessionProfile/LoadSessionProfile, а src/main.cpp всё ещё сохраняет мир и профиль напрямую в нескольких местах. Ещё в репе появился Next_split, но он сам помечен как разбор старого Next.md, а не как новый source of truth.
+
+Шаг 1
+
+Удалить: ничего
+Путь удаляемого файла: не нужно удалять файл на этом шаге
+
+Добавить: include/GameplayDescriptorRegistry.hpp
+Путь нового файла: include/GameplayDescriptorRegistry.hpp
+
+Код для include/GameplayDescriptorRegistry.hpp
+#pragma once
+
+#include <array>
+#include <string_view>
+
+#include "MapObject.hpp"
+
+namespace bunker {
+
+struct GameplayDescriptorSpec {
+    std::string_view scriptTag;
+    std::string_view label;
+    InteractionType preferredInteraction;
+    ObjectCategory preferredCategory;
+    bool requiresLinkTarget = false;
+};
+
+inline const GameplayDescriptorSpec* FindGameplayDescriptor(std::string_view scriptTag) {
+    static constexpr std::array<GameplayDescriptorSpec, 15> kSpecs{{
+        {"tower_sync", "Tower Sync", InteractionType::Terminal, ObjectCategory::Terminal, false},
+        {"power_pylon", "Power Pylon", InteractionType::Terminal, ObjectCategory::Terminal, false},
+        {"drone_station", "Drone Station", InteractionType::Terminal, ObjectCategory::Terminal, false},
+        {"rail_freight", "Rail Freight", InteractionType::Terminal, ObjectCategory::Terminal, false},
+        {"orbital_uplink", "Orbital Uplink", InteractionType::Terminal, ObjectCategory::Terminal, false},
+        {"rail_fortress", "Rail Fortress", InteractionType::Terminal, ObjectCategory::Terminal, false},
+        {"recovery_fabricator", "Recovery Fabricator", InteractionType::Terminal, ObjectCategory::Terminal, false},
+        {"industrial_gate", "Industrial Gate", InteractionType::Transition, ObjectCategory::Landmark, false},
+        {"industrial_survey", "Industrial Survey", InteractionType::Terminal, ObjectCategory::Terminal, false},
+        {"industrial_outpost", "Industrial Outpost", InteractionType::Terminal, ObjectCategory::Terminal, false},
+        {"assembly_cell", "Assembly Cell", InteractionType::Terminal, ObjectCategory::Terminal, false},
+        {"reactor_yard", "Reactor Yard", InteractionType::Terminal, ObjectCategory::Terminal, false},
+        {"lanline_service_hub", "Lanline Service Hub", InteractionType::Terminal, ObjectCategory::Terminal, false},
+        {"tank_service", "Tank Service", InteractionType::Workshop, ObjectCategory::Hangar, false},
+        {"fey_ring", "Fey Ring", InteractionType::Transition, ObjectCategory::Landmark, true},
+    }};
+
+    for (const auto& spec : kSpecs) {
+        if (spec.scriptTag == scriptTag) {
+            return &spec;
+        }
+    }
+    return nullptr;
+}
+
+inline bool ScriptTagRequiresLinkTarget(std::string_view scriptTag) {
+    if (const auto* spec = FindGameplayDescriptor(scriptTag)) {
+        return spec->requiresLinkTarget;
+    }
+    return false;
+}
+
+} // namespace bunker
+Зачем это первым
+
+Это создаёт один общий справочник для scriptTag, чтобы потом одинаково использовать его в editor, validation и runtime, а не держать смысл тегов размазанным по коду. У тебя уже есть MapObject с scriptTag и linkTarget, так что это естественное расширение текущей модели.
+
+Следующий шаг
+
+Удалить: ничего
+Путь удаляемого файла: не нужно удалять файл на этом шаге
+
+Добавить: include/WorldValidation.hpp
+Путь нового файла: include/WorldValidation.hpp
+
+Код для include/WorldValidation.hpp
+#pragma once
+
+#include <string>
+#include <unordered_set>
+#include <vector>
+
+#include "GameplayDescriptorRegistry.hpp"
+#include "World.hpp"
+
+namespace bunker {
+
+enum class ValidationSeverity {
+    Warning,
+    Error
+};
+
+struct ValidationIssue {
+    ValidationSeverity severity = ValidationSeverity::Warning;
+    std::string code;
+    std::string objectId;
+    std::string message;
+};
+
+inline std::vector<ValidationIssue> ValidateWorldForRuntime(const World& world) {
+    std::vector<ValidationIssue> issues;
+    std::unordered_set<std::string> registryIds;
+
+    for (const auto& obj : world.objects) {
+        if (obj.registryId.empty()) {
+            issues.push_back({
+                ValidationSeverity::Error,
+                "missing_registry_id",
+                "",
+                "Object has empty registryId."
+            });
+        } else if (!registryIds.insert(obj.registryId).second) {
+            issues.push_back({
+                ValidationSeverity::Error,
+                "duplicate_registry_id",
+                obj.registryId,
+                "Duplicate registryId detected: " + obj.registryId
+            });
+        }
+
+        if (obj.displayName.empty()) {
+            issues.push_back({
+                ValidationSeverity::Warning,
+                "missing_display_name",
+                obj.registryId,
+                "Object has empty displayName."
+            });
+        }
+
+        if (!obj.linkTarget.empty() && !world.HasObject(obj.linkTarget)) {
+            issues.push_back({
+                ValidationSeverity::Error,
+                "broken_link_target",
+                obj.registryId,
+                "linkTarget does not resolve to any object: " + obj.linkTarget
+            });
+        }
+
+        if (const auto* spec = FindGameplayDescriptor(obj.scriptTag)) {
+            if (obj.interaction != spec->preferredInteraction) {
+                issues.push_back({
+                    ValidationSeverity::Warning,
+                    "interaction_mismatch",
+                    obj.registryId,
+                    "Interaction does not match preferred interaction for scriptTag '" +
+                        std::string(spec->scriptTag) + "'."
+                });
+            }
+
+            if (obj.category != spec->preferredCategory) {
+                issues.push_back({
+                    ValidationSeverity::Warning,
+                    "category_mismatch",
+                    obj.registryId,
+                    "Category does not match preferred category for scriptTag '" +
+                        std::string(spec->scriptTag) + "'."
+                });
+            }
+
+            if (spec->requiresLinkTarget && obj.linkTarget.empty()) {
+                issues.push_back({
+                    ValidationSeverity::Error,
+                    "missing_required_link_target",
+                    obj.registryId,
+                    "scriptTag '" + std::string(spec->scriptTag) + "' requires a linkTarget."
+                });
+            }
+        } else if (!obj.scriptTag.empty() && ScriptTagRequiresLinkTarget(obj.scriptTag) && obj.linkTarget.empty()) {
+            issues.push_back({
+                ValidationSeverity::Error,
+                "missing_required_link_target",
+                obj.registryId,
+                "scriptTag requires a linkTarget."
+            });
+        }
+
+        if (obj.interaction == InteractionType::Transition && obj.linkTarget.empty()) {
+            issues.push_back({
+                ValidationSeverity::Warning,
+                "transition_without_link_target",
+                obj.registryId,
+                "Transition object has no linkTarget."
+            });
+        }
+    }
+
+    return issues;
+}
+
+inline int CountValidationErrors(const std::vector<ValidationIssue>& issues) {
+    int count = 0;
+    for (const auto& issue : issues) {
+        if (issue.severity == ValidationSeverity::Error) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+inline int CountValidationWarnings(const std::vector<ValidationIssue>& issues) {
+    int count = 0;
+    for (const auto& issue : issues) {
+        if (issue.severity == ValidationSeverity::Warning) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+inline std::string BuildValidationSummary(const std::vector<ValidationIssue>& issues) {
+    const int errors = CountValidationErrors(issues);
+    const int warnings = CountValidationWarnings(issues);
+
+    if (errors == 0 && warnings == 0) {
+        return "World validation passed: no issues found.";
+    }
+    if (errors == 0) {
+        return "World validation passed with warnings: " + std::to_string(warnings) + ".";
+    }
+    return "World validation failed: " + std::to_string(errors) +
+           " errors, " + std::to_string(warnings) + " warnings.";
+}
+
+} // namespace bunker
+Зачем это вторым
+
+У тебя World уже хранит objects, есть HasObject, HasScriptTag, FindObjectByLinkTarget и другие lookup-методы, так что validation садится поверх существующей модели очень естественно. Это самый дешёвый способ резко уменьшить шанс сломать authored world.
+
+Следующий шаг
+
+Удалить: ничего
+Путь удаляемого файла: не нужно удалять файл на этом шаге
+
+Добавить: include/AtomicPersistence.hpp
+Путь нового файла: include/AtomicPersistence.hpp
+
+Код для include/AtomicPersistence.hpp
+#pragma once
+
+#include <filesystem>
+#include <functional>
+#include <string>
+#include <system_error>
+
+#include "SessionProfiles.hpp"
+#include "World.hpp"
+
+namespace bunker {
+
+namespace fs = std::filesystem;
+
+struct SaveStatus {
+    bool ok = false;
+    std::string message;
+};
+
+inline SaveStatus AtomicWriteFile(
+    const fs::path& finalPath,
+    const std::function<bool(const fs::path&)>& writer) {
+
+    std::error_code ec;
+
+    if (!finalPath.parent_path().empty()) {
+        fs::create_directories(finalPath.parent_path(), ec);
+    }
+
+    const fs::path tempPath = finalPath.string() + ".tmp";
+    const fs::path backupPath = finalPath.string() + ".bak";
+
+    fs::remove(tempPath, ec);
+
+    if (!writer(tempPath)) {
+        fs::remove(tempPath, ec);
+        return {false, "Failed to write temp file: " + tempPath.string()};
+    }
+
+    if (fs::exists(backupPath, ec)) {
+        fs::remove(backupPath, ec);
+    }
+
+    if (fs::exists(finalPath, ec)) {
+        fs::rename(finalPath, backupPath, ec);
+        if (ec) {
+            fs::remove(tempPath, ec);
+            return {false, "Failed to rotate existing file: " + finalPath.string()};
+        }
+    }
+
+    fs::rename(tempPath, finalPath, ec);
+    if (ec) {
+        std::error_code restoreEc;
+        if (fs::exists(backupPath, restoreEc)) {
+            fs::rename(backupPath, finalPath, restoreEc);
+        }
+        fs::remove(tempPath, restoreEc);
+        return {false, "Failed to promote temp file: " + finalPath.string()};
+    }
+
+    if (fs::exists(backupPath, ec)) {
+        fs::remove(backupPath, ec);
+    }
+
+    return {true, {}};
+}
+
+inline SaveStatus SaveWorldAtomically(const World& world, const fs::path& worldPath) {
+    return AtomicWriteFile(worldPath, [&](const fs::path& tempPath) {
+        return world.Save(tempPath.string());
+    });
+}
+
+inline SaveStatus SaveProfileAtomically(const SessionProfile& profile, const fs::path& profilePath) {
+    return AtomicWriteFile(profilePath, [&](const fs::path& tempPath) {
+        return SaveSessionProfile(profile, tempPath);
+    });
+}
+
+} // namespace bunker
+Зачем это третьим
+
+SessionProfiles.hpp сейчас сам сохраняет и загружает профиль inline, а src/main.cpp вызывает сохранение профиля и мира напрямую. Поэтому безопасная обёртка поверх существующего формата — это лучший ход: минимум риска, максимум пользы.
+
+Следующий шаг — правка существующего файла
+
+Файл: Editor/src/Editor_Main.cpp
+Путь: Editor/src/Editor_Main.cpp
+
+Сначала добавь два include сразу после этой строки:
+
+#include "../../include/World.hpp"
+Вставить в Editor/src/Editor_Main.cpp
+#include "../../include/WorldValidation.hpp"
+#include "../../include/AtomicPersistence.hpp"
+
+Теперь найди внутри LoadOrCreateEditorWorld(...) этот кусок:
+
+world.GeneratePrototypeZone();
+world.Save(path.string());
+statusText = "Runtime world was missing. Generated a fresh prototype workspace at " + path.string();
+return false;
+
+И замени его на это:
+
+Заменить в Editor/src/Editor_Main.cpp
+world.GeneratePrototypeZone();
+
+const auto saveResult = bunker::SaveWorldAtomically(world, path);
+if (!saveResult.ok) {
+    statusText = "Runtime world was missing. Failed to persist generated workspace: " + saveResult.message;
+    return false;
+}
+
+statusText = "Runtime world was missing. Generated a fresh prototype workspace at " + path.string();
+return false;
+Ещё один кусок для Editor/src/Editor_Main.cpp
+
+Добавь рядом с другими helper-функциями в anonymous namespace:
+
+std::string BuildEditorValidationStatus(const bunker::World& world) {
+    const auto issues = bunker::ValidateWorldForRuntime(world);
+    return bunker::BuildValidationSummary(issues);
+}
+
+Сейчас у editor уже есть загрузка runtime-world через session profile и сохранение активного мира обратно в профиль, так что именно сюда логично вешать validation и atomic persistence первым делом.
+
+Следующий шаг — правка существующего файла
+
+Файл: src/main.cpp
+Путь: src/main.cpp
+
+Найди блок include’ов. Сейчас там есть AppPaths.hpp, GameRuntime.hpp, LanlineSession.hpp, LaunchSession.hpp, WorldEvents.hpp.
+
+Сразу после:
+
+#include "../include/WorldEvents.hpp"
+
+добавь:
+
+Вставить в src/main.cpp
+#include "../include/AtomicPersistence.hpp"
+
+Теперь замени первый блок, где создаётся дефолтный профиль, если загрузка не удалась.
+
+Найди:
+
+if (!bunker::LoadSessionProfile(profilePath, sessionProfile)) {
+    sessionProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SaveSessionProfile(sessionProfile, profilePath);
+}
+
+И замени на:
+
+Заменить в src/main.cpp
+if (!bunker::LoadSessionProfile(profilePath, sessionProfile)) {
+    sessionProfile = bunker::MakeDefaultSessionProfile();
+    const auto initialProfileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
+    if (!initialProfileSave.ok) {
+        std::fprintf(stderr, "Initial profile save failed: %s\n", initialProfileSave.message.c_str());
+    }
+}
+
+Теперь найди F5 save-блок. Сейчас там прямой world.Save(...) и SaveSessionProfile(...).
+
+Заменить на:
+
+Заменить в src/main.cpp
+const bool saveNow = glfwGetKey(window, GLFW_KEY_F5) == GLFW_PRESS;
+
+if (saveNow && !gameState.savePressed) {
+    const auto worldSave = bunker::SaveWorldAtomically(world, worldPath);
+    const auto profileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
+
+    if (worldSave.ok && profileSave.ok) {
+        staticEraser.Save(sessionProfile.selectedWorld);
+        gameState.lastEvent = "Field save committed.";
+    } else {
+        std::string failure = "Field save failed:";
+        if (!worldSave.ok) {
+            failure += " world=" + worldSave.message;
+        }
+        if (!profileSave.ok) {
+            if (!worldSave.ok) failure += ";";
+            failure += " profile=" + profileSave.message;
+        }
+        gameState.lastEvent = failure;
+    }
+}
+
+И в самом конце файла замени финальное сохранение перед shutdown:
+
+Сейчас там:
+
+world.Save(worldPath.string());
+bunker::SaveSessionProfile(sessionProfile, profilePath);
+staticEraser.Save(sessionProfile.selectedWorld);
+Заменить в src/main.cpp
+const auto finalWorldSave = bunker::SaveWorldAtomically(world, worldPath);
+const auto finalProfileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
+
+if (!finalWorldSave.ok) {
+    std::fprintf(stderr, "Final world save failed: %s\n", finalWorldSave.message.c_str());
+}
+if (!finalProfileSave.ok) {
+    std::fprintf(stderr, "Final profile save failed: %s\n", finalProfileSave.message.c_str());
+}
+
+if (finalWorldSave.ok && finalProfileSave.ok) {
+    staticEraser.Save(sessionProfile.selectedWorld);
+}
+Следующий шаг
+
+Сейчас ничего не удаляй. Это намеренно: сначала делаем три новых header-файла и две точечные интеграции, чтобы получить:
+
+единый реестр scriptTag,
+validation мира,
+безопасное сохранение мира и профиля,
+минимум риска сломать сборку.
+
+уже вижу главное: это не “мы всё сломали кодом”, а сначала ломается toolchain/include path, а потом clang сыпет каскадом ложных ошибок по GLFW, ImGui и даже std::string. Сейчас быстро вытащу из лога опорные места и дам тебе порядок действий без воды.
+
+Thought for 1m 13s
+
+Да, картина уже ясна: главная проблема сейчас не в моих добавленных header’ах, а в том, что clang/Windsurf вообще не может нормально разобрать main.cpp из-за отсутствующего GLFW/glfw3.h. После этого идут каскадные ложные ошибки по glfwInit, GLFWwindow, ImGui, glViewport, GL_COLOR_BUFFER_BIT и даже странные ошибки в std::string/type_traits. В логе это видно прямо: сначала GLFW/glfw3.h file not found, потом Too many errors emitted, а дальше уже сыпется всё остальное.
+
+Что это значит по сути:
+сейчас не надо удалять мои новые файлы. Сначала нужно починить среду сборки / индексатор, иначе ты будешь видеть фальшивые ошибки даже в нормальном коде. То, что AtomicPersistence.hpp помечен как unused-includes, — это только предупреждение, не причина падения. Отдельно у тебя ещё есть две фоновые IDE-проблемы: невалидное значение в Windsurf/User/settings.json и поломанный .clang-format. Они не главные, но тоже шумят в диагностике.
+
+Что делать прямо сейчас
+1) Ничего не удаляй из проекта
+
+include/GameplayDescriptorRegistry.hpp, include/WorldValidation.hpp, include/AtomicPersistence.hpp пока не удаляй.
+Сначала убедись, что сам проект собирается через CMake, а не только ругается индексатор.
+
+2) Почини first blocker: GLFW/include paths
+
+У тебя первая ошибка — отсутствие GLFW/glfw3.h. Пока она не исправлена, все ошибки ниже почти бесполезно анализировать.
+
+Сделай так в терминале из корня проекта:
+
+cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build build --config Debug
+Что смотреть
+Если сборка тоже падает на GLFW/glfw3.h not found, значит проблема реально в CMakeLists.txt или в зависимости GLFW.
+Если сборка проходит, а краснота остаётся только в Windsurf, значит проблема в clangd / compile database / IDE, а не в коде.
+3) Если сборка падает на GLFW — править надо CMake, а не main.cpp
+
+Судя по логам, main.cpp использует GLFW/OpenGL/ImGui symbols, но индексатор их не видит.
+
+Тут есть только 3 нормальных варианта:
+
+Вариант A — GLFW подтягивается как submodule / add_subdirectory
+
+Тогда в CMakeLists.txt должно быть что-то вроде:
+
+add_subdirectory(external/glfw)
+target_link_libraries(BunkerGame PRIVATE glfw)
+Вариант B — GLFW ставится в систему / vcpkg / package manager
+
+Тогда должно быть что-то вроде:
+
+find_package(glfw3 CONFIG REQUIRED)
+target_link_libraries(BunkerGame PRIVATE glfw)
+Вариант C — include path руками
+
+Это самый слабый вариант, но как временный:
+
+target_include_directories(BunkerGame PRIVATE path/to/glfw/include)
+4) Если сборка проходит, но Windsurf всё ещё красный
+
+Тогда проблема уже не в проекте, а в том, что clangd не видит compile flags.
+
+Сделай одно из двух:
+
+Способ 1
+
+После генерации CMake проверь, что появился файл:
+
+build/compile_commands.json
+
+Потом либо:
+
+настрой clangd/Windsurf на эту папку build,
+либо положи копию compile_commands.json в корень проекта.
+Способ 2
+
+Если используешь CMake Tools, убедись, что открыт именно CMake-kit/target, а не просто папка как обычный текстовый workspace.
+
+5) AtomicPersistence.hpp is not used directly — это не авария
+
+Это обычный warning от include-cleaner. Он появился на строке 15 main.cpp.
+
+Тут логика простая:
+
+если ты уже заменил прямые вызовы world.Save(...) / SaveSessionProfile(...) на SaveWorldAtomically(...) и SaveProfileAtomically(...), то предупреждение, скорее всего, исчезнет после нормальной индексации;
+если ты ещё не заменил эти места, тогда просто временно убери include из src/main.cpp:
+
+Файл: src/main.cpp
+Что удалить:
+
+#include "../include/AtomicPersistence.hpp"
+
+И добавь его обратно только когда вставишь вызовы атомарного сохранения.
+
+6) .clang-format у тебя тоже сломан
+
+В логе прямо есть:
+
+Incorrect type. Expected "string".
+Incorrect type. Expected ".clang-format config".
+
+Это не ломает игру, но ломает tooling и шумит. Самый быстрый путь:
+
+Временно
+
+Переименуй файл:
+
+.clang-format -> .clang-format.bak
+
+Это самый дешёвый способ убрать шум, пока не починишь конфиг.
+
+7) Windsurf/User/settings.json тоже содержит невалидное значение
+
+Лог показывает, что в settings.json на 49 строке стоит значение, которого нет в списке допустимых расширений.
+
+Это не причина отсутствия GLFW, но IDE из-за этого тоже может вести себя грязно.
+
+Самый безопасный ход:
+
+открой settings.json,
+найди строку 49,
+убери только то значение, которое не входит в список разрешённых.
+Что делать в правильном порядке
+
+Иди вот так:
+
+Сначала
+cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build build --config Debug
+Потом
+если build падает — чини CMakeLists.txt / GLFW dependency
+если build проходит — чини clangd/Windsurf indexing
+временно убери битый .clang-format
+подчисти settings.json
+Самый важный вывод
+
+Сейчас не код рефакторинга главный враг, а сломанный include/tooling слой.
+Пока не исчезнет первая ошибка GLFW/glfw3.h file not found, все остальные сообщения по ImGui, OpenGL, GLFWwindow и даже часть ошибок по STL надо считать вторичными.
+
+уже видно важную вещь: сам по себе он не выглядит “фатально сломанным”, но для IDE у тебя не хватает двух вещей — экспорт compile commands и более явного пути к GLFW include. Поэтому дам тебе не теорию, а готовую замену файла целиком.
+
+Thought for 22s
+
+Твой CMakeLists.txt в целом нормальный, и build через CMake вполне может собраться. Но для Windsurf/clangd у тебя сейчас слабое место в двух местах:
+
+не экспортируется compile_commands.json, поэтому индексатор может не понимать реальные include paths;
+путь к GLFW рассчитывается через target glfw, что обычно нормально для сборки, но clangd в IDE часто ведёт себя лучше, когда include путь указан явно.
+
+То есть я бы сейчас ничего не удалял из исходников, а сначала починил именно CMake.
+
+Шаг 1
+
+Удалить: ничего
+Путь удаляемого файла: не нужно удалять файл
+
+Заменить целиком файл:
+Путь: CMakeLists.txt
+
+Полный код для CMakeLists.txt
+cmake_minimum_required(VERSION 3.16)
+project(BunkerProtocolSuite LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+find_package(OpenGL REQUIRED)
+
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+
+add_subdirectory(external/glfw)
+
+set(IMGUI_SRC
+    external/imgui/imgui.cpp
+    external/imgui/imgui_draw.cpp
+    external/imgui/imgui_tables.cpp
+    external/imgui/imgui_widgets.cpp
+    external/imgui/backends/imgui_impl_glfw.cpp
+    external/imgui/backends/imgui_impl_opengl3.cpp
+)
+
+set(COMMON_INCLUDE_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/external
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/glfw/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/backends
+)
+
+function(configure_bunker_target target_name)
+    target_include_directories(${target_name} PRIVATE ${COMMON_INCLUDE_DIRS})
+    target_link_libraries(${target_name} PRIVATE glfw OpenGL::GL)
+
+    if(MSVC)
+        target_compile_options(${target_name} PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+endfunction()
+
+add_executable(BunkerGame
+    src/GameRuntime.cpp
+    src/LanlineServices.cpp
+    src/LanlineSession.cpp
+    src/LaunchSession.cpp
+    src/main.cpp
+    src/Progression.cpp
+    src/Renderer.cpp
+    src/SkillSystem.cpp
+    src/StoryRoute.cpp
+    src/WorldEvents.cpp
+    src/World.cpp
+    ${IMGUI_SRC}
+)
+configure_bunker_target(BunkerGame)
+
+add_executable(BunkerLauncher
+    Launcher/src/Launcher_Main.cpp
+    src/LanlineServices.cpp
+    src/LanlineSession.cpp
+    src/LaunchSession.cpp
+    ${IMGUI_SRC}
+)
+configure_bunker_target(BunkerLauncher)
+
+add_executable(BunkerEditor
+    Editor/src/Editor_Main.cpp
+    src/World.cpp
+    ${IMGUI_SRC}
+)
+configure_bunker_target(BunkerEditor)
+
+message(STATUS "Configured targets: BunkerGame, BunkerLauncher, BunkerEditor")
+Что делать сразу после замены
+
+В корне проекта выполни:
+
+cmake -S . -B build
+cmake --build build --config Debug
+
+После этого проверь, появился ли файл:
+
+build/compile_commands.json
+
+Если появился — это уже большой шаг, потому что clangd сможет взять реальные compile flags вместо гадания.
+
+Следующий шаг
+
+Удалить: ничего
+Путь удаляемого файла: не нужно удалять файл
+
+Правка существующего файла:
+Путь: src/main.cpp
+
+Сейчас по логам у тебя AtomicPersistence.hpp подсвечивается как unused include. Это не ошибка, но если ты ещё не вставил атомарные save-вызовы, лучше временно убрать include, чтобы не плодить шум. В логе это видно как warning, а не blocker.
+
+Найди в src/main.cpp
+#include "../include/AtomicPersistence.hpp"
+Если ты ещё НЕ заменил save-вызовы — временно удали эту строку
+
+То есть:
+
+Удалить файл: ничего
+Удалить строку в файле:
+Путь: src/main.cpp
+
+#include "../include/AtomicPersistence.hpp"
+Следующий шаг
+
+Удалить: ничего
+Путь удаляемого файла: не нужно удалять файл
+
+Переименовать файл временно:
+Старый путь: .clang-format
+Новый путь: .clang-format.bak
+
+Это потому что у тебя в диагностике .clang-format сам по себе сломан и даёт YAML-ошибки. Это не ломает build, но ломает tooling и мешает понять реальное состояние проекта. Это прямо видно в логе.
+
+Следующий шаг
+
+Ничего не удалять из проекта, пока не проверишь вот эти два результата:
+
+проходит ли cmake --build build --config Debug;
+исчезла ли ошибка 'GLFW/glfw3.h' file not found. Она у тебя первая и главная в списке. Пока она не ушла, все ошибки ниже по glfwInit, GLFWwindow, ImGui, glViewport и GL_COLOR_BUFFER_BIT почти наверняка вторичные.
+Самое важное сейчас
+
+Текущий CMakeLists.txt я бы оценил так:
+
+для реальной сборки он был почти достаточный;
+для Windsurf/clangd он был недостаточно явный.
+
+Поэтому первый правильный ход — не ломать код дальше, а стабилизировать CMake и индексатор.

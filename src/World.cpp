@@ -1,4 +1,5 @@
 #include "../include/World.hpp"
+#include "../include/GameplayDescriptorRegistry.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -25,6 +26,10 @@ bool ReadString(std::ifstream& file, std::string& value) {
     value.resize(length);
     file.read(value.data(), static_cast<std::streamsize>(length));
     return static_cast<bool>(file);
+}
+
+void NormalizeLoadedObject(MapObject& object) {
+    object.scriptTag = std::string(NormalizeGameplayDescriptorTag(object.scriptTag));
 }
 
 }  // namespace
@@ -108,6 +113,7 @@ bool World::Load(const std::string& path) {
             }
         }
 
+        NormalizeLoadedObject(object);
         objects.push_back(object);
     }
 
@@ -1431,8 +1437,9 @@ bool World::HasObject(const std::string& registryId) const {
 }
 
 const MapObject* World::FindObjectByScriptTag(const std::string& scriptTag) const {
+    const std::string_view normalizedTag = NormalizeGameplayDescriptorTag(scriptTag);
     for (const auto& object : objects) {
-        if (object.scriptTag == scriptTag) {
+        if (NormalizeGameplayDescriptorTag(object.scriptTag) == normalizedTag) {
             return &object;
         }
     }
@@ -1440,8 +1447,9 @@ const MapObject* World::FindObjectByScriptTag(const std::string& scriptTag) cons
 }
 
 MapObject* World::FindObjectByScriptTag(const std::string& scriptTag) {
+    const std::string_view normalizedTag = NormalizeGameplayDescriptorTag(scriptTag);
     for (auto& object : objects) {
-        if (object.scriptTag == scriptTag) {
+        if (NormalizeGameplayDescriptorTag(object.scriptTag) == normalizedTag) {
             return &object;
         }
     }

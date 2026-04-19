@@ -13,7 +13,10 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
+#include "EditorSupport.hpp"
+
 #include "../../include/AppPaths.hpp"
+#include "../../include/GameplayDescriptorRegistry.hpp"
 #include "../../include/RegistryId.hpp"
 #include "../../include/SessionProfiles.hpp"
 #include "../../include/World.hpp"
@@ -27,6 +30,8 @@ struct ImportedConcept {
     std::string targetType;
     std::string completionMode;
 };
+
+#if 0
 
 struct SavedPrefab {
     std::string label;
@@ -122,11 +127,6 @@ bunker::ObjectCategory CategoryFromIndex(int index) {
 }
 
 bool LoadOrCreateEditorWorld(bunker::World& world, std::string& statusText) {
-        world.GeneratePrototypeZone();
-        world.Save(path.string());
-        statusText = "Runtime world was missing. Generated a fresh prototype workspace at " + path.string();
-        return false;
-
     bunker::SessionProfile sessionProfile;
     const auto profilePath = bunker::DefaultSessionProfilePath();
     if (!bunker::LoadSessionProfile(profilePath, sessionProfile)) {
@@ -148,8 +148,6 @@ bool LoadOrCreateEditorWorld(bunker::World& world, std::string& statusText) {
         return false;
     }
 
-
-    world.Save(path.string());
     statusText = "Runtime world was missing. Generated a fresh prototype workspace at " + path.string();
     return false;
 }
@@ -162,11 +160,12 @@ bool SetActiveWorldInProfile(const std::string& worldFileName, std::string& stat
     }
     bunker::NormalizeSessionProfile(sessionProfile);
     sessionProfile.selectedWorld = bunker::NormalizeWorldReference(worldFileName);
-    if (bunker::SaveSessionProfile(sessionProfile, profilePath)) {
+    const auto saveResult = bunker::SaveProfileAtomically(sessionProfile, profilePath);
+    if (saveResult.ok) {
         statusText = "Active world changed to " + sessionProfile.selectedWorld;
         return true;
     }
-    statusText = "Failed to update active world in session profile.";
+    statusText = "Failed to update active world in session profile: " + saveResult.message;
     return false;
 }
 
@@ -759,6 +758,11 @@ bool LoadPrefabLibrary(std::vector<SavedPrefab>& prefabs) {
     return true;
 }
 
+std::string BuildEditorValidationStatus(const bunker::World& world) {
+    const auto issues = bunker::ValidateWorldForRuntime(world);
+    return bunker::BuildValidationSummary(issues);
+}
+
 bool SavePrefabLibrary(const std::vector<SavedPrefab>& prefabs) {
     std::ofstream file(bunker::EditorPrefabLibraryPath());
     if (!file.is_open()) {
@@ -983,6 +987,59 @@ PreviewInteraction DrawWorldPreview(const bunker::World& world,
     return interactionResult;
 }
 
+#endif
+
+using editor_support::ApplyAssemblyCellDescriptorPreset;
+using editor_support::ApplyCapacitorBankDescriptorPreset;
+using editor_support::ApplyDroneStationDescriptorPreset;
+using editor_support::ApplyEchoDescriptorPreset;
+using editor_support::ApplyFeyRingDescriptorPreset;
+using editor_support::ApplyFoundryLineDescriptorPreset;
+using editor_support::ApplyIndustrialGateDescriptorPreset;
+using editor_support::ApplyIndustrialOutpostDescriptorPreset;
+using editor_support::ApplyIndustrialSurveyDescriptorPreset;
+using editor_support::ApplyMedicalSupportDescriptorPreset;
+using editor_support::ApplyOrbitalUplinkDescriptorPreset;
+using editor_support::ApplyPowerPylonDescriptorPreset;
+using editor_support::ApplyRailDepotDescriptorPreset;
+using editor_support::ApplyRailFortressDescriptorPreset;
+using editor_support::ApplyReactorYardDescriptorPreset;
+using editor_support::ApplyRecoveryFabricatorDescriptorPreset;
+using editor_support::ApplyRelaySubstationDescriptorPreset;
+using editor_support::ApplyRemoteLinkDescriptorPreset;
+using editor_support::ApplyServiceBayDescriptorPreset;
+using editor_support::ApplyServiceHubDescriptorPreset;
+using editor_support::ApplySpecialistDescriptorPreset;
+using editor_support::ApplyTankServiceDescriptorPreset;
+using editor_support::ApplyTerminalDescriptorPreset;
+using editor_support::ApplyTowerDescriptorPreset;
+using editor_support::ApplyTransitionDescriptorPreset;
+using editor_support::ApplyWaterReclaimerDescriptorPreset;
+using editor_support::ApplyWorkshopDescriptorPreset;
+using editor_support::BuildEditorValidationStatus;
+using editor_support::CategoryFromIndex;
+using editor_support::ContainsCaseInsensitive;
+using editor_support::CopyStringToBuffer;
+using editor_support::DefaultRegistryIdForPreset;
+using editor_support::DrawWorldPreview;
+using editor_support::HasOtherObjectWithRegistryId;
+using editor_support::IsBlank;
+using editor_support::LoadOrCreateEditorWorld;
+using editor_support::LoadPrefabLibrary;
+using editor_support::MakeDuplicateRegistryId;
+using editor_support::NormalizeExportWorldName;
+using editor_support::ObjectPreset;
+using editor_support::PrepareSpecializedDraft;
+using editor_support::PreviewInteraction;
+using editor_support::PreviewViewportState;
+using editor_support::SavedPrefab;
+using editor_support::SavePrefabLibrary;
+using editor_support::SelectedPreset;
+using editor_support::SetActiveWorldInProfile;
+using editor_support::SyncEditorWorldBindings;
+using editor_support::ToIndex;
+using editor_support::ToLabel;
+
 }  // namespace
 
 int main() {
@@ -1020,11 +1077,6 @@ int main() {
     std::vector<ImportedConcept> importedConcepts;
     std::vector<SavedPrefab> savedPrefabs;
     std::string statusText = "Editor ready. Prepare assets or export a runtime prototype.";
-    std::string BuildEditorValidationStatus(const bunker::World& world) {
-    const auto issues = bunker::ValidateWorldForRuntime(world);
-    return bunker::BuildValidationSummary(issues);
-}
-
 
     bunker::World editorWorld;
     LoadOrCreateEditorWorld(editorWorld, statusText);
@@ -1645,13 +1697,14 @@ int main() {
             if (ImGui::InputFloat("Edit X", &selectedObject.x, 0.5f, 2.0f, "%.1f") && snapToGrid) {
                 selectedObject.x = std::round(selectedObject.x);
             }
-            if (selectedObject.scriptTag == "fey_ring" && selectedObject.linkTarget.empty()) {
+            const std::string_view normalizedScriptTag = bunker::NormalizeGameplayDescriptorTag(selectedObject.scriptTag);
+            if (normalizedScriptTag == "fey_ring" && selectedObject.linkTarget.empty()) {
                 ImGui::TextColored(ImVec4(0.92f, 0.65f, 0.24f, 1.0f), "Warning: fey_ring needs a linkTarget.");
             }
-            if (selectedObject.scriptTag == "lanline_service_hub" && !editorWorld.HasScriptTag("tower_sync")) {
+            if (normalizedScriptTag == "lanline_service_hub" && !editorWorld.HasScriptTag("tower_sync")) {
                 ImGui::TextColored(ImVec4(0.92f, 0.65f, 0.24f, 1.0f), "Warning: lanline_service_hub is authored without tower_sync in this world.");
             }
-            if (selectedObject.scriptTag == "tank_service" &&
+            if (normalizedScriptTag == "tank_service" &&
                 !editorWorld.HasScriptTag("service_bay") &&
                 selectedObject.category != bunker::ObjectCategory::Hangar) {
                 ImGui::TextColored(ImVec4(0.92f, 0.65f, 0.24f, 1.0f), "Warning: tank_service should live with service_bay coverage or a hangar-category anchor.");

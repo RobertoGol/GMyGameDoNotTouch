@@ -49,10 +49,30 @@ cmake_ninja_workdir = D$:\Projects\Game_Project\build_verify_ninja_fresh\
 
 build cmake_object_order_depends_target_BunkerGame: phony || cmake_object_order_depends_target_glfw
 
+build CMakeFiles\BunkerGame.dir\src\GameplayDescriptorRegistry.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\GameplayDescriptorRegistry.cpp || cmake_object_order_depends_target_BunkerGame
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerGame.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
+  TARGET_PDB = BunkerGame.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerGame.dir
+
 build CMakeFiles\BunkerGame.dir\src\GameRuntime.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\GameRuntime.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerGame.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
+  TARGET_PDB = BunkerGame.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerGame.dir
+
+build CMakeFiles\BunkerGame.dir\src\GameRuntimePipPad.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\GameRuntimePipPad.cpp || cmake_object_order_depends_target_BunkerGame
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -62,7 +82,7 @@ build CMakeFiles\BunkerGame.dir\src\GameRuntime.cpp.obj: CXX_COMPILER__BunkerGam
 build CMakeFiles\BunkerGame.dir\src\LanlineServices.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\LanlineServices.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -72,7 +92,7 @@ build CMakeFiles\BunkerGame.dir\src\LanlineServices.cpp.obj: CXX_COMPILER__Bunke
 build CMakeFiles\BunkerGame.dir\src\LanlineSession.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\LanlineSession.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -82,7 +102,7 @@ build CMakeFiles\BunkerGame.dir\src\LanlineSession.cpp.obj: CXX_COMPILER__Bunker
 build CMakeFiles\BunkerGame.dir\src\LaunchSession.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\LaunchSession.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -92,7 +112,7 @@ build CMakeFiles\BunkerGame.dir\src\LaunchSession.cpp.obj: CXX_COMPILER__BunkerG
 build CMakeFiles\BunkerGame.dir\src\main.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\main.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -102,7 +122,17 @@ build CMakeFiles\BunkerGame.dir\src\main.cpp.obj: CXX_COMPILER__BunkerGame_unsca
 build CMakeFiles\BunkerGame.dir\src\Progression.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\Progression.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerGame.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
+  TARGET_PDB = BunkerGame.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerGame.dir
+
+build CMakeFiles\BunkerGame.dir\src\SessionProfiles.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\SessionProfiles.cpp || cmake_object_order_depends_target_BunkerGame
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -112,7 +142,7 @@ build CMakeFiles\BunkerGame.dir\src\Progression.cpp.obj: CXX_COMPILER__BunkerGam
 build CMakeFiles\BunkerGame.dir\src\Renderer.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\Renderer.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -122,7 +152,7 @@ build CMakeFiles\BunkerGame.dir\src\Renderer.cpp.obj: CXX_COMPILER__BunkerGame_u
 build CMakeFiles\BunkerGame.dir\src\SkillSystem.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\SkillSystem.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -132,7 +162,7 @@ build CMakeFiles\BunkerGame.dir\src\SkillSystem.cpp.obj: CXX_COMPILER__BunkerGam
 build CMakeFiles\BunkerGame.dir\src\StoryRoute.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\StoryRoute.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -142,7 +172,7 @@ build CMakeFiles\BunkerGame.dir\src\StoryRoute.cpp.obj: CXX_COMPILER__BunkerGame
 build CMakeFiles\BunkerGame.dir\src\WorldEvents.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\WorldEvents.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -152,7 +182,17 @@ build CMakeFiles\BunkerGame.dir\src\WorldEvents.cpp.obj: CXX_COMPILER__BunkerGam
 build CMakeFiles\BunkerGame.dir\src\World.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\World.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerGame.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
+  TARGET_PDB = BunkerGame.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerGame.dir
+
+build CMakeFiles\BunkerGame.dir\src\WorldValidation.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\src\WorldValidation.cpp || cmake_object_order_depends_target_BunkerGame
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -162,7 +202,7 @@ build CMakeFiles\BunkerGame.dir\src\World.cpp.obj: CXX_COMPILER__BunkerGame_unsc
 build CMakeFiles\BunkerGame.dir\external\imgui\imgui.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\external\imgui
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -172,7 +212,7 @@ build CMakeFiles\BunkerGame.dir\external\imgui\imgui.cpp.obj: CXX_COMPILER__Bunk
 build CMakeFiles\BunkerGame.dir\external\imgui\imgui_draw.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui_draw.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\external\imgui
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -182,7 +222,7 @@ build CMakeFiles\BunkerGame.dir\external\imgui\imgui_draw.cpp.obj: CXX_COMPILER_
 build CMakeFiles\BunkerGame.dir\external\imgui\imgui_tables.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui_tables.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\external\imgui
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -192,7 +232,7 @@ build CMakeFiles\BunkerGame.dir\external\imgui\imgui_tables.cpp.obj: CXX_COMPILE
 build CMakeFiles\BunkerGame.dir\external\imgui\imgui_widgets.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui_widgets.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\external\imgui
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -202,7 +242,7 @@ build CMakeFiles\BunkerGame.dir\external\imgui\imgui_widgets.cpp.obj: CXX_COMPIL
 build CMakeFiles\BunkerGame.dir\external\imgui\backends\imgui_impl_glfw.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\external\imgui\backends\imgui_impl_glfw.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\external\imgui\backends
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -212,7 +252,7 @@ build CMakeFiles\BunkerGame.dir\external\imgui\backends\imgui_impl_glfw.cpp.obj:
 build CMakeFiles\BunkerGame.dir\external\imgui\backends\imgui_impl_opengl3.cpp.obj: CXX_COMPILER__BunkerGame_unscanned_Debug D$:\Projects\Game_Project\external\imgui\backends\imgui_impl_opengl3.cpp || cmake_object_order_depends_target_BunkerGame
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerGame.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerGame.dir\external\imgui\backends
   TARGET_COMPILE_PDB = CMakeFiles\BunkerGame.dir\
@@ -227,7 +267,7 @@ build CMakeFiles\BunkerGame.dir\external\imgui\backends\imgui_impl_opengl3.cpp.o
 #############################################
 # Link the executable BunkerGame.exe
 
-build BunkerGame.exe: CXX_EXECUTABLE_LINKER__BunkerGame_Debug CMakeFiles\BunkerGame.dir\src\GameRuntime.cpp.obj CMakeFiles\BunkerGame.dir\src\LanlineServices.cpp.obj CMakeFiles\BunkerGame.dir\src\LanlineSession.cpp.obj CMakeFiles\BunkerGame.dir\src\LaunchSession.cpp.obj CMakeFiles\BunkerGame.dir\src\main.cpp.obj CMakeFiles\BunkerGame.dir\src\Progression.cpp.obj CMakeFiles\BunkerGame.dir\src\Renderer.cpp.obj CMakeFiles\BunkerGame.dir\src\SkillSystem.cpp.obj CMakeFiles\BunkerGame.dir\src\StoryRoute.cpp.obj CMakeFiles\BunkerGame.dir\src\WorldEvents.cpp.obj CMakeFiles\BunkerGame.dir\src\World.cpp.obj CMakeFiles\BunkerGame.dir\external\imgui\imgui.cpp.obj CMakeFiles\BunkerGame.dir\external\imgui\imgui_draw.cpp.obj CMakeFiles\BunkerGame.dir\external\imgui\imgui_tables.cpp.obj CMakeFiles\BunkerGame.dir\external\imgui\imgui_widgets.cpp.obj CMakeFiles\BunkerGame.dir\external\imgui\backends\imgui_impl_glfw.cpp.obj CMakeFiles\BunkerGame.dir\external\imgui\backends\imgui_impl_opengl3.cpp.obj | external\glfw\src\glfw3.lib || external\glfw\src\glfw3.lib
+build BunkerGame.exe: CXX_EXECUTABLE_LINKER__BunkerGame_Debug CMakeFiles\BunkerGame.dir\src\GameplayDescriptorRegistry.cpp.obj CMakeFiles\BunkerGame.dir\src\GameRuntime.cpp.obj CMakeFiles\BunkerGame.dir\src\GameRuntimePipPad.cpp.obj CMakeFiles\BunkerGame.dir\src\LanlineServices.cpp.obj CMakeFiles\BunkerGame.dir\src\LanlineSession.cpp.obj CMakeFiles\BunkerGame.dir\src\LaunchSession.cpp.obj CMakeFiles\BunkerGame.dir\src\main.cpp.obj CMakeFiles\BunkerGame.dir\src\Progression.cpp.obj CMakeFiles\BunkerGame.dir\src\SessionProfiles.cpp.obj CMakeFiles\BunkerGame.dir\src\Renderer.cpp.obj CMakeFiles\BunkerGame.dir\src\SkillSystem.cpp.obj CMakeFiles\BunkerGame.dir\src\StoryRoute.cpp.obj CMakeFiles\BunkerGame.dir\src\WorldEvents.cpp.obj CMakeFiles\BunkerGame.dir\src\World.cpp.obj CMakeFiles\BunkerGame.dir\src\WorldValidation.cpp.obj CMakeFiles\BunkerGame.dir\external\imgui\imgui.cpp.obj CMakeFiles\BunkerGame.dir\external\imgui\imgui_draw.cpp.obj CMakeFiles\BunkerGame.dir\external\imgui\imgui_tables.cpp.obj CMakeFiles\BunkerGame.dir\external\imgui\imgui_widgets.cpp.obj CMakeFiles\BunkerGame.dir\external\imgui\backends\imgui_impl_glfw.cpp.obj CMakeFiles\BunkerGame.dir\external\imgui\backends\imgui_impl_opengl3.cpp.obj | external\glfw\src\glfw3.lib || external\glfw\src\glfw3.lib
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -MDd
   LINK_FLAGS = /machine:x64 /debug /INCREMENTAL /subsystem:console
@@ -253,9 +293,29 @@ build cmake_object_order_depends_target_BunkerLauncher: phony || cmake_object_or
 build CMakeFiles\BunkerLauncher.dir\Launcher\src\Launcher_Main.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\Launcher\src\Launcher_Main.cpp || cmake_object_order_depends_target_BunkerLauncher
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\Launcher\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
+  TARGET_PDB = BunkerLauncher.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerLauncher.dir
+
+build CMakeFiles\BunkerLauncher.dir\Launcher\src\LauncherSupport.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\Launcher\src\LauncherSupport.cpp || cmake_object_order_depends_target_BunkerLauncher
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\Launcher\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
+  TARGET_PDB = BunkerLauncher.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerLauncher.dir
+
+build CMakeFiles\BunkerLauncher.dir\src\GameplayDescriptorRegistry.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\src\GameplayDescriptorRegistry.cpp || cmake_object_order_depends_target_BunkerLauncher
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
   TARGET_PDB = BunkerLauncher.pdb
   TARGET_SUPPORT_DIR = CMakeFiles\BunkerLauncher.dir
@@ -263,7 +323,7 @@ build CMakeFiles\BunkerLauncher.dir\Launcher\src\Launcher_Main.cpp.obj: CXX_COMP
 build CMakeFiles\BunkerLauncher.dir\src\LanlineServices.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\src\LanlineServices.cpp || cmake_object_order_depends_target_BunkerLauncher
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
@@ -273,7 +333,7 @@ build CMakeFiles\BunkerLauncher.dir\src\LanlineServices.cpp.obj: CXX_COMPILER__B
 build CMakeFiles\BunkerLauncher.dir\src\LanlineSession.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\src\LanlineSession.cpp || cmake_object_order_depends_target_BunkerLauncher
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
@@ -283,7 +343,17 @@ build CMakeFiles\BunkerLauncher.dir\src\LanlineSession.cpp.obj: CXX_COMPILER__Bu
 build CMakeFiles\BunkerLauncher.dir\src\LaunchSession.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\src\LaunchSession.cpp || cmake_object_order_depends_target_BunkerLauncher
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
+  TARGET_PDB = BunkerLauncher.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerLauncher.dir
+
+build CMakeFiles\BunkerLauncher.dir\src\SessionProfiles.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\src\SessionProfiles.cpp || cmake_object_order_depends_target_BunkerLauncher
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
@@ -293,7 +363,7 @@ build CMakeFiles\BunkerLauncher.dir\src\LaunchSession.cpp.obj: CXX_COMPILER__Bun
 build CMakeFiles\BunkerLauncher.dir\external\imgui\imgui.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui.cpp || cmake_object_order_depends_target_BunkerLauncher
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\external\imgui
   TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
@@ -303,7 +373,7 @@ build CMakeFiles\BunkerLauncher.dir\external\imgui\imgui.cpp.obj: CXX_COMPILER__
 build CMakeFiles\BunkerLauncher.dir\external\imgui\imgui_draw.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui_draw.cpp || cmake_object_order_depends_target_BunkerLauncher
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\external\imgui
   TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
@@ -313,7 +383,7 @@ build CMakeFiles\BunkerLauncher.dir\external\imgui\imgui_draw.cpp.obj: CXX_COMPI
 build CMakeFiles\BunkerLauncher.dir\external\imgui\imgui_tables.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui_tables.cpp || cmake_object_order_depends_target_BunkerLauncher
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\external\imgui
   TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
@@ -323,7 +393,7 @@ build CMakeFiles\BunkerLauncher.dir\external\imgui\imgui_tables.cpp.obj: CXX_COM
 build CMakeFiles\BunkerLauncher.dir\external\imgui\imgui_widgets.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui_widgets.cpp || cmake_object_order_depends_target_BunkerLauncher
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\external\imgui
   TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
@@ -333,7 +403,7 @@ build CMakeFiles\BunkerLauncher.dir\external\imgui\imgui_widgets.cpp.obj: CXX_CO
 build CMakeFiles\BunkerLauncher.dir\external\imgui\backends\imgui_impl_glfw.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\external\imgui\backends\imgui_impl_glfw.cpp || cmake_object_order_depends_target_BunkerLauncher
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\external\imgui\backends
   TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
@@ -343,7 +413,7 @@ build CMakeFiles\BunkerLauncher.dir\external\imgui\backends\imgui_impl_glfw.cpp.
 build CMakeFiles\BunkerLauncher.dir\external\imgui\backends\imgui_impl_opengl3.cpp.obj: CXX_COMPILER__BunkerLauncher_unscanned_Debug D$:\Projects\Game_Project\external\imgui\backends\imgui_impl_opengl3.cpp || cmake_object_order_depends_target_BunkerLauncher
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerLauncher.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerLauncher.dir\external\imgui\backends
   TARGET_COMPILE_PDB = CMakeFiles\BunkerLauncher.dir\
@@ -358,7 +428,7 @@ build CMakeFiles\BunkerLauncher.dir\external\imgui\backends\imgui_impl_opengl3.c
 #############################################
 # Link the executable BunkerLauncher.exe
 
-build BunkerLauncher.exe: CXX_EXECUTABLE_LINKER__BunkerLauncher_Debug CMakeFiles\BunkerLauncher.dir\Launcher\src\Launcher_Main.cpp.obj CMakeFiles\BunkerLauncher.dir\src\LanlineServices.cpp.obj CMakeFiles\BunkerLauncher.dir\src\LanlineSession.cpp.obj CMakeFiles\BunkerLauncher.dir\src\LaunchSession.cpp.obj CMakeFiles\BunkerLauncher.dir\external\imgui\imgui.cpp.obj CMakeFiles\BunkerLauncher.dir\external\imgui\imgui_draw.cpp.obj CMakeFiles\BunkerLauncher.dir\external\imgui\imgui_tables.cpp.obj CMakeFiles\BunkerLauncher.dir\external\imgui\imgui_widgets.cpp.obj CMakeFiles\BunkerLauncher.dir\external\imgui\backends\imgui_impl_glfw.cpp.obj CMakeFiles\BunkerLauncher.dir\external\imgui\backends\imgui_impl_opengl3.cpp.obj | external\glfw\src\glfw3.lib || external\glfw\src\glfw3.lib
+build BunkerLauncher.exe: CXX_EXECUTABLE_LINKER__BunkerLauncher_Debug CMakeFiles\BunkerLauncher.dir\Launcher\src\Launcher_Main.cpp.obj CMakeFiles\BunkerLauncher.dir\Launcher\src\LauncherSupport.cpp.obj CMakeFiles\BunkerLauncher.dir\src\GameplayDescriptorRegistry.cpp.obj CMakeFiles\BunkerLauncher.dir\src\LanlineServices.cpp.obj CMakeFiles\BunkerLauncher.dir\src\LanlineSession.cpp.obj CMakeFiles\BunkerLauncher.dir\src\LaunchSession.cpp.obj CMakeFiles\BunkerLauncher.dir\src\SessionProfiles.cpp.obj CMakeFiles\BunkerLauncher.dir\external\imgui\imgui.cpp.obj CMakeFiles\BunkerLauncher.dir\external\imgui\imgui_draw.cpp.obj CMakeFiles\BunkerLauncher.dir\external\imgui\imgui_tables.cpp.obj CMakeFiles\BunkerLauncher.dir\external\imgui\imgui_widgets.cpp.obj CMakeFiles\BunkerLauncher.dir\external\imgui\backends\imgui_impl_glfw.cpp.obj CMakeFiles\BunkerLauncher.dir\external\imgui\backends\imgui_impl_opengl3.cpp.obj | external\glfw\src\glfw3.lib || external\glfw\src\glfw3.lib
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -MDd
   LINK_FLAGS = /machine:x64 /debug /INCREMENTAL /subsystem:console
@@ -384,9 +454,39 @@ build cmake_object_order_depends_target_BunkerEditor: phony || cmake_object_orde
 build CMakeFiles\BunkerEditor.dir\Editor\src\Editor_Main.cpp.obj: CXX_COMPILER__BunkerEditor_unscanned_Debug D$:\Projects\Game_Project\Editor\src\Editor_Main.cpp || cmake_object_order_depends_target_BunkerEditor
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerEditor.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerEditor.dir\Editor\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerEditor.dir\
+  TARGET_PDB = BunkerEditor.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerEditor.dir
+
+build CMakeFiles\BunkerEditor.dir\Editor\src\EditorSupport.cpp.obj: CXX_COMPILER__BunkerEditor_unscanned_Debug D$:\Projects\Game_Project\Editor\src\EditorSupport.cpp || cmake_object_order_depends_target_BunkerEditor
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerEditor.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerEditor.dir\Editor\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerEditor.dir\
+  TARGET_PDB = BunkerEditor.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerEditor.dir
+
+build CMakeFiles\BunkerEditor.dir\src\GameplayDescriptorRegistry.cpp.obj: CXX_COMPILER__BunkerEditor_unscanned_Debug D$:\Projects\Game_Project\src\GameplayDescriptorRegistry.cpp || cmake_object_order_depends_target_BunkerEditor
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerEditor.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerEditor.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerEditor.dir\
+  TARGET_PDB = BunkerEditor.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerEditor.dir
+
+build CMakeFiles\BunkerEditor.dir\src\SessionProfiles.cpp.obj: CXX_COMPILER__BunkerEditor_unscanned_Debug D$:\Projects\Game_Project\src\SessionProfiles.cpp || cmake_object_order_depends_target_BunkerEditor
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerEditor.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerEditor.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerEditor.dir\
   TARGET_PDB = BunkerEditor.pdb
   TARGET_SUPPORT_DIR = CMakeFiles\BunkerEditor.dir
@@ -394,7 +494,17 @@ build CMakeFiles\BunkerEditor.dir\Editor\src\Editor_Main.cpp.obj: CXX_COMPILER__
 build CMakeFiles\BunkerEditor.dir\src\World.cpp.obj: CXX_COMPILER__BunkerEditor_unscanned_Debug D$:\Projects\Game_Project\src\World.cpp || cmake_object_order_depends_target_BunkerEditor
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerEditor.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerEditor.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerEditor.dir\
+  TARGET_PDB = BunkerEditor.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerEditor.dir
+
+build CMakeFiles\BunkerEditor.dir\src\WorldValidation.cpp.obj: CXX_COMPILER__BunkerEditor_unscanned_Debug D$:\Projects\Game_Project\src\WorldValidation.cpp || cmake_object_order_depends_target_BunkerEditor
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerEditor.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerEditor.dir\src
   TARGET_COMPILE_PDB = CMakeFiles\BunkerEditor.dir\
@@ -404,7 +514,7 @@ build CMakeFiles\BunkerEditor.dir\src\World.cpp.obj: CXX_COMPILER__BunkerEditor_
 build CMakeFiles\BunkerEditor.dir\external\imgui\imgui.cpp.obj: CXX_COMPILER__BunkerEditor_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui.cpp || cmake_object_order_depends_target_BunkerEditor
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerEditor.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerEditor.dir\external\imgui
   TARGET_COMPILE_PDB = CMakeFiles\BunkerEditor.dir\
@@ -414,7 +524,7 @@ build CMakeFiles\BunkerEditor.dir\external\imgui\imgui.cpp.obj: CXX_COMPILER__Bu
 build CMakeFiles\BunkerEditor.dir\external\imgui\imgui_draw.cpp.obj: CXX_COMPILER__BunkerEditor_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui_draw.cpp || cmake_object_order_depends_target_BunkerEditor
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerEditor.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerEditor.dir\external\imgui
   TARGET_COMPILE_PDB = CMakeFiles\BunkerEditor.dir\
@@ -424,7 +534,7 @@ build CMakeFiles\BunkerEditor.dir\external\imgui\imgui_draw.cpp.obj: CXX_COMPILE
 build CMakeFiles\BunkerEditor.dir\external\imgui\imgui_tables.cpp.obj: CXX_COMPILER__BunkerEditor_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui_tables.cpp || cmake_object_order_depends_target_BunkerEditor
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerEditor.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerEditor.dir\external\imgui
   TARGET_COMPILE_PDB = CMakeFiles\BunkerEditor.dir\
@@ -434,7 +544,7 @@ build CMakeFiles\BunkerEditor.dir\external\imgui\imgui_tables.cpp.obj: CXX_COMPI
 build CMakeFiles\BunkerEditor.dir\external\imgui\imgui_widgets.cpp.obj: CXX_COMPILER__BunkerEditor_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui_widgets.cpp || cmake_object_order_depends_target_BunkerEditor
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerEditor.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerEditor.dir\external\imgui
   TARGET_COMPILE_PDB = CMakeFiles\BunkerEditor.dir\
@@ -444,7 +554,7 @@ build CMakeFiles\BunkerEditor.dir\external\imgui\imgui_widgets.cpp.obj: CXX_COMP
 build CMakeFiles\BunkerEditor.dir\external\imgui\backends\imgui_impl_glfw.cpp.obj: CXX_COMPILER__BunkerEditor_unscanned_Debug D$:\Projects\Game_Project\external\imgui\backends\imgui_impl_glfw.cpp || cmake_object_order_depends_target_BunkerEditor
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerEditor.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerEditor.dir\external\imgui\backends
   TARGET_COMPILE_PDB = CMakeFiles\BunkerEditor.dir\
@@ -454,7 +564,7 @@ build CMakeFiles\BunkerEditor.dir\external\imgui\backends\imgui_impl_glfw.cpp.ob
 build CMakeFiles\BunkerEditor.dir\external\imgui\backends\imgui_impl_opengl3.cpp.obj: CXX_COMPILER__BunkerEditor_unscanned_Debug D$:\Projects\Game_Project\external\imgui\backends\imgui_impl_opengl3.cpp || cmake_object_order_depends_target_BunkerEditor
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
-  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends -ID:\Projects\Game_Project\external\glfw\include
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerEditor.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerEditor.dir\external\imgui\backends
   TARGET_COMPILE_PDB = CMakeFiles\BunkerEditor.dir\
@@ -469,7 +579,7 @@ build CMakeFiles\BunkerEditor.dir\external\imgui\backends\imgui_impl_opengl3.cpp
 #############################################
 # Link the executable BunkerEditor.exe
 
-build BunkerEditor.exe: CXX_EXECUTABLE_LINKER__BunkerEditor_Debug CMakeFiles\BunkerEditor.dir\Editor\src\Editor_Main.cpp.obj CMakeFiles\BunkerEditor.dir\src\World.cpp.obj CMakeFiles\BunkerEditor.dir\external\imgui\imgui.cpp.obj CMakeFiles\BunkerEditor.dir\external\imgui\imgui_draw.cpp.obj CMakeFiles\BunkerEditor.dir\external\imgui\imgui_tables.cpp.obj CMakeFiles\BunkerEditor.dir\external\imgui\imgui_widgets.cpp.obj CMakeFiles\BunkerEditor.dir\external\imgui\backends\imgui_impl_glfw.cpp.obj CMakeFiles\BunkerEditor.dir\external\imgui\backends\imgui_impl_opengl3.cpp.obj | external\glfw\src\glfw3.lib || external\glfw\src\glfw3.lib
+build BunkerEditor.exe: CXX_EXECUTABLE_LINKER__BunkerEditor_Debug CMakeFiles\BunkerEditor.dir\Editor\src\Editor_Main.cpp.obj CMakeFiles\BunkerEditor.dir\Editor\src\EditorSupport.cpp.obj CMakeFiles\BunkerEditor.dir\src\GameplayDescriptorRegistry.cpp.obj CMakeFiles\BunkerEditor.dir\src\SessionProfiles.cpp.obj CMakeFiles\BunkerEditor.dir\src\World.cpp.obj CMakeFiles\BunkerEditor.dir\src\WorldValidation.cpp.obj CMakeFiles\BunkerEditor.dir\external\imgui\imgui.cpp.obj CMakeFiles\BunkerEditor.dir\external\imgui\imgui_draw.cpp.obj CMakeFiles\BunkerEditor.dir\external\imgui\imgui_tables.cpp.obj CMakeFiles\BunkerEditor.dir\external\imgui\imgui_widgets.cpp.obj CMakeFiles\BunkerEditor.dir\external\imgui\backends\imgui_impl_glfw.cpp.obj CMakeFiles\BunkerEditor.dir\external\imgui\backends\imgui_impl_opengl3.cpp.obj | external\glfw\src\glfw3.lib || external\glfw\src\glfw3.lib
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -MDd
   LINK_FLAGS = /machine:x64 /debug /INCREMENTAL /subsystem:console
@@ -482,6 +592,109 @@ build BunkerEditor.exe: CXX_EXECUTABLE_LINKER__BunkerEditor_Debug CMakeFiles\Bun
   TARGET_IMPLIB = BunkerEditor.lib
   TARGET_PDB = BunkerEditor.pdb
   TARGET_SUPPORT_DIR = CMakeFiles\BunkerEditor.dir
+
+# =============================================================================
+# Object build statements for EXECUTABLE target BunkerSmokeChecks
+
+
+#############################################
+# Order-only phony target for BunkerSmokeChecks
+
+build cmake_object_order_depends_target_BunkerSmokeChecks: phony || .
+
+build CMakeFiles\BunkerSmokeChecks.dir\tests\SmokeChecks.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\tests\SmokeChecks.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\tests
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\src\GameplayDescriptorRegistry.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\GameplayDescriptorRegistry.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\src\LaunchSession.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\LaunchSession.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\src\SessionProfiles.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\SessionProfiles.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\src\World.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\World.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\src\WorldValidation.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\WorldValidation.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+
+# =============================================================================
+# Link build statements for EXECUTABLE target BunkerSmokeChecks
+
+
+#############################################
+# Link the executable BunkerSmokeChecks.exe
+
+build BunkerSmokeChecks.exe: CXX_EXECUTABLE_LINKER__BunkerSmokeChecks_Debug CMakeFiles\BunkerSmokeChecks.dir\tests\SmokeChecks.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\GameplayDescriptorRegistry.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\LaunchSession.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\SessionProfiles.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\World.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\WorldValidation.cpp.obj
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -MDd
+  LINK_FLAGS = /machine:x64 /debug /INCREMENTAL /subsystem:console
+  LINK_LIBRARIES = kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  POST_BUILD = cd .
+  PRE_LINK = cd .
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_FILE = BunkerSmokeChecks.exe
+  TARGET_IMPLIB = BunkerSmokeChecks.lib
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+
+#############################################
+# Utility command for test
+
+build CMakeFiles\test.util: CUSTOM_COMMAND
+  COMMAND = C:\Windows\system32\cmd.exe /C "cd /D D:\Projects\Game_Project\build_verify_ninja_fresh && "C:\Program Files\CMake\bin\ctest.exe" "
+  DESC = Running tests...
+  pool = console
+  restat = 1
+
+build test: phony CMakeFiles\test.util
 
 
 #############################################
@@ -507,36 +720,6 @@ build CMakeFiles\rebuild_cache.util: CUSTOM_COMMAND
 
 build rebuild_cache: phony CMakeFiles\rebuild_cache.util
 
-
-#############################################
-# Utility command for list_install_components
-
-build list_install_components: phony
-
-
-#############################################
-# Utility command for install
-
-build CMakeFiles\install.util: CUSTOM_COMMAND all
-  COMMAND = C:\Windows\system32\cmd.exe /C "cd /D D:\Projects\Game_Project\build_verify_ninja_fresh && "C:\Program Files\CMake\bin\cmake.exe" -P cmake_install.cmake"
-  DESC = Install the project...
-  pool = console
-  restat = 1
-
-build install: phony CMakeFiles\install.util
-
-
-#############################################
-# Utility command for install/local
-
-build CMakeFiles\install\local.util: CUSTOM_COMMAND all
-  COMMAND = C:\Windows\system32\cmd.exe /C "cd /D D:\Projects\Game_Project\build_verify_ninja_fresh && "C:\Program Files\CMake\bin\cmake.exe" -DCMAKE_INSTALL_LOCAL_ONLY=1 -P cmake_install.cmake"
-  DESC = Installing only the local directory...
-  pool = console
-  restat = 1
-
-build install\local: phony CMakeFiles\install\local.util
-
 # =============================================================================
 # Write statements declared in CMakeLists.txt:
 # D:/Projects/Game_Project/CMakeLists.txt
@@ -544,9 +727,15 @@ build install\local: phony CMakeFiles\install\local.util
 
 
 #############################################
-# Utility command for uninstall
+# Utility command for test
 
-build external\glfw\uninstall: phony external\glfw\CMakeFiles\uninstall
+build external\glfw\CMakeFiles\test.util: CUSTOM_COMMAND
+  COMMAND = C:\Windows\system32\cmd.exe /C "cd /D D:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw && "C:\Program Files\CMake\bin\ctest.exe" "
+  DESC = Running tests...
+  pool = console
+  restat = 1
+
+build external\glfw\test: phony external\glfw\CMakeFiles\test.util
 
 
 #############################################
@@ -571,43 +760,6 @@ build external\glfw\CMakeFiles\rebuild_cache.util: CUSTOM_COMMAND
   restat = 1
 
 build external\glfw\rebuild_cache: phony external\glfw\CMakeFiles\rebuild_cache.util
-
-
-#############################################
-# Utility command for list_install_components
-
-build external\glfw\list_install_components: phony
-
-
-#############################################
-# Utility command for install
-
-build external\glfw\CMakeFiles\install.util: CUSTOM_COMMAND external\glfw\all
-  COMMAND = C:\Windows\system32\cmd.exe /C "cd /D D:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw && "C:\Program Files\CMake\bin\cmake.exe" -P cmake_install.cmake"
-  DESC = Install the project...
-  pool = console
-  restat = 1
-
-build external\glfw\install: phony external\glfw\CMakeFiles\install.util
-
-
-#############################################
-# Utility command for install/local
-
-build external\glfw\CMakeFiles\install\local.util: CUSTOM_COMMAND external\glfw\all
-  COMMAND = C:\Windows\system32\cmd.exe /C "cd /D D:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw && "C:\Program Files\CMake\bin\cmake.exe" -DCMAKE_INSTALL_LOCAL_ONLY=1 -P cmake_install.cmake"
-  DESC = Installing only the local directory...
-  pool = console
-  restat = 1
-
-build external\glfw\install\local: phony external\glfw\CMakeFiles\install\local.util
-
-
-#############################################
-# Custom command for external\glfw\CMakeFiles\uninstall
-
-build external\glfw\CMakeFiles\uninstall | ${cmake_ninja_workdir}external\glfw\CMakeFiles\uninstall: CUSTOM_COMMAND
-  COMMAND = C:\Windows\system32\cmd.exe /C "cd /D D:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw && "C:\Program Files\CMake\bin\cmake.exe" -P D:/Projects/Game_Project/build_verify_ninja_fresh/external/glfw/cmake_uninstall.cmake"
 
 # =============================================================================
 # Write statements declared in CMakeLists.txt:
@@ -882,6 +1034,18 @@ build external\glfw\src\update_mappings: phony external\glfw\src\CMakeFiles\upda
 
 
 #############################################
+# Utility command for test
+
+build external\glfw\src\CMakeFiles\test.util: CUSTOM_COMMAND
+  COMMAND = C:\Windows\system32\cmd.exe /C "cd /D D:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw\src && "C:\Program Files\CMake\bin\ctest.exe" "
+  DESC = Running tests...
+  pool = console
+  restat = 1
+
+build external\glfw\src\test: phony external\glfw\src\CMakeFiles\test.util
+
+
+#############################################
 # Utility command for edit_cache
 
 build external\glfw\src\CMakeFiles\edit_cache.util: CUSTOM_COMMAND
@@ -906,36 +1070,6 @@ build external\glfw\src\rebuild_cache: phony external\glfw\src\CMakeFiles\rebuil
 
 
 #############################################
-# Utility command for list_install_components
-
-build external\glfw\src\list_install_components: phony
-
-
-#############################################
-# Utility command for install
-
-build external\glfw\src\CMakeFiles\install.util: CUSTOM_COMMAND external\glfw\src\all
-  COMMAND = C:\Windows\system32\cmd.exe /C "cd /D D:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw\src && "C:\Program Files\CMake\bin\cmake.exe" -P cmake_install.cmake"
-  DESC = Install the project...
-  pool = console
-  restat = 1
-
-build external\glfw\src\install: phony external\glfw\src\CMakeFiles\install.util
-
-
-#############################################
-# Utility command for install/local
-
-build external\glfw\src\CMakeFiles\install\local.util: CUSTOM_COMMAND external\glfw\src\all
-  COMMAND = C:\Windows\system32\cmd.exe /C "cd /D D:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw\src && "C:\Program Files\CMake\bin\cmake.exe" -DCMAKE_INSTALL_LOCAL_ONLY=1 -P cmake_install.cmake"
-  DESC = Installing only the local directory...
-  pool = console
-  restat = 1
-
-build external\glfw\src\install\local: phony external\glfw\src\CMakeFiles\install\local.util
-
-
-#############################################
 # Custom command for external\glfw\src\CMakeFiles\update_mappings
 
 build external\glfw\src\CMakeFiles\update_mappings | ${cmake_ninja_workdir}external\glfw\src\CMakeFiles\update_mappings: CUSTOM_COMMAND
@@ -951,11 +1085,11 @@ build BunkerGame: phony BunkerGame.exe
 
 build BunkerLauncher: phony BunkerLauncher.exe
 
+build BunkerSmokeChecks: phony BunkerSmokeChecks.exe
+
 build glfw: phony external\glfw\src\glfw3.lib
 
 build glfw3.lib: phony external\glfw\src\glfw3.lib
-
-build uninstall: phony external\glfw\uninstall
 
 build update_mappings: phony external\glfw\src\update_mappings
 
@@ -967,7 +1101,7 @@ build update_mappings: phony external\glfw\src\update_mappings
 #############################################
 # Folder: D:/Projects/Game_Project/build_verify_ninja_fresh
 
-build all: phony BunkerGame.exe BunkerLauncher.exe BunkerEditor.exe external\glfw\all
+build all: phony BunkerGame.exe BunkerLauncher.exe BunkerEditor.exe BunkerSmokeChecks.exe external\glfw\all
 
 # =============================================================================
 
@@ -990,14 +1124,14 @@ build external\glfw\src\all: phony external\glfw\src\glfw3.lib
 #############################################
 # Re-run CMake if any of its inputs changed.
 
-build build.ninja D$:\Projects\Game_Project\build_verify_ninja_fresh\cmake_install.cmake D$:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw\cmake_install.cmake D$:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw\src\cmake_install.cmake: RERUN_CMAKE | C$:\Program$ Files\CMake\share\cmake-4.3\Modules\BasicConfigVersion-SameMajorVersion.cmake.in C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeCInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeCXXInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeCommonLanguageInclude.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeDependentOption.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeGenericSystem.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeInitializeConfigs.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeLanguageInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakePackageConfigHelpers.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeRCInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInitialize.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CheckCSourceCompiles.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CheckIncludeFile.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CheckLibraryExists.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\CMakeCommonCompilerMacros.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindOpenGL.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindPackageHandleStandardArgs.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindPackageMessage.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindThreads.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\GNUInstallDirs.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCLinkerInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCXXLinkerInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCommonLinkerInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CheckSourceCompiles.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Linker\MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-Initialize.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\WindowsPaths.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\WriteBasicConfigVersionFile.cmake CMakeCache.txt CMakeFiles\4.3.0\CMakeCCompiler.cmake CMakeFiles\4.3.0\CMakeCXXCompiler.cmake CMakeFiles\4.3.0\CMakeRCCompiler.cmake CMakeFiles\4.3.0\CMakeSystem.cmake D$:\Projects\Game_Project\CMakeLists.txt D$:\Projects\Game_Project\external\glfw\CMakeLists.txt D$:\Projects\Game_Project\external\glfw\CMake\cmake_uninstall.cmake.in D$:\Projects\Game_Project\external\glfw\CMake\glfw3.pc.in D$:\Projects\Game_Project\external\glfw\CMake\glfw3Config.cmake.in D$:\Projects\Game_Project\external\glfw\src\CMakeLists.txt
+build build.ninja D$:\Projects\Game_Project\build_verify_ninja_fresh\cmake_install.cmake D$:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw\cmake_install.cmake D$:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw\src\cmake_install.cmake D$:\Projects\Game_Project\build_verify_ninja_fresh\CTestTestfile.cmake D$:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw\CTestTestfile.cmake D$:\Projects\Game_Project\build_verify_ninja_fresh\external\glfw\src\CTestTestfile.cmake: RERUN_CMAKE | C$:\Program$ Files\CMake\share\cmake-4.3\Modules\BasicConfigVersion-SameMajorVersion.cmake.in C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeCInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeCXXInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeCommonLanguageInclude.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeDependentOption.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeGenericSystem.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeInitializeConfigs.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeLanguageInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakePackageConfigHelpers.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeRCInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInitialize.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CheckCSourceCompiles.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CheckIncludeFile.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CheckLibraryExists.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\CMakeCommonCompilerMacros.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindOpenGL.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindPackageHandleStandardArgs.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindPackageMessage.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindThreads.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\GNUInstallDirs.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCLinkerInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCXXLinkerInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCommonLinkerInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CheckSourceCompiles.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Linker\MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-Initialize.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\WindowsPaths.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\WriteBasicConfigVersionFile.cmake CMakeCache.txt CMakeFiles\4.3.0\CMakeCCompiler.cmake CMakeFiles\4.3.0\CMakeCXXCompiler.cmake CMakeFiles\4.3.0\CMakeRCCompiler.cmake CMakeFiles\4.3.0\CMakeSystem.cmake D$:\Projects\Game_Project\CMakeLists.txt D$:\Projects\Game_Project\external\glfw\CMakeLists.txt D$:\Projects\Game_Project\external\glfw\CMake\glfw3.pc.in D$:\Projects\Game_Project\external\glfw\CMake\glfw3Config.cmake.in D$:\Projects\Game_Project\external\glfw\src\CMakeLists.txt
   pool = console
 
 
 #############################################
 # A missing CMake input file is not an error.
 
-build C$:\Program$ Files\CMake\share\cmake-4.3\Modules\BasicConfigVersion-SameMajorVersion.cmake.in C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeCInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeCXXInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeCommonLanguageInclude.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeDependentOption.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeGenericSystem.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeInitializeConfigs.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeLanguageInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakePackageConfigHelpers.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeRCInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInitialize.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CheckCSourceCompiles.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CheckIncludeFile.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CheckLibraryExists.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\CMakeCommonCompilerMacros.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindOpenGL.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindPackageHandleStandardArgs.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindPackageMessage.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindThreads.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\GNUInstallDirs.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCLinkerInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCXXLinkerInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCommonLinkerInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CheckSourceCompiles.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Linker\MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-Initialize.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\WindowsPaths.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\WriteBasicConfigVersionFile.cmake CMakeCache.txt CMakeFiles\4.3.0\CMakeCCompiler.cmake CMakeFiles\4.3.0\CMakeCXXCompiler.cmake CMakeFiles\4.3.0\CMakeRCCompiler.cmake CMakeFiles\4.3.0\CMakeSystem.cmake D$:\Projects\Game_Project\CMakeLists.txt D$:\Projects\Game_Project\external\glfw\CMakeLists.txt D$:\Projects\Game_Project\external\glfw\CMake\cmake_uninstall.cmake.in D$:\Projects\Game_Project\external\glfw\CMake\glfw3.pc.in D$:\Projects\Game_Project\external\glfw\CMake\glfw3Config.cmake.in D$:\Projects\Game_Project\external\glfw\src\CMakeLists.txt: phony
+build C$:\Program$ Files\CMake\share\cmake-4.3\Modules\BasicConfigVersion-SameMajorVersion.cmake.in C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeCInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeCXXInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeCommonLanguageInclude.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeDependentOption.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeGenericSystem.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeInitializeConfigs.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeLanguageInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakePackageConfigHelpers.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeRCInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInitialize.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CheckCSourceCompiles.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CheckIncludeFile.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\CheckLibraryExists.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\CMakeCommonCompilerMacros.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindOpenGL.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindPackageHandleStandardArgs.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindPackageMessage.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\FindThreads.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\GNUInstallDirs.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCLinkerInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCXXLinkerInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCommonLinkerInformation.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Internal\CheckSourceCompiles.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Linker\MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-Initialize.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-C.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-CXX.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\Windows.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\Platform\WindowsPaths.cmake C$:\Program$ Files\CMake\share\cmake-4.3\Modules\WriteBasicConfigVersionFile.cmake CMakeCache.txt CMakeFiles\4.3.0\CMakeCCompiler.cmake CMakeFiles\4.3.0\CMakeCXXCompiler.cmake CMakeFiles\4.3.0\CMakeRCCompiler.cmake CMakeFiles\4.3.0\CMakeSystem.cmake D$:\Projects\Game_Project\CMakeLists.txt D$:\Projects\Game_Project\external\glfw\CMakeLists.txt D$:\Projects\Game_Project\external\glfw\CMake\glfw3.pc.in D$:\Projects\Game_Project\external\glfw\CMake\glfw3Config.cmake.in D$:\Projects\Game_Project\external\glfw\src\CMakeLists.txt: phony
 
 
 #############################################
