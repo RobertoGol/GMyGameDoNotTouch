@@ -8,6 +8,7 @@
 #include "imgui_impl_opengl3.h"
 
 #include "../include/AppPaths.hpp"
+#include "../include/AtomicPersistence.hpp"
 #include "../include/GameRuntime.hpp"
 #include "../include/LanlineLobbyLogic.hpp"
 #include "../include/LanlineSession.hpp"
@@ -212,11 +213,13 @@ int main() {
     const auto profilePath = bunker::DefaultSessionProfilePath();
     if (!bunker::LoadSessionProfile(profilePath, sessionProfile)) {
     sessionProfile = bunker::MakeDefaultSessionProfile();
+
     const auto initialProfileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
     if (!initialProfileSave.ok) {
         std::fprintf(stderr, "Initial profile save failed: %s\n", initialProfileSave.message.c_str());
     }
     }
+    
     bunker::NormalizeSessionProfile(sessionProfile);
     SyncLanlineRuntimeLaunchState(launchTicket, sessionProfile);
 
@@ -245,6 +248,7 @@ int main() {
     bunker::World world;
     const auto worldPath = bunker::ResolveWorldPath(sessionProfile.selectedWorld);
     if (!world.Load(worldPath.string())) {
+
         world.GeneratePrototypeZone();
         const auto initialWorldSave = bunker::SaveWorldAtomically(world, worldPath);
         if (!initialWorldSave.ok) {
@@ -461,17 +465,7 @@ int main() {
         gameState.uiPressed = toggleUiNow;
 
         const bool saveNow = glfwGetKey(window, GLFW_KEY_F5) == GLFW_PRESS;
-        if (saveNow && !gameState.savePressed) {
-            const auto worldSave = bunker::SaveWorldAtomically(world, worldPath);
-            const auto profileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
-            staticEraser.Save(sessionProfile.selectedWorld);
-            if (worldSave.ok && profileSave.ok) {
-                gameState.lastEvent = "Field save committed.";
-            } else {
-                gameState.lastEvent = "Field save failed: " +
-                    std::string(!worldSave.ok ? worldSave.message : profileSave.message);
-            }
-        }
+
         gameState.savePressed = saveNow;
 
         const bool healNow = glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS;
@@ -486,7 +480,7 @@ int main() {
                 gameState.lastEvent = "No cryo medkits available.";
             }
         }
-        gameState.healPressed = healNow;
+        gameState.savePressed = saveNow;
 
         const bool reloadNow = glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS;
         if (reloadNow && !gameState.reloadPressed && sessionProfile.character.hp > 0.0f) {
