@@ -21,6 +21,7 @@ struct ValidationIssue {
 
 bool LooksLikeRegistryReference(const std::string& value);
 std::vector<ValidationIssue> ValidateWorldForRuntime(const World& world);
+bool HasBlockingValidationIssues(const std::vector<ValidationIssue>& issues);
 int CountValidationErrors(const std::vector<ValidationIssue>& issues);
 int CountValidationWarnings(const std::vector<ValidationIssue>& issues);
 std::string BuildValidationSummary(const std::vector<ValidationIssue>& issues);

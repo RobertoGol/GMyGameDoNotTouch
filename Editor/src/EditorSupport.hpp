@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -118,6 +119,7 @@ std::string MakeDuplicateRegistryId(const bunker::World& world, const std::strin
 bool HasOtherObjectWithRegistryId(const bunker::World& world, const std::string& registryId, int selectedIndex);
 bool LoadPrefabLibrary(std::vector<SavedPrefab>& prefabs);
 std::string BuildEditorValidationStatus(const bunker::World& world);
+bool TryExportValidatedWorld(const bunker::World& world, const std::filesystem::path& path, std::string& statusText);
 bool SavePrefabLibrary(const std::vector<SavedPrefab>& prefabs);
 ImU32 ColorForCategory(bunker::ObjectCategory category);
 const char* InteractionMarker(bunker::InteractionType interaction);

@@ -1039,6 +1039,7 @@ using editor_support::SetActiveWorldInProfile;
 using editor_support::SyncEditorWorldBindings;
 using editor_support::ToIndex;
 using editor_support::ToLabel;
+using editor_support::TryExportValidatedWorld;
 
 }  // namespace
 
@@ -2002,11 +2003,8 @@ int main() {
             }
             bunker::NormalizeSessionProfile(sessionProfile);
             const auto path = bunker::ResolveWorldPath(sessionProfile.selectedWorld);
-            if (editorWorld.Save(path.string())) {
+            if (TryExportValidatedWorld(editorWorld, path, statusText)) {
                 CopyStringToBuffer(sessionProfile.selectedWorld, exportWorldFileInput, IM_ARRAYSIZE(exportWorldFileInput));
-                statusText = "Exported workspace into active runtime world: " + path.string();
-            } else {
-                statusText = "Failed to export runtime world to " + path.string();
             }
         }
         ImGui::InputText("Save As", exportWorldFileInput, IM_ARRAYSIZE(exportWorldFileInput));
@@ -2016,11 +2014,8 @@ int main() {
                 statusText = "Save As world name cannot be empty.";
             } else {
                 const auto path = bunker::ResolveWorldPath(exportName);
-                if (editorWorld.Save(path.string())) {
-                    statusText = "Exported new world file to " + path.string();
+                if (TryExportValidatedWorld(editorWorld, path, statusText)) {
                     CopyStringToBuffer(exportName, exportWorldFileInput, IM_ARRAYSIZE(exportWorldFileInput));
-                } else {
-                    statusText = "Failed to export new world file to " + path.string();
                 }
             }
         }
@@ -2045,8 +2040,7 @@ int main() {
                 statusText = "Export+Set Active needs a Save As world name first.";
             } else {
                 const auto path = bunker::ResolveWorldPath(exportName);
-                if (!editorWorld.Save(path.string())) {
-                    statusText = "Failed to export and activate world: " + path.string();
+                if (!TryExportValidatedWorld(editorWorld, path, statusText)) {
                 } else if (!SetActiveWorldInProfile(exportName, statusText)) {
                     statusText = "Exported world but failed to activate it: " + path.string();
                 } else {

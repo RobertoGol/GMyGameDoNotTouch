@@ -118,6 +118,15 @@ std::vector<ValidationIssue> ValidateWorldForRuntime(const World& world) {
     return issues;
 }
 
+bool HasBlockingValidationIssues(const std::vector<ValidationIssue>& issues) {
+    for (const auto& issue : issues) {
+        if (issue.severity == ValidationSeverity::Error) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int CountValidationErrors(const std::vector<ValidationIssue>& issues) {
     int count = 0;
     for (const auto& issue : issues) {

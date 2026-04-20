@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -19,6 +20,53 @@
 
 
 namespace {
+
+struct RuntimeSaveOutcome {
+    bool worldSaved = false;
+    bool profileSaved = false;
+    bool eraserSaved = false;
+    std::string message;
+};
+
+RuntimeSaveOutcome BuildRuntimeSaveOutcome(
+    const bunker::SaveStatus* worldSave,
+    const bunker::SaveStatus* profileSave,
+    std::string_view worldName,
+    bool saveEraser) {
+    RuntimeSaveOutcome outcome;
+
+    outcome.worldSaved = (worldSave == nullptr) ? true : worldSave->ok;
+    outcome.profileSaved = (profileSave == nullptr) ? true : profileSave->ok;
+
+    if (saveEraser) {
+        const auto eraserPath = bunker::StaticEraserPath(worldName);
+        outcome.eraserSaved = std::filesystem::exists(eraserPath);
+    } else {
+        outcome.eraserSaved = true;
+    }
+
+    if (!outcome.worldSaved && worldSave != nullptr) {
+        outcome.message = "world save failed: " + worldSave->message;
+    } else if (!outcome.profileSaved && profileSave != nullptr) {
+        outcome.message = "profile save failed: " + profileSave->message;
+    } else if (!outcome.eraserSaved) {
+        outcome.message = "static eraser save could not be confirmed on disk";
+    } else {
+        outcome.message = "world/profile save flow completed successfully";
+    }
+
+    return outcome;
+}
+
+void ReportRuntimeSaveOutcome(const char* label, const RuntimeSaveOutcome& outcome) {
+    std::fprintf(stderr,
+        "%s: world=%s profile=%s eraser=%s :: %s\n",
+        label,
+        outcome.worldSaved ? "ok" : "failed",
+        outcome.profileSaved ? "ok" : "failed",
+        outcome.eraserSaved ? "ok" : "failed",
+        outcome.message.c_str());
+}
 
 void TrimLanlineEventLog(bunker::LanlineSessionState& state, std::size_t maxEntries) {
     if (state.eventLog.size() > maxEntries) {
@@ -215,9 +263,9 @@ int main() {
     sessionProfile = bunker::MakeDefaultSessionProfile();
 
     const auto initialProfileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
-    if (!initialProfileSave.ok) {
-        std::fprintf(stderr, "Initial profile save failed: %s\n", initialProfileSave.message.c_str());
-    }
+    ReportRuntimeSaveOutcome(
+        "Initial profile bootstrap",
+        BuildRuntimeSaveOutcome(nullptr, &initialProfileSave, sessionProfile.selectedWorld, false));
     }
     
     bunker::NormalizeSessionProfile(sessionProfile);
@@ -251,9 +299,9 @@ int main() {
 
         world.GeneratePrototypeZone();
         const auto initialWorldSave = bunker::SaveWorldAtomically(world, worldPath);
-        if (!initialWorldSave.ok) {
-            std::fprintf(stderr, "Initial world save failed: %s\n", initialWorldSave.message.c_str());
-        }
+        ReportRuntimeSaveOutcome(
+            "Initial world bootstrap",
+            BuildRuntimeSaveOutcome(&initialWorldSave, nullptr, sessionProfile.selectedWorld, false));
     }
     world.EnsureStarterInfrastructure();
     bunker::ApplyStaticEraser(world, staticEraser);
@@ -744,12 +792,9 @@ int main() {
     const auto finalWorldSave = bunker::SaveWorldAtomically(world, worldPath);
     const auto finalProfileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
     staticEraser.Save(sessionProfile.selectedWorld);
-    if (!finalWorldSave.ok) {
-        std::fprintf(stderr, "Final world save failed: %s\n", finalWorldSave.message.c_str());
-    }
-    if (!finalProfileSave.ok) {
-        std::fprintf(stderr, "Final profile save failed: %s\n", finalProfileSave.message.c_str());
-    }
+    ReportRuntimeSaveOutcome(
+        "Final runtime save",
+        BuildRuntimeSaveOutcome(&finalWorldSave, &finalProfileSave, sessionProfile.selectedWorld, true));
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

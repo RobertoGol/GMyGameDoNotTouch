@@ -587,6 +587,26 @@ std::string BuildEditorValidationStatus(const bunker::World& world) {
     return bunker::BuildValidationSummary(issues);
 }
 
+bool TryExportValidatedWorld(const bunker::World& world, const std::filesystem::path& path, std::string& statusText) {
+    const auto issues = bunker::ValidateWorldForRuntime(world);
+    if (bunker::HasBlockingValidationIssues(issues)) {
+        statusText = "Export blocked: " + bunker::BuildValidationSummary(issues);
+        return false;
+    }
+
+    const auto saveResult = bunker::SaveWorldAtomically(world, path);
+    if (!saveResult.ok) {
+        statusText = "Export failed: " + saveResult.message;
+        return false;
+    }
+
+    const int warningCount = bunker::CountValidationWarnings(issues);
+    statusText = warningCount > 0
+        ? "Exported with warnings (" + std::to_string(warningCount) + "): " + path.string()
+        : "Exported world: " + path.string();
+    return true;
+}
+
 bool SavePrefabLibrary(const std::vector<SavedPrefab>& prefabs) {
     std::ofstream file(bunker::EditorPrefabLibraryPath());
     if (!file.is_open()) {
