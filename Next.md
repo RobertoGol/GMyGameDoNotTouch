@@ -19,6 +19,17 @@
 - editor warnings по `fey_ring` / `lanline_service_hub` / `tank_service` тоже учитывают legacy-aliases, а не только новые теги
 - `GameplayDescriptorRegistry` вынесен из header в [src/GameplayDescriptorRegistry.cpp], `WorldValidation` вынесен в [src/WorldValidation.cpp]
 - editor export теперь проходит через validation gate: blocking ошибки режут export, warnings не режут и попадают в статус
+- `WorldExport` расширен query/filter/preset слоем: есть `WorldExportHistoryFilter`, `WorldExportComparePreset`, `WorldExportHistoryQuery`, `WorldExportHistorySelection`
+- shared export history helper-layer теперь умеет `MatchesHistoryQuery`, `FilterWorldExportHistoryEntries`, `FindLatestMatchingHistoryEntry`, `ResolveComparePresetTarget` и compact badge/summary labels
+- `BunkerEditor` получил filter row, compare preset combo, jump actions к `last successful shipping / prototype / blocked / baseline updated` и compact filtered audit list
+- smoke-check теперь покрывает quick history filters, preset resolution, baseline-updated selection, blocked checkpoint selection и no-match fallback
+- shared `World` теперь умеет `FindObjectByRegistryId`, `BuildObjectReferences`, `FindIncomingObjectReferences`, `FindOutgoingObjectReferences`, `HasIncomingObjectReferences` для `registryId`-style weak refs через `linkTarget`
+- `BunkerEditor` теперь показывает `Weak References / XREF` блок у выбранного объекта, умеет jump-to-reference и предупреждает перед удалением объекта, на который еще ссылаются другие authored nodes
+- smoke-check теперь покрывает shared world reference graph: resolved incoming/outgoing refs, unresolved weak ref и incoming-reference flag
+- `BunkerEditor` validation panel теперь умеет issue search, severity filter, selected-object-only filter и фокус по уже отфильтрованному списку, чтобы warnings не тонули в общей ленте
+- `MapObject` / `World` / `PrefabLibrary` теперь держат `editorLayer`: `BWL4` пишет его явно, legacy `BWL3` world-файлы получают inferred layer по object semantics, а smoke-check фиксирует roundtrip и backward-compatible layer inference
+- `BunkerEditor` получил production-useful `layer manager`: `show/hide`, `lock/unlock`, `filter by layer`, `select first`, compact layer badges в object list и preview discipline для hidden/locked layers
+- выбранный объект теперь собран в более цельный inspector: `display name` и `layer` редактируются рядом с identity/gameplay полями, секции `Semantic / Validation`, `XREF`, `Descriptor Presets`, `Transform / Runtime`, `Loot`, `Actions` больше не размазаны одной простыней, а runtime notes подсказывают service/fey/tank context
 
 ### Правило на следующие проходы
 
@@ -10175,3 +10186,636 @@ import assistant,
 
 Считаем этот файл дополнительным референсом по ролям модулей редактора, а основу решений держим на нашем проекте и его каноне. Дальше логично собрать из этого уже чистое, короткое Editor_TZ.md без мусора и без Bethesda-перегруза
 
+фиксирую состояние без путаницы:
+
+Текущий export/history path теперь закрыт не только backend-ом, но и production-useful navigation layer:
+
+есть `LoadWorldExportHistory(...)`, snapshot/baseline paths и загрузка baseline snapshot;
+есть history query/filter/preset слой в `WorldExport`;
+есть smoke-тест `RunExportHistoryCheckpointSelectionSmoke()`, который теперь проверяет latest shipping/prototype/blocked selection, baseline-updated filter, compare preset resolution и no-match fallback;
+в `Editor_Main.cpp` теперь есть filter row, compare preset combo, jump actions, compact filtered audit list, preview snapshot, historical diff, baseline diff и focus/fix по regressions.
+
+Следующий точный ход после этого слоя:
+
+`undo/redo`
+
+Иначе говоря:
+compare/history path заново не перепридумывать — он уже закрыт и дальше нужен только как поддерживаемый production слой editor/export pipeline.
+Тогда это можно использовать только как локальный технический полигон, а не как основу публичного контента проекта.
+Самый правильный ход сейчас такой:
+Что можно делать
+
+
+локально проверить AssetProvider/virtual path resolver;
+
+
+проверить, что мир хранит пути и ссылки на ресурсы, а не сами тяжелые картинки внутри world-файла;
+
+
+протестировать editor-side texture browser и preview на внешней библиотеке ресурсов;
+
+
+держать это как внешний source library, а не как часть канонического контента проекта. В твоем файле как раз описана полезная идея: .wld/world format должен хранить ссылки и manifest, а AssetProvider решает, брать ресурс из обычной папки или из внешней библиотеки/архива.  
+
+
+Чего не делать
+
+
+не коммитить эти BA/картинки в публичный репозиторий;
+
+
+не делать их частью shipping build;
+
+
+не строить канонический визуальный стиль проекта на чужих ассетах;
+
+
+не превращать редактор в “Fallout importer” как основную цель. В том же файле это уходит далеко в сторону и как production-цель для нашего проекта не годится. 
+
+
+Как это использовать с пользой для проекта
+
+
+через внешний AssetProvider;
+
+
+через asset manifest в world/export pipeline;
+
+
+через texture/material browser в editor;
+
+
+только для внутренней проверки пайплайна:
+
+
+path resolution
+
+
+preview
+
+
+material assignment
+
+
+fallback loading
+
+
+external library indexing.
+Файл прямо подталкивает именно к такому подходу: внешний ресурсный слой, virtual path resolver и ссылки на текстуры, а не запихивание картинок прямо в мир.  
+
+
+
+
+Если по-человечески:
+как временный тестовый ресурсный банк — ок.
+Как часть публичного/финального проекта — нет.
+И для нашего курса это даже удобно: можно не трогать канон проекта, а спокойно проверить:
+
+
+AssetProvider
+
+
+texture lookup
+
+
+external resource manifest
+
+
+editor preview/browser
+
+
+А уже потом заменить все это на свои ассеты.
+Следующий практический шаг отсюда — добавить в план редактора внешнюю resource library support без вшивания чужих файлов в сам проект.
+
+Разберем дальше уже по-взрослому.
+
+Где проект сейчас реально сильный
+
+Архитектура уже очень крепкая: проект собирает отдельные BunkerGame, BunkerLauncher, BunkerEditor, а также отдельный BunkerSmokeChecks; в BunkerEditor уже подключены WorldExport.cpp, WorldSemanticAuthoring.cpp и WorldValidation.cpp, а в game/launcher/editor используется общий набор модулей вроде GameplayDescriptorRegistry.cpp и SessionProfiles.cpp. Это уже не “набор экспериментов”, а нормальный product split с тестовым target.
+
+ROADMAP.md тоже подтверждает зрелость: Этап 1 завершен, Launcher v1 отмечен как завершенный, а в списке подтвержденных сборок есть длинная цепочка успешных build_verify_ninja и build_verify_ninja_fresh, включая editor-side world preview, prefab/library workflow, BWL2, semantic authoring, Lanline Services persistence/world glue и launcher hardening. Это очень сильный сигнал, что позвоночник проекта уже собран.
+
+Что видно по последнему прерванному таску
+
+По твоим вставкам видно, что export/history path уже не в зачатке. В WorldExport backend уже есть:
+
+пути для report / audit trail / snapshot / baseline;
+загрузка истории через LoadWorldExportHistory(...);
+сводка history entry;
+построение validation snapshot;
+загрузка baseline snapshot.
+То есть backend уже умеет хранить и читать историю экспортов и validation-артефактов.
+
+Smoke-тест RunExportHistoryCheckpointSelectionSmoke() уже проверяет важную вещь: два экспорта одного и того же мира, порядок history entries как newest-first, сравнение текущего состояния с новым и старым historical checkpoint, object-aware regressions/improvements и корректный разбор policyLabel/decisionLabel. Значит selected checkpoint compare уже реально сделан и тестируется, а не только обещан.
+
+В Editor_Main.cpp это уже доведено до usable UI: есть baseline diff, historical checkpoint selection, preview historical snapshot, object-level regressions/improvements, кнопки Focus и Fix для baseline и historical regressions. То есть плоский список уже частично преодолен — ручной выбор checkpoint и сравнение уже живут в editor.
+
+Что в этом слое еще не дожато
+
+Судя по тому, что уже есть, недостает не “системы истории”, а именно последнего production-useful navigation layer:
+
+быстрых фильтров по audit history;
+compare presets;
+jump-кнопок вида last successful shipping, last prototype, last blocked, last baseline updated;
+helper-layer в WorldExport, который будет находить “последнюю подходящую запись”, а не заставлять editor жить на одном длинном combo. Это прямо вытекает из текущего состояния кода и твоего описания прерванного таска.
+
+То есть самый точный вывод тут такой: таск не провален и не пустой — он уже на 70–80% сделан, осталось добить быстрый слой навигации и пресетов поверх уже работающего compare/history path.
+
+Разбор по папкам
+include/
+
+Самый ближайший кандидат — include/WorldExport.hpp. Там уже есть типы для baseline/snapshot/history/result, так что следующий логичный шаг — добавить query/filter/preset слой, а не изобретать новые сущности elsewhere. Это хорошая точка для:
+
+history filters,
+compare preset enums,
+selection/query structs,
+helper declarations для latest matching entry.
+src/
+
+Главный ближайший файл — src/WorldExport.cpp. Там уже есть все кирпичи для history loading и snapshot parsing, значит именно сюда надо положить:
+
+фильтрацию history entries,
+выбор latest matching export,
+compare preset resolution,
+compact summary/badge helpers.
+Это даст production-useful слой без ломки существующего backend.
+Editor/
+
+Editor_Main.cpp уже тащит на себе runtime/export окно, preview, baseline diff, historical compare и action-кнопки. Значит здесь следующий ход — не переписывать UI, а надстроить:
+
+filter row,
+quick buttons,
+compare preset combo,
+compact filtered history view,
+fallback messages, если подходящего checkpoint нет.
+tests/
+
+tests/SmokeChecks.cpp уже хорошо покрывает historical checkpoint selection. Следующий честный шаг — не писать новый test harness, а просто расширить существующий smoke-блок проверками на:
+
+latest shipping selection,
+latest blocked selection,
+prototype-only filter,
+no-match fallback.
+docs
+
+ROADMAP.md после этого нужно будет синхронизировать коротко и по факту: не “мы придумали историю экспортов”, а “добавлены быстрые history filters и compare presets”. Это особенно важно, потому что roadmap у тебя уже очень насыщенный, и ему нужна точная синхронизация с реальным состоянием кода.
+
+Что кроме export/history сейчас выглядит самым дорогим хвостом
+
+После этого слоя самыми дорогими открытыми блоками выглядят:
+
+Registry ID / XREF / strong reference discipline в editor;
+unified property inspector;
+layer manager;
+undo/redo;
+дальнейшее hardening validation/warnings;
+deeper semantic authoring glue между editor и runtime.
+Это логично, потому что editor уже вырос из “viewer”, и теперь дорогие дыры — не базовые, а tool-grade.
+На чем бы я сосредоточился дальше
+
+Когда токены вернутся, я бы делал строго по порядку:
+
+WorldExport.hpp — query/filter/preset types.
+WorldExport.cpp — latest matching entry + filtering + quick compare resolution.
+Editor_Main.cpp — быстрые кнопки и filtered selection поверх уже существующего UI.
+SmokeChecks.cpp — тесты на новые быстрые режимы.
+ROADMAP.md — короткий sync по факту.
+
+Это сейчас самый дешевый по риску и самый полезный по отдаче ход, потому что existing compare/history layer уже живой.
+что останется по большой версии после закрытия export/history filters + compare presets.
+
+Что будет считаться закрытым после этого слоя
+
+Если добить:
+
+history filters,
+quick compare presets,
+jump к last successful shipping / prototype / blocked / baseline,
+smoke на эти режимы,
+
+то editor получит нормальный production-useful export audit workflow, а не просто набор preview-окон. Это логично, потому что backend истории, baseline/snapshot compare и UI для historical checkpoint уже есть, а недостает именно удобного navigation layer поверх них.
+
+После этого можно будет считать, что у редактора экспортный контур уже взрослый:
+
+world export,
+validation report,
+audit trail,
+shipping baseline,
+historical compare,
+object-aware regressions,
+быстрый переход по ключевым checkpoint’ам.
+Что останется самым дорогим после этого
+1. Editor-hardening
+
+Это будет следующий большой блок:
+
+Registry ID как полный жесткий слой,
+weak refs / XREF,
+unified property inspector,
+layer manager,
+undo/redo,
+более сильный warnings/validation UX.
+Это уже тот уровень, который реально приближает BunkerEditor к сильному production toolset, а не просто к редактору карты. Сам проект уже явно идет в эту сторону: editor выделен в отдельный target и обрастает специализированными модулями вроде EditorSupport.cpp, PrefabLibrary.cpp, WorldExport.cpp, WorldSemanticAuthoring.cpp, WorldValidation.cpp. (raw.githubusercontent.com
+)
+2. Start vertical slice
+
+По roadmap Этап 3. Вертикальный срез старта все еще “в работе”, хотя база старта уже собрана. Значит после export/history слоя одной из главных больших задач останется не новая система, а дожим стартового опыта как цельной игровой зоны и маршрута, а не просто цепочки уже существующих систем. (raw.githubusercontent.com
+)
+
+3. Combat / RPG / BT-72 depth
+
+Roadmap по-прежнему держит Этап 4. Базовый боевой и RPG-слой как “в работе”. То есть для большой версии потребуется не просто наличие танка, сервиса, прогрессии и SPECIAL-подобных идей, а именно достаточная глубина и сцепка этих систем. (raw.githubusercontent.com
+)
+
+4. Recovery / industry / logistics depth
+
+Это уже одна из сильнейших сторон проекта, но для большой версии ее надо не просто продолжать линейно, а превращать в настоящий mid-game operational core loop. По roadmap backbone уже серьезно вырос: power grid, drone stations, trade network, rail freight, orbital uplink, rail fortress, recovery fabricator, service bay, water reclaimer и дальше. Большая версия — это когда это не только checkpoints, а устойчивый игровой хребет. (raw.githubusercontent.com
+)
+
+5. Service / Fey / runtime glue
+
+Lanline Services уже заметно окреп: есть persistence, dual-currency logic, editor-side service/fey anchors и tower-sync-aware unlock. Но для большой версии останется дожать:
+
+полную runtime/launcher/editor консистентность,
+более глубокие gameplay hooks,
+service/fey world coupling,
+честный статус чата/voice как shell vs real transport.
+Это уже не фундаментальная дыра, а зрелая интеграционная работа. (raw.githubusercontent.com
+)
+6. Repo / release discipline
+
+Это не игровая механика, но до большой версии все равно придется:
+
+дочистить repo hygiene,
+не держать лишние build artifacts в публичном репо,
+синхронизировать ROADMAP.md без противоречий,
+лучше закрепить release flow.
+Сейчас код уже серьезный, а репозиторий по форме все еще частично dev-tree. (raw.githubusercontent.com
+)
+Что уже не выглядит страшной проблемой
+
+Вот что уже не главная угроза:
+
+трехчастная архитектура Launcher / Game / Editor;
+сам факт существования редактора;
+world export как таковой;
+history/baseline/audit как направление;
+service persistence как факт;
+industrial backbone как направление.
+Это уже реально есть и живет в коде/roadmap, а не только в идеях. (raw.githubusercontent.com
+) (raw.githubusercontent.com
+)
+Моя обновленная оценка после закрытия этого слоя
+
+Если закрыть именно export/history filters + compare presets, я бы оценил проект так:
+
+до крепкой v1: 82–85%
+до большой полноценной версии: 55–60%
+
+Почему рост не гигантский: этот слой не делает новую игру, но сильно повышает production maturity editor/export pipeline, а это очень важно именно для большой версии. У тебя уже собран позвоночник проекта, и сейчас ценность все чаще дают не новые “большие идеи”, а такие finish layers. (raw.githubusercontent.com
+) (raw.githubusercontent.com
+)
+
+Самый правильный маршрут после этого
+
+После закрытия history/filter/preset слоя я бы двигался так:
+
+Registry ID / XREF / warnings hardening
+unified property inspector
+layer manager
+undo/redo
+start vertical slice polish
+deeper BT-72 / combat / RPG
+richer recovery/industry/logistics core
+service/fey full glue
+release discipline / cleanup
+
+Это и будет самый прямой путь от “сильная системная ранняя версия” к “большой полноценной версии”.
+Вот следующие 10 ходов подряд после текущего export/history слоя.
+
+Судя по коду, у тебя уже есть: history backend, baseline/snapshot compare, historical checkpoint selection, object-aware regressions/improvements и UI для baseline/history diff. Значит дальше надо идти не в новые большие идеи, а в editor-hardening и world authoring maturity.
+
+1. Добить быстрые history filters и compare presets
+
+Закрыть текущий прерванный слой до конца:
+
+quick buttons: Last successful shipping, Last prototype, Last blocked, Last baseline
+filter row
+compare preset selection
+smoke-тесты на быстрые режимы
+Это последний кусок поверх уже живого history workflow.
+2. Ввести полный Registry ID слой
+
+Сделать объектный реестр редактора жестким:
+
+уникальный ID у каждого объекта
+генерация новых ID
+remap при duplicate/import
+поиск по ID
+запрет дублей
+Это следующий настоящий фундамент editor-grade уровня.
+3. Добавить XREF / weak references
+
+После Registry ID сделать:
+
+incoming/outgoing references
+предупреждение при удалении объекта, на который ссылаются
+jump-to-reference
+reference block в inspector
+Это сразу усилит semantic authoring и validation.
+4. Усилить validation/warnings окно
+
+Не просто список ошибок, а production warnings:
+
+broken refs
+duplicate IDs
+missing semantic anchors
+invalid service/fey links
+export blockers
+quick fix suggestions
+Текущий validation/export путь уже сильный, значит warnings теперь надо дотянуть до tool-grade UX.
+5. Сделать unified property inspector
+
+Собрать один сильный инспектор вместо россыпи полей:
+
+Transform
+Gameplay
+Interaction
+Semantic
+Loot
+Visual
+Runtime Notes
+спецсекции для lanline_service_hub, fey_ring, tank_service, medical_support
+6. Добавить Layer Manager
+
+Нужны слои:
+
+Terrain
+Structures
+Gameplay
+Loot
+Service
+Fey
+Spawn
+Debug
+Rail
+Industrial
+
+И действия:
+
+show/hide
+lock/unlock
+filter by layer
+assign selected to layer
+7. Ввести Undo / Redo
+
+Минимальный стек команд:
+
+add/remove object
+duplicate
+move/rotate/scale
+property change
+semantic preset apply
+spawn move
+link change
+Без этого editor уже будет ощущаться узким местом.
+8. Дожать viewport tools
+
+Сделать viewport по-настоящему рабочим:
+
+raycast select
+move/rotate/scale gizmo
+snap to grid
+focus on selected
+bounds overlay
+interaction/service radius overlay
+route/link visualization для service/fey объектов
+9. Усилить Prefab / Library
+
+Следующий production шаг:
+
+сохранить prefab из selection
+metadata/category/preview
+prefab usage tracking
+warnings on broken prefab refs
+future-ready base for prefab overrides
+10. Полировать стартовый vertical slice
+
+После editor-hardening вернуться к игре:
+
+цельность стартового мира
+onboarding
+BT-72 сцепка
+recovery/service/fey hooks в первом маршруте
+убрать пустоты и “системность ради системности”
+Это уже шаг от сильного toolset к большой версии самой игры.
+Самый правильный порядок по файлам
+
+Если очень жестко:
+
+WorldExport.hpp/.cpp
+Editor_Main.cpp
+tests/SmokeChecks.cpp
+World / SessionProfiles для Registry ID и refs
+WorldValidation / editor warnings
+inspector UI
+layer UI/state
+undo/redo stack
+viewport tools
+prefab/library + start slice polish
+Коротко
+Вот один прямой маршрут, без развилок.
+Сейчас текущий слой — это export/history path. Он уже живой: есть audit history, baseline/snapshot compare, historical checkpoint selection, object-aware regressions/improvements и UI под это в editor. Значит сначала его надо дожать до конца, а не перескакивать дальше.  
+Маршрут такой
+
+
+Добить export/history
+
+
+quick filters
+
+
+compare presets
+
+
+jump to last successful shipping / prototype / blocked / baseline
+
+
+smoke-тесты на эти режимы. 
+
+
+
+
+Сделать жесткий Registry ID слой
+
+
+уникальные ID
+
+
+remap при duplicate/import
+
+
+поиск по ID
+
+
+запрет дублей
+
+
+
+
+Добавить XREF / weak refs
+
+
+кто на кого ссылается
+
+
+warning при удалении
+
+
+jump-to-reference
+
+
+
+
+Дожать editor-hardening
+
+
+warnings/validation UX
+
+
+unified property inspector
+
+
+layer manager
+
+
+undo/redo
+
+
+
+
+Дожать viewport как рабочий tool
+
+
+raycast select
+
+
+gizmo
+
+
+snap
+
+
+overlays для service/fey/link logic
+
+
+
+
+Усилить prefab/library
+
+
+prefab save/reuse
+
+
+usage tracking
+
+
+prefab warnings
+
+
+
+
+Вернуться к игре
+
+
+polish стартового vertical slice
+
+
+BT-72 / combat / RPG depth
+
+
+recovery/industry/logistics как настоящий core loop
+
+
+
+
+Потом уже большая версия
+
+
+full service/fey glue
+
+
+content expansion
+
+
+release/repo discipline
+
+
+
+
+Самое короткое
+Сначала добиваем editor pipeline, потом дожимаем game slice, потом расширяем игру.
+Если еще короче:
+export/history → Registry/XREF → editor-hardening → viewport/prefab → start slice polish → big version.
+
+Да. Самое важное еще вот что:
+Первое: не потеряй точку входа после паузы.
+Когда токены вернутся, пусть ИИ начинает не “с нуля”, а ровно с текущего места: WorldExport уже умеет history, baseline, snapshot compare и historical checkpoint selection, так что надо добивать именно quick filters/presets, а не переписывать слой заново.  
+Второе: зафиксируй один ближайший checkpoint в тексте.
+Лучше прямо в Use_this_One.md или рядом коротко записать:
+
+
+что уже есть;
+
+
+что осталось;
+
+
+какие 4 файла трогать следующими;
+
+
+что не трогать.
+Иначе следующий ИИ может снова расползтись.
+
+
+Третье: не открывай сейчас новые большие ветки.
+До конца текущего слоя не надо:
+
+
+новый editor subsystem,
+
+
+новый gameplay subsystem,
+
+
+новый import pipeline,
+
+
+новый Fallout-asset слой.
+Сначала закрыть текущий production-useful кусок.
+
+
+Четвертое: не тащи чужие BA/картинки в shipping-путь.
+Их можно держать только как локальный технический полигон для preview/provider/browser, но не как основу публичной сборки.
+Пятое: после quick filters сразу идти в editor-hardening, а не в новую красивую фичу:
+
+
+Registry ID
+
+
+XREF
+
+
+warnings/validation
+
+
+unified inspector
+
+
+layer manager
+
+
+undo/redo
+
+
+Если хочешь, я могу прямо сейчас написать тебе сверхкороткий checkpoint note на 10 строк, который ты просто вставишь в Use_this_One.md.

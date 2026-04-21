@@ -69,6 +69,12 @@ struct AnchorCascadeResult {
     std::vector<std::string> createdScriptTags{};
 };
 
+struct EditorLayerViewState {
+    std::string name;
+    bool visible = true;
+    bool locked = false;
+};
+
 const char* ToLabel(bunker::InteractionType interaction);
 const char* ToLabel(bunker::ObjectCategory category);
 int ToIndex(bunker::InteractionType interaction);
@@ -95,12 +101,22 @@ void SyncEditorWorldBindings(const bunker::World& editorWorld,
     float& worldSpawnY);
 void SyncSelectedObjectBindings(const bunker::World& editorWorld,
     int selectedObjectIndex,
+    char* selectedDisplayNameEdit,
+    std::size_t selectedDisplayNameEditSize,
     char* selectedRegistryEdit,
     std::size_t selectedRegistryEditSize,
     char* selectedScriptTagEdit,
     std::size_t selectedScriptTagEditSize,
     char* selectedLinkTargetEdit,
-    std::size_t selectedLinkTargetEditSize);
+    std::size_t selectedLinkTargetEditSize,
+    char* selectedLayerEdit,
+    std::size_t selectedLayerEditSize);
+void SyncEditorLayerViewStates(const bunker::World& world, std::vector<EditorLayerViewState>& layerStates);
+EditorLayerViewState* FindEditorLayerViewState(std::vector<EditorLayerViewState>& layerStates, std::string_view layerName);
+const EditorLayerViewState* FindEditorLayerViewState(const std::vector<EditorLayerViewState>& layerStates, std::string_view layerName);
+bool IsObjectVisibleInEditorLayerView(const bunker::MapObject& object, const std::vector<EditorLayerViewState>& layerStates);
+bool IsObjectLockedInEditorLayerView(const bunker::MapObject& object, const std::vector<EditorLayerViewState>& layerStates);
+std::string BuildSpecializedRuntimeNotes(const bunker::MapObject& object);
 int FindObjectIndexByRegistryId(const bunker::World& world, const std::string& registryId);
 int FindObjectIndexByScriptTag(const bunker::World& world, std::string_view scriptTag);
 const ObjectPreset& SelectedPreset(const std::array<ObjectPreset, 6>& presets, int index);
@@ -188,6 +204,7 @@ PreviewInteraction DrawWorldPreview(const bunker::World& world,
     int selectedObjectIndex,
     bool previewAsPlayer,
     PreviewViewportState& viewportState,
+    const std::vector<EditorLayerViewState>& layerStates,
     bool showInteractionHelpers,
     bool showObjectLabels);
 

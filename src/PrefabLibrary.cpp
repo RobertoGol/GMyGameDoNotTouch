@@ -1,10 +1,12 @@
 #include "../include/PrefabLibrary.hpp"
 
+#include <cctype>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
 
 #include "../include/AppPaths.hpp"
+#include "../include/World.hpp"
 
 namespace bunker {
 
@@ -32,6 +34,15 @@ bool LoadPrefabLibrary(std::vector<PrefabRecord>& prefabs) {
             return false;
         }
 
+        while (lineStream && std::isspace(static_cast<unsigned char>(lineStream.peek()))) {
+            lineStream.get();
+        }
+        if (lineStream.peek() == '"') {
+            if (!(lineStream >> std::quoted(prefab.object.editorLayer))) {
+                return false;
+            }
+        }
+
         int interaction = 0;
         int category = 0;
         if (!(lineStream >> interaction
@@ -51,6 +62,10 @@ bool LoadPrefabLibrary(std::vector<PrefabRecord>& prefabs) {
 
         prefab.object.interaction = static_cast<InteractionType>(interaction);
         prefab.object.category = static_cast<ObjectCategory>(category);
+        prefab.object.editorLayer = NormalizeEditorLayerName(prefab.object.editorLayer);
+        if (prefab.object.editorLayer.empty()) {
+            prefab.object.editorLayer = DefaultEditorLayerName(prefab.object);
+        }
 
         bool semanticAutoCreated = false;
         bool semanticLayoutPinned = false;
@@ -82,13 +97,15 @@ bool SavePrefabLibrary(const std::vector<PrefabRecord>& prefabs) {
         return false;
     }
 
-    file << "# BUNKER_PREFABS_V2\n";
+    file << "# BUNKER_PREFABS_V3\n";
     for (const auto& prefab : prefabs) {
+        const std::string normalizedLayer = NormalizeEditorLayerName(prefab.object.editorLayer);
         file << std::quoted(prefab.label) << ' '
              << std::quoted(prefab.object.registryId) << ' '
              << std::quoted(prefab.object.displayName) << ' '
              << std::quoted(prefab.object.scriptTag) << ' '
              << std::quoted(prefab.object.linkTarget) << ' '
+             << std::quoted(normalizedLayer.empty() ? DefaultEditorLayerName(prefab.object) : normalizedLayer) << ' '
              << static_cast<int>(prefab.object.interaction) << ' '
              << static_cast<int>(prefab.object.category) << ' '
              << prefab.object.x << ' '

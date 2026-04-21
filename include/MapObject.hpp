@@ -51,6 +51,7 @@ struct MapObject {
     std::string linkTarget;
     bool semanticAutoCreated = false;
     bool semanticLayoutPinned = false;
+    std::string editorLayer;
 };
 
 }  // namespace bunker

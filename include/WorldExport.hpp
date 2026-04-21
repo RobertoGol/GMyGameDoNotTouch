@@ -84,6 +84,40 @@ struct WorldExportHistoryEntry {
     std::string message;
 };
 
+enum class WorldExportHistoryFilter {
+    All,
+    Successful,
+    Blocked,
+    SaveFailed,
+    PrototypeOnly,
+    ShippingOnly,
+    BaselineUpdatedOnly
+};
+
+enum class WorldExportComparePreset {
+    LatestSuccessfulShipping,
+    LatestSuccessfulPrototype,
+    LatestBlocked,
+    LatestBaselineUpdated,
+    ManualSelection
+};
+
+struct WorldExportHistoryQuery {
+    WorldExportHistoryFilter filter = WorldExportHistoryFilter::All;
+    bool requireSuccessful = false;
+    bool requireValidationSnapshot = false;
+};
+
+struct WorldExportHistorySelection {
+    bool found = false;
+    int historyIndex = -1;
+    WorldExportComparePreset preset = WorldExportComparePreset::ManualSelection;
+    WorldExportHistoryQuery query{};
+    std::string summaryLabel;
+    std::string badgeLabel;
+    std::string fallbackMessage;
+};
+
 struct WorldExportResult {
     bool ok = false;
     bool blockedByValidation = false;
@@ -105,12 +139,26 @@ struct WorldExportResult {
 
 const char* ExportValidationPolicyLabel(ExportValidationPolicy policy);
 const char* WorldExportDecisionLabel(const WorldExportResult& result);
+const char* WorldExportHistoryFilterLabel(WorldExportHistoryFilter filter);
+const char* WorldExportComparePresetLabel(WorldExportComparePreset preset);
 std::filesystem::path ValidationReportPathForWorld(const std::filesystem::path& worldPath);
 std::filesystem::path ExportAuditTrailPathForWorld(const std::filesystem::path& worldPath);
 std::filesystem::path ValidationSnapshotArchivePathForWorld(const std::filesystem::path& worldPath, std::string_view exportToken);
 std::filesystem::path ValidationBaselinePathForWorld(const std::filesystem::path& worldPath);
 std::string LoadTextArtifactPreview(const std::filesystem::path& path, std::size_t maxChars = 4096);
 bool LoadWorldExportHistory(const std::filesystem::path& worldPath, std::vector<WorldExportHistoryEntry>& entries);
+bool MatchesHistoryQuery(const WorldExportHistoryEntry& entry, const WorldExportHistoryQuery& query);
+std::vector<WorldExportHistorySelection> FilterWorldExportHistoryEntries(
+    const std::vector<WorldExportHistoryEntry>& entries,
+    const WorldExportHistoryQuery& query);
+WorldExportHistorySelection FindLatestMatchingHistoryEntry(
+    const std::vector<WorldExportHistoryEntry>& entries,
+    const WorldExportHistoryQuery& query);
+WorldExportHistorySelection ResolveComparePresetTarget(
+    const std::vector<WorldExportHistoryEntry>& entries,
+    WorldExportComparePreset preset,
+    int manualSelectionIndex = -1);
+std::string BuildWorldExportHistoryBadgeLabel(const WorldExportHistoryEntry& entry);
 std::string SummarizeWorldExportHistoryEntry(const WorldExportHistoryEntry& entry);
 std::string BuildValidationBaselineSnapshot(const std::vector<ValidationIssue>& issues, const WorldExportResult& result);
 bool LoadValidationBaselineSnapshot(const std::filesystem::path& path, ValidationBaselineSnapshot& snapshot);

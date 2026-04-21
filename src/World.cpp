@@ -2,13 +2,31 @@
 #include "../include/GameplayDescriptorRegistry.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <string_view>
+#include <unordered_map>
 
 namespace bunker {
 
 namespace {
+
+constexpr std::array<std::string_view, 11> kKnownEditorLayers = {
+    "Terrain",
+    "Structures",
+    "Gameplay",
+    "Loot",
+    "Service",
+    "Fey",
+    "Spawn",
+    "Debug",
+    "Markers",
+    "Rail",
+    "Industrial"
+};
 
 void WriteString(std::ofstream& file, const std::string& value) {
     const auto length = static_cast<std::uint32_t>(value.size());
@@ -28,8 +46,76 @@ bool ReadString(std::ifstream& file, std::string& value) {
     return static_cast<bool>(file);
 }
 
+std::string TrimLayerCopy(std::string_view value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string_view::npos) {
+        return {};
+    }
+
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return std::string(value.substr(first, last - first + 1));
+}
+
+std::string ToLowerCopy(std::string_view value) {
+    std::string lower(value);
+    for (char& ch : lower) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return lower;
+}
+
+bool IsRailGameplayTag(std::string_view normalizedTag) {
+    return normalizedTag == "rail_depot" || normalizedTag == "rail_fortress_hub";
+}
+
+bool IsIndustrialGameplayTag(std::string_view normalizedTag) {
+    return normalizedTag == "industrial_gate" ||
+        normalizedTag == "industrial_survey" ||
+        normalizedTag == "industrial_outpost" ||
+        normalizedTag == "assembly_cell" ||
+        normalizedTag == "foundry_line" ||
+        normalizedTag == "reactor_yard" ||
+        normalizedTag == "capacitor_bank";
+}
+
+bool IsServiceGameplayTag(std::string_view normalizedTag) {
+    return normalizedTag == "tower_sync" ||
+        normalizedTag == "workshop_service" ||
+        normalizedTag == "power_pylon" ||
+        normalizedTag == "drone_station" ||
+        normalizedTag == "recovery_fabricator" ||
+        normalizedTag == "relay_substation" ||
+        normalizedTag == "service_bay" ||
+        normalizedTag == "water_reclaimer" ||
+        normalizedTag == "lanline_service_hub" ||
+        normalizedTag == "medical_support" ||
+        normalizedTag == "tank_service" ||
+        normalizedTag == "remote_link" ||
+        normalizedTag == "orbital_uplink";
+}
+
+bool IsSpawnObject(const MapObject& object) {
+    const std::string lowerRegistryId = ToLowerCopy(object.registryId);
+    const std::string lowerDisplayName = ToLowerCopy(object.displayName);
+    return lowerRegistryId.find("spawn") != std::string::npos ||
+        lowerDisplayName.find("spawn") != std::string::npos;
+}
+
+void AppendUniqueLayer(std::vector<std::string>& layers, std::string layerName) {
+    if (layerName.empty()) {
+        return;
+    }
+    if (std::find(layers.begin(), layers.end(), layerName) == layers.end()) {
+        layers.push_back(std::move(layerName));
+    }
+}
+
 void NormalizeLoadedObject(MapObject& object) {
     object.scriptTag = std::string(NormalizeGameplayDescriptorTag(object.scriptTag));
+    object.editorLayer = NormalizeEditorLayerName(object.editorLayer);
+    if (object.editorLayer.empty()) {
+        object.editorLayer = DefaultEditorLayerName(object);
+    }
 }
 
 bool LooksLikeLegacySemanticAutoAnchor(const MapObject& object) {
@@ -37,14 +123,84 @@ bool LooksLikeLegacySemanticAutoAnchor(const MapObject& object) {
         !object.scriptTag.empty();
 }
 
+bool LooksLikeRegistryStyleReference(std::string_view value) {
+    return value.size() >= 2 && value.front() == '[' && value.back() == ']';
+}
+
 }  // namespace
+
+const char* WorldObjectReferenceFieldLabel(WorldObjectReferenceField field) {
+    switch (field) {
+    case WorldObjectReferenceField::LinkTarget:
+    default:
+        return "linkTarget";
+    }
+}
+
+std::string NormalizeEditorLayerName(std::string_view layerName) {
+    std::string trimmed = TrimLayerCopy(layerName);
+    if (trimmed.empty()) {
+        return {};
+    }
+
+    const std::string lowerLayer = ToLowerCopy(trimmed);
+    for (std::string_view knownLayer : kKnownEditorLayers) {
+        if (lowerLayer == ToLowerCopy(knownLayer)) {
+            return std::string(knownLayer);
+        }
+    }
+
+    trimmed[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(trimmed[0])));
+    return trimmed;
+}
+
+std::string DefaultEditorLayerName(const MapObject& object) {
+    const std::string normalizedTag = std::string(NormalizeGameplayDescriptorTag(object.scriptTag));
+    if (normalizedTag == "fey_ring") {
+        return "Fey";
+    }
+    if (IsRailGameplayTag(normalizedTag)) {
+        return "Rail";
+    }
+    if (IsIndustrialGameplayTag(normalizedTag)) {
+        return "Industrial";
+    }
+    if (IsServiceGameplayTag(normalizedTag)) {
+        return "Service";
+    }
+    if (IsSpawnObject(object)) {
+        return "Spawn";
+    }
+    if (normalizedTag.starts_with("debug_")) {
+        return "Debug";
+    }
+
+    switch (object.category) {
+    case ObjectCategory::Structure:
+    case ObjectCategory::Hangar:
+        return "Structures";
+    case ObjectCategory::ResourceNode:
+        return "Terrain";
+    case ObjectCategory::Container:
+        return "Loot";
+    case ObjectCategory::Landmark:
+        return "Markers";
+    case ObjectCategory::Terminal:
+    case ObjectCategory::Vehicle:
+    case ObjectCategory::Hostile:
+    default:
+        return "Gameplay";
+    }
+}
 
 void World::Clear() {
     objects.clear();
 }
 
 void World::AddObject(const MapObject& obj) {
-    objects.push_back(obj);
+    MapObject normalizedObject = obj;
+    NormalizeLoadedObject(normalizedObject);
+    objects.push_back(std::move(normalizedObject));
 }
 
 bool World::Load(const std::string& path) {
@@ -56,9 +212,10 @@ bool World::Load(const std::string& path) {
     char header[4]{};
     file.read(header, 4);
     const std::string format(header, 4);
-    const bool hasExtendedObjectData = (format == "BWL2" || format == "BWL3");
-    const bool hasSemanticAuthoringState = (format == "BWL3");
-    if (format != "BWLD" && format != "BWL2" && format != "BWL3") {
+    const bool hasExtendedObjectData = (format == "BWL2" || format == "BWL3" || format == "BWL4");
+    const bool hasSemanticAuthoringState = (format == "BWL3" || format == "BWL4");
+    const bool hasEditorLayerData = (format == "BWL4");
+    if (format != "BWLD" && format != "BWL2" && format != "BWL3" && format != "BWL4") {
         return false;
     }
 
@@ -89,6 +246,9 @@ bool World::Load(const std::string& path) {
         }
         if (hasExtendedObjectData) {
             if (!ReadString(file, object.scriptTag) || !ReadString(file, object.linkTarget)) {
+                return false;
+            }
+            if (hasEditorLayerData && !ReadString(file, object.editorLayer)) {
                 return false;
             }
         }
@@ -127,7 +287,7 @@ bool World::Load(const std::string& path) {
             object.semanticAutoCreated = true;
         }
         NormalizeLoadedObject(object);
-        objects.push_back(object);
+        objects.push_back(std::move(object));
     }
 
     return true;
@@ -139,7 +299,7 @@ bool World::Save(const std::string& path) const {
         return false;
     }
 
-    file.write("BWL3", 4);
+    file.write("BWL4", 4);
     WriteString(file, metadata.name);
     WriteString(file, metadata.biome);
     WriteString(file, metadata.objective);
@@ -157,6 +317,8 @@ bool World::Save(const std::string& path) const {
         WriteString(file, object.displayName);
         WriteString(file, object.scriptTag);
         WriteString(file, object.linkTarget);
+        const std::string normalizedLayer = NormalizeEditorLayerName(object.editorLayer);
+        WriteString(file, normalizedLayer.empty() ? DefaultEditorLayerName(object) : normalizedLayer);
         file.write(reinterpret_cast<const char*>(&interaction), sizeof(interaction));
         file.write(reinterpret_cast<const char*>(&category), sizeof(category));
         file.write(reinterpret_cast<const char*>(&object.x), sizeof(object.x));
@@ -1451,6 +1613,24 @@ bool World::HasObject(const std::string& registryId) const {
     });
 }
 
+const MapObject* World::FindObjectByRegistryId(const std::string& registryId) const {
+    for (const auto& object : objects) {
+        if (object.registryId == registryId) {
+            return &object;
+        }
+    }
+    return nullptr;
+}
+
+MapObject* World::FindObjectByRegistryId(const std::string& registryId) {
+    for (auto& object : objects) {
+        if (object.registryId == registryId) {
+            return &object;
+        }
+    }
+    return nullptr;
+}
+
 const MapObject* World::FindObjectByScriptTag(const std::string& scriptTag) const {
     const std::string_view normalizedTag = NormalizeGameplayDescriptorTag(scriptTag);
     for (const auto& object : objects) {
@@ -1487,6 +1667,122 @@ MapObject* World::FindObjectByLinkTarget(const std::string& linkTarget) {
         }
     }
     return nullptr;
+}
+
+std::vector<WorldObjectReference> World::BuildObjectReferences() const {
+    std::vector<WorldObjectReference> references;
+    std::unordered_map<std::string, int> objectIndexById;
+    objectIndexById.reserve(objects.size());
+    for (int objectIndex = 0; objectIndex < static_cast<int>(objects.size()); ++objectIndex) {
+        objectIndexById[objects[static_cast<std::size_t>(objectIndex)].registryId] = objectIndex;
+    }
+
+    references.reserve(objects.size());
+    for (int objectIndex = 0; objectIndex < static_cast<int>(objects.size()); ++objectIndex) {
+        const auto& object = objects[static_cast<std::size_t>(objectIndex)];
+        if (object.linkTarget.empty()) {
+            continue;
+        }
+
+        const auto targetIt = objectIndexById.find(object.linkTarget);
+        const bool resolved = targetIt != objectIndexById.end();
+        if (!resolved && !LooksLikeRegistryStyleReference(object.linkTarget)) {
+            continue;
+        }
+
+        WorldObjectReference reference;
+        reference.field = WorldObjectReferenceField::LinkTarget;
+        reference.sourceObjectIndex = objectIndex;
+        reference.sourceObjectId = object.registryId;
+        reference.sourceDisplayName = object.displayName;
+        reference.sourceScriptTag = object.scriptTag;
+        reference.targetObjectId = object.linkTarget;
+        reference.viaValue = object.linkTarget;
+        reference.resolved = resolved;
+        if (resolved) {
+            reference.targetObjectIndex = targetIt->second;
+        }
+        references.push_back(std::move(reference));
+    }
+
+    return references;
+}
+
+std::vector<WorldObjectReference> World::FindIncomingObjectReferences(const std::string& registryId) const {
+    std::vector<WorldObjectReference> references;
+    for (const auto& reference : BuildObjectReferences()) {
+        if (!reference.resolved || reference.targetObjectId != registryId) {
+            continue;
+        }
+        references.push_back(reference);
+    }
+    return references;
+}
+
+std::vector<WorldObjectReference> World::FindOutgoingObjectReferences(const std::string& registryId) const {
+    std::vector<WorldObjectReference> references;
+    for (const auto& reference : BuildObjectReferences()) {
+        if (reference.sourceObjectId != registryId) {
+            continue;
+        }
+        references.push_back(reference);
+    }
+    return references;
+}
+
+std::vector<std::string> World::CollectEditorLayerNames() const {
+    std::vector<std::string> layerNames;
+    for (std::string_view knownLayer : kKnownEditorLayers) {
+        if (CountObjectsInEditorLayer(knownLayer) > 0) {
+            layerNames.emplace_back(knownLayer);
+        }
+    }
+
+    std::vector<std::string> customLayerNames;
+    for (const auto& object : objects) {
+        const std::string normalizedLayer = NormalizeEditorLayerName(object.editorLayer);
+        const std::string resolvedLayer = normalizedLayer.empty()
+            ? DefaultEditorLayerName(object)
+            : normalizedLayer;
+        if (std::find(kKnownEditorLayers.begin(), kKnownEditorLayers.end(), resolvedLayer) != kKnownEditorLayers.end()) {
+            continue;
+        }
+        AppendUniqueLayer(customLayerNames, resolvedLayer);
+    }
+
+    std::sort(customLayerNames.begin(), customLayerNames.end());
+    for (std::string& customLayer : customLayerNames) {
+        layerNames.push_back(std::move(customLayer));
+    }
+    return layerNames;
+}
+
+int World::CountObjectsInEditorLayer(std::string_view layerName) const {
+    const std::string normalizedQueryLayer = NormalizeEditorLayerName(layerName);
+    if (normalizedQueryLayer.empty()) {
+        return 0;
+    }
+
+    int count = 0;
+    for (const auto& object : objects) {
+        const std::string normalizedLayer = NormalizeEditorLayerName(object.editorLayer);
+        const std::string resolvedLayer = normalizedLayer.empty()
+            ? DefaultEditorLayerName(object)
+            : normalizedLayer;
+        if (resolvedLayer == normalizedQueryLayer) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool World::HasIncomingObjectReferences(const std::string& registryId) const {
+    for (const auto& reference : BuildObjectReferences()) {
+        if (reference.resolved && reference.targetObjectId == registryId) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool World::HasScriptTag(const std::string& scriptTag) const {

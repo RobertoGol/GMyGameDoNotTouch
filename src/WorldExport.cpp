@@ -302,6 +302,100 @@ const char* WorldExportDecisionLabel(const WorldExportResult& result) {
     return "not exported";
 }
 
+const char* WorldExportHistoryFilterLabel(WorldExportHistoryFilter filter) {
+    switch (filter) {
+    case WorldExportHistoryFilter::Successful:
+        return "Successful";
+    case WorldExportHistoryFilter::Blocked:
+        return "Blocked";
+    case WorldExportHistoryFilter::SaveFailed:
+        return "Save Failed";
+    case WorldExportHistoryFilter::PrototypeOnly:
+        return "Prototype Only";
+    case WorldExportHistoryFilter::ShippingOnly:
+        return "Shipping Only";
+    case WorldExportHistoryFilter::BaselineUpdatedOnly:
+        return "Baseline Updated";
+    case WorldExportHistoryFilter::All:
+    default:
+        return "All";
+    }
+}
+
+const char* WorldExportComparePresetLabel(WorldExportComparePreset preset) {
+    switch (preset) {
+    case WorldExportComparePreset::LatestSuccessfulShipping:
+        return "Latest Successful Shipping";
+    case WorldExportComparePreset::LatestSuccessfulPrototype:
+        return "Latest Successful Prototype";
+    case WorldExportComparePreset::LatestBlocked:
+        return "Latest Blocked";
+    case WorldExportComparePreset::LatestBaselineUpdated:
+        return "Latest Baseline Updated";
+    case WorldExportComparePreset::ManualSelection:
+    default:
+        return "Manual Selection";
+    }
+}
+
+namespace {
+
+bool IsHistoryEntrySuccessful(const WorldExportHistoryEntry& entry) {
+    return entry.decisionLabel == "exported";
+}
+
+bool IsHistoryEntrySaveFailed(const WorldExportHistoryEntry& entry) {
+    return entry.decisionLabel == "save failed";
+}
+
+bool IsHistoryEntryBlocked(const WorldExportHistoryEntry& entry) {
+    return !IsHistoryEntrySuccessful(entry) && !IsHistoryEntrySaveFailed(entry);
+}
+
+bool IsHistoryEntryPrototype(const WorldExportHistoryEntry& entry) {
+    return entry.policyLabel == ExportValidationPolicyLabel(ExportValidationPolicy::AllowWarnings);
+}
+
+bool IsHistoryEntryShipping(const WorldExportHistoryEntry& entry) {
+    return entry.policyLabel == ExportValidationPolicyLabel(ExportValidationPolicy::BlockAutoCreatedSemanticAnchors);
+}
+
+std::string DescribeHistoryQuery(const WorldExportHistoryQuery& query) {
+    switch (query.filter) {
+    case WorldExportHistoryFilter::Successful:
+        return "successful export";
+    case WorldExportHistoryFilter::Blocked:
+        return "blocked export";
+    case WorldExportHistoryFilter::SaveFailed:
+        return "save-failed export";
+    case WorldExportHistoryFilter::PrototypeOnly:
+        return query.requireSuccessful ? "successful prototype export" : "prototype export";
+    case WorldExportHistoryFilter::ShippingOnly:
+        return query.requireSuccessful ? "successful shipping export" : "shipping export";
+    case WorldExportHistoryFilter::BaselineUpdatedOnly:
+        return "baseline-updating export";
+    case WorldExportHistoryFilter::All:
+    default:
+        return query.requireSuccessful ? "successful export" : "audit checkpoint";
+    }
+}
+
+WorldExportHistorySelection MakeHistorySelection(const std::vector<WorldExportHistoryEntry>& entries, int historyIndex) {
+    WorldExportHistorySelection selection;
+    if (historyIndex < 0 || historyIndex >= static_cast<int>(entries.size())) {
+        return selection;
+    }
+
+    const auto& entry = entries[static_cast<std::size_t>(historyIndex)];
+    selection.found = true;
+    selection.historyIndex = historyIndex;
+    selection.summaryLabel = SummarizeWorldExportHistoryEntry(entry);
+    selection.badgeLabel = BuildWorldExportHistoryBadgeLabel(entry);
+    return selection;
+}
+
+}  // namespace
+
 std::filesystem::path ValidationReportPathForWorld(const std::filesystem::path& worldPath) {
     const std::string reportFileName = worldPath.stem().string() + ".validation.txt";
     return worldPath.parent_path() / reportFileName;
@@ -435,16 +529,179 @@ bool LoadWorldExportHistory(const std::filesystem::path& worldPath, std::vector<
     return true;
 }
 
+bool MatchesHistoryQuery(const WorldExportHistoryEntry& entry, const WorldExportHistoryQuery& query) {
+    bool matchesFilter = false;
+    switch (query.filter) {
+    case WorldExportHistoryFilter::Successful:
+        matchesFilter = IsHistoryEntrySuccessful(entry);
+        break;
+    case WorldExportHistoryFilter::Blocked:
+        matchesFilter = IsHistoryEntryBlocked(entry);
+        break;
+    case WorldExportHistoryFilter::SaveFailed:
+        matchesFilter = IsHistoryEntrySaveFailed(entry);
+        break;
+    case WorldExportHistoryFilter::PrototypeOnly:
+        matchesFilter = IsHistoryEntryPrototype(entry);
+        break;
+    case WorldExportHistoryFilter::ShippingOnly:
+        matchesFilter = IsHistoryEntryShipping(entry);
+        break;
+    case WorldExportHistoryFilter::BaselineUpdatedOnly:
+        matchesFilter = entry.baselineUpdated;
+        break;
+    case WorldExportHistoryFilter::All:
+    default:
+        matchesFilter = true;
+        break;
+    }
+
+    if (!matchesFilter) {
+        return false;
+    }
+    if (query.requireSuccessful && !IsHistoryEntrySuccessful(entry)) {
+        return false;
+    }
+    if (query.requireValidationSnapshot && entry.validationSnapshotPath.empty()) {
+        return false;
+    }
+    return true;
+}
+
+std::vector<WorldExportHistorySelection> FilterWorldExportHistoryEntries(
+    const std::vector<WorldExportHistoryEntry>& entries,
+    const WorldExportHistoryQuery& query) {
+    std::vector<WorldExportHistorySelection> filteredEntries;
+    filteredEntries.reserve(entries.size());
+
+    for (int historyIndex = 0; historyIndex < static_cast<int>(entries.size()); ++historyIndex) {
+        const auto& entry = entries[static_cast<std::size_t>(historyIndex)];
+        if (!MatchesHistoryQuery(entry, query)) {
+            continue;
+        }
+
+        WorldExportHistorySelection selection = MakeHistorySelection(entries, historyIndex);
+        selection.query = query;
+        filteredEntries.push_back(std::move(selection));
+    }
+
+    return filteredEntries;
+}
+
+WorldExportHistorySelection FindLatestMatchingHistoryEntry(
+    const std::vector<WorldExportHistoryEntry>& entries,
+    const WorldExportHistoryQuery& query) {
+    for (int historyIndex = 0; historyIndex < static_cast<int>(entries.size()); ++historyIndex) {
+        const auto& entry = entries[static_cast<std::size_t>(historyIndex)];
+        if (!MatchesHistoryQuery(entry, query)) {
+            continue;
+        }
+
+        WorldExportHistorySelection selection = MakeHistorySelection(entries, historyIndex);
+        selection.query = query;
+        return selection;
+    }
+
+    WorldExportHistorySelection selection;
+    selection.query = query;
+    selection.fallbackMessage = "No " + DescribeHistoryQuery(query) +
+        (query.requireValidationSnapshot
+            ? " with an archived validation snapshot was found."
+            : " was found.");
+    return selection;
+}
+
+WorldExportHistorySelection ResolveComparePresetTarget(
+    const std::vector<WorldExportHistoryEntry>& entries,
+    WorldExportComparePreset preset,
+    int manualSelectionIndex) {
+    if (preset == WorldExportComparePreset::ManualSelection) {
+        WorldExportHistorySelection selection = MakeHistorySelection(entries, manualSelectionIndex);
+        selection.preset = preset;
+        selection.query.requireValidationSnapshot = true;
+        if (!selection.found) {
+            selection.fallbackMessage = "Select a historical export checkpoint to compare against.";
+            return selection;
+        }
+
+        const auto& entry = entries[static_cast<std::size_t>(manualSelectionIndex)];
+        if (entry.validationSnapshotPath.empty()) {
+            selection.found = false;
+            selection.fallbackMessage =
+                "Selected historical export checkpoint has no archived validation snapshot.";
+        }
+        return selection;
+    }
+
+    WorldExportHistoryQuery query;
+    query.requireValidationSnapshot = true;
+    switch (preset) {
+    case WorldExportComparePreset::LatestSuccessfulShipping:
+        query.filter = WorldExportHistoryFilter::ShippingOnly;
+        query.requireSuccessful = true;
+        break;
+    case WorldExportComparePreset::LatestSuccessfulPrototype:
+        query.filter = WorldExportHistoryFilter::PrototypeOnly;
+        query.requireSuccessful = true;
+        break;
+    case WorldExportComparePreset::LatestBlocked:
+        query.filter = WorldExportHistoryFilter::Blocked;
+        break;
+    case WorldExportComparePreset::LatestBaselineUpdated:
+        query.filter = WorldExportHistoryFilter::BaselineUpdatedOnly;
+        break;
+    case WorldExportComparePreset::ManualSelection:
+    default:
+        break;
+    }
+
+    WorldExportHistorySelection selection = FindLatestMatchingHistoryEntry(entries, query);
+    selection.preset = preset;
+    return selection;
+}
+
+std::string BuildWorldExportHistoryBadgeLabel(const WorldExportHistoryEntry& entry) {
+    std::vector<std::string> badges;
+    if (IsHistoryEntryShipping(entry)) {
+        badges.emplace_back("shipping");
+    } else if (IsHistoryEntryPrototype(entry)) {
+        badges.emplace_back("prototype");
+    } else if (!entry.policyLabel.empty()) {
+        badges.push_back(entry.policyLabel);
+    }
+
+    if (IsHistoryEntrySuccessful(entry)) {
+        badges.emplace_back("ok");
+    } else if (IsHistoryEntrySaveFailed(entry)) {
+        badges.emplace_back("save-failed");
+    } else if (IsHistoryEntryBlocked(entry)) {
+        badges.emplace_back("blocked");
+    } else if (!entry.decisionLabel.empty()) {
+        badges.push_back(entry.decisionLabel);
+    }
+
+    if (entry.baselineUpdated) {
+        badges.emplace_back("baseline");
+    }
+
+    std::ostringstream label;
+    for (std::size_t badgeIndex = 0; badgeIndex < badges.size(); ++badgeIndex) {
+        if (badgeIndex > 0) {
+            label << ' ';
+        }
+        label << '[' << badges[badgeIndex] << ']';
+    }
+    return label.str();
+}
+
 std::string SummarizeWorldExportHistoryEntry(const WorldExportHistoryEntry& entry) {
     std::ostringstream summary;
     summary << entry.generatedAt;
-    if (!entry.policyLabel.empty()) {
-        summary << " | " << entry.policyLabel;
+    const std::string badgeLabel = BuildWorldExportHistoryBadgeLabel(entry);
+    if (!badgeLabel.empty()) {
+        summary << " | " << badgeLabel;
     }
-    if (!entry.decisionLabel.empty()) {
-        summary << " | " << entry.decisionLabel;
-    }
-    summary << " | warn " << entry.warningCount;
+    summary << " | " << entry.errorCount << "E/" << entry.warningCount << "W";
     if (entry.autoCreatedSemanticAnchorCount > 0) {
         summary << " | auto " << entry.autoCreatedSemanticAnchorCount;
     }

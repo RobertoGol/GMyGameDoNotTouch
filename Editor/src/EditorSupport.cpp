@@ -19,6 +19,24 @@
 
 namespace editor_support {
 
+namespace {
+
+constexpr std::array<std::string_view, 11> kDefaultEditorLayers = {
+    "Terrain",
+    "Structures",
+    "Gameplay",
+    "Loot",
+    "Service",
+    "Fey",
+    "Spawn",
+    "Debug",
+    "Markers",
+    "Rail",
+    "Industrial"
+};
+
+}  // namespace
+
 const char* ToLabel(bunker::InteractionType interaction) {
     switch (interaction) {
         case bunker::InteractionType::Static: return "Static";
@@ -185,23 +203,99 @@ void SyncEditorWorldBindings(const bunker::World& editorWorld,
 
 void SyncSelectedObjectBindings(const bunker::World& editorWorld,
     int selectedObjectIndex,
+    char* selectedDisplayNameEdit,
+    std::size_t selectedDisplayNameEditSize,
     char* selectedRegistryEdit,
     std::size_t selectedRegistryEditSize,
     char* selectedScriptTagEdit,
     std::size_t selectedScriptTagEditSize,
     char* selectedLinkTargetEdit,
-    std::size_t selectedLinkTargetEditSize) {
+    std::size_t selectedLinkTargetEditSize,
+    char* selectedLayerEdit,
+    std::size_t selectedLayerEditSize) {
     if (selectedObjectIndex < 0 || selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+        CopyStringToBuffer("", selectedDisplayNameEdit, selectedDisplayNameEditSize);
         CopyStringToBuffer("", selectedRegistryEdit, selectedRegistryEditSize);
         CopyStringToBuffer("", selectedScriptTagEdit, selectedScriptTagEditSize);
         CopyStringToBuffer("", selectedLinkTargetEdit, selectedLinkTargetEditSize);
+        CopyStringToBuffer("", selectedLayerEdit, selectedLayerEditSize);
         return;
     }
 
     const auto& object = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+    CopyStringToBuffer(object.displayName, selectedDisplayNameEdit, selectedDisplayNameEditSize);
     CopyStringToBuffer(object.registryId, selectedRegistryEdit, selectedRegistryEditSize);
     CopyStringToBuffer(object.scriptTag, selectedScriptTagEdit, selectedScriptTagEditSize);
     CopyStringToBuffer(object.linkTarget, selectedLinkTargetEdit, selectedLinkTargetEditSize);
+    CopyStringToBuffer(object.editorLayer, selectedLayerEdit, selectedLayerEditSize);
+}
+
+void SyncEditorLayerViewStates(const bunker::World& world, std::vector<EditorLayerViewState>& layerStates) {
+    std::vector<std::string> orderedLayers;
+    orderedLayers.reserve(kDefaultEditorLayers.size() + world.objects.size());
+    for (std::string_view defaultLayer : kDefaultEditorLayers) {
+        orderedLayers.emplace_back(defaultLayer);
+    }
+    for (const std::string& layerName : world.CollectEditorLayerNames()) {
+        if (std::find(orderedLayers.begin(), orderedLayers.end(), layerName) == orderedLayers.end()) {
+            orderedLayers.push_back(layerName);
+        }
+    }
+
+    std::vector<EditorLayerViewState> nextStates;
+    nextStates.reserve(orderedLayers.size());
+    for (const std::string& layerName : orderedLayers) {
+        const auto it = std::find_if(
+            layerStates.begin(),
+            layerStates.end(),
+            [&](const EditorLayerViewState& state) { return state.name == layerName; });
+        if (it != layerStates.end()) {
+            nextStates.push_back(*it);
+        } else {
+            nextStates.push_back({layerName, true, false});
+        }
+    }
+    layerStates = std::move(nextStates);
+}
+
+EditorLayerViewState* FindEditorLayerViewState(std::vector<EditorLayerViewState>& layerStates, std::string_view layerName) {
+    const std::string normalizedLayer = bunker::NormalizeEditorLayerName(layerName);
+    for (auto& layerState : layerStates) {
+        if (layerState.name == normalizedLayer) {
+            return &layerState;
+        }
+    }
+    return nullptr;
+}
+
+const EditorLayerViewState* FindEditorLayerViewState(const std::vector<EditorLayerViewState>& layerStates, std::string_view layerName) {
+    const std::string normalizedLayer = bunker::NormalizeEditorLayerName(layerName);
+    for (const auto& layerState : layerStates) {
+        if (layerState.name == normalizedLayer) {
+            return &layerState;
+        }
+    }
+    return nullptr;
+}
+
+bool IsObjectVisibleInEditorLayerView(const bunker::MapObject& object, const std::vector<EditorLayerViewState>& layerStates) {
+    const std::string resolvedLayer = bunker::NormalizeEditorLayerName(object.editorLayer).empty()
+        ? bunker::DefaultEditorLayerName(object)
+        : bunker::NormalizeEditorLayerName(object.editorLayer);
+    if (const auto* layerState = FindEditorLayerViewState(layerStates, resolvedLayer)) {
+        return layerState->visible;
+    }
+    return true;
+}
+
+bool IsObjectLockedInEditorLayerView(const bunker::MapObject& object, const std::vector<EditorLayerViewState>& layerStates) {
+    const std::string resolvedLayer = bunker::NormalizeEditorLayerName(object.editorLayer).empty()
+        ? bunker::DefaultEditorLayerName(object)
+        : bunker::NormalizeEditorLayerName(object.editorLayer);
+    if (const auto* layerState = FindEditorLayerViewState(layerStates, resolvedLayer)) {
+        return layerState->locked;
+    }
+    return false;
 }
 
 int FindObjectIndexByRegistryId(const bunker::World& world, const std::string& registryId) {
@@ -552,6 +646,32 @@ bool LoadPrefabLibrary(std::vector<SavedPrefab>& prefabs) {
     return bunker::LoadPrefabLibrary(prefabs);
 }
 
+std::string BuildSpecializedRuntimeNotes(const bunker::MapObject& object) {
+    const std::string normalizedTag = std::string(bunker::NormalizeGameplayDescriptorTag(object.scriptTag));
+    if (normalizedTag == "lanline_service_hub") {
+        return "Lanline Services relay/service anchor. Keep it tied to tower_sync recovery and authored backbone targets, not generic internet-style endpoints.";
+    }
+    if (normalizedTag == "fey_ring") {
+        return "Fey Ring route anchor. It should expose a deliberate route target or network handoff, not an unstructured magic transport node.";
+    }
+    if (normalizedTag == "tank_service") {
+        return "BT-72 support anchor. Keep it near authored hangar/service context so recovery and maintenance loops stay grounded in infrastructure.";
+    }
+    if (normalizedTag == "medical_support") {
+        return "Field medical support node. It should stay attached to the service backbone rather than floating as a standalone loot or flavor marker.";
+    }
+    if (normalizedTag == "tower_sync") {
+        return "Primary infrastructure recovery anchor. Service unlock flow should converge here before broader Lanline functionality comes online.";
+    }
+    if (normalizedTag == "rail_depot" || normalizedTag == "rail_fortress_hub") {
+        return "Rail/industrial logistics anchor. Use it to make freight routes and fortress links legible in authored recovery progression.";
+    }
+    if (normalizedTag == "remote_link" || normalizedTag == "echo_trace") {
+        return "Marker-style authored interaction. Keep link targets explicit so runtime handoff stays auditable through validation and export history.";
+    }
+    return {};
+}
+
 std::string BuildEditorValidationStatus(const bunker::World& world) {
     const auto issues = bunker::ValidateWorldForRuntime(world);
     return bunker::BuildValidationSummary(issues);
@@ -662,6 +782,7 @@ PreviewInteraction DrawWorldPreview(const bunker::World& world,
     int selectedObjectIndex,
     bool previewAsPlayer,
     PreviewViewportState& viewportState,
+    const std::vector<EditorLayerViewState>& layerStates,
     bool showInteractionHelpers,
     bool showObjectLabels) {
     PreviewInteraction interactionResult;
@@ -682,6 +803,9 @@ PreviewInteraction DrawWorldPreview(const bunker::World& world,
     float minY = world.metadata.playerSpawnY;
     float maxY = world.metadata.playerSpawnY;
     for (const auto& object : world.objects) {
+        if (!IsObjectVisibleInEditorLayerView(object, layerStates)) {
+            continue;
+        }
         minX = std::min(minX, object.x - object.width);
         maxX = std::max(maxX, object.x + object.width);
         minY = std::min(minY, object.y - object.depth);
@@ -736,11 +860,17 @@ PreviewInteraction DrawWorldPreview(const bunker::World& world,
         }
 
         const auto& sourceObject = world.objects[static_cast<std::size_t>(edge.sourceObjectIndex)];
+        if (!IsObjectVisibleInEditorLayerView(sourceObject, layerStates)) {
+            continue;
+        }
         const ImVec2 sourcePoint = toCanvas(sourceObject.x, sourceObject.y);
         if (edge.resolved &&
             edge.targetObjectIndex >= 0 &&
             edge.targetObjectIndex < static_cast<int>(world.objects.size())) {
             const auto& targetObject = world.objects[static_cast<std::size_t>(edge.targetObjectIndex)];
+            if (!IsObjectVisibleInEditorLayerView(targetObject, layerStates)) {
+                continue;
+            }
             const ImVec2 targetPoint = toCanvas(targetObject.x, targetObject.y);
             drawList->AddLine(sourcePoint, targetPoint, IM_COL32(74, 190, 220, 210), 2.0f);
             const ImVec2 labelPoint((sourcePoint.x + targetPoint.x) * 0.5f + 4.0f, (sourcePoint.y + targetPoint.y) * 0.5f - 12.0f);
@@ -757,11 +887,19 @@ PreviewInteraction DrawWorldPreview(const bunker::World& world,
 
     for (int index = 0; index < static_cast<int>(world.objects.size()); ++index) {
         const auto& object = world.objects[static_cast<std::size_t>(index)];
+        if (!IsObjectVisibleInEditorLayerView(object, layerStates)) {
+            continue;
+        }
+
         const ImVec2 min = toCanvas(object.x - object.width * 0.5f, object.y - object.depth * 0.5f);
         const ImVec2 max = toCanvas(object.x + object.width * 0.5f, object.y + object.depth * 0.5f);
         const bool semanticOverlayObject = isSemanticOverlayObject(index);
         const bool semanticOverlayRoot = index == viewportState.semanticOverlayRootIndex;
-        drawList->AddRectFilled(min, max, ColorForCategory(object.category), 2.0f);
+        const bool layerLocked = IsObjectLockedInEditorLayerView(object, layerStates);
+        const ImU32 fillColor = layerLocked
+            ? IM_COL32(82, 90, 102, 210)
+            : ColorForCategory(object.category);
+        drawList->AddRectFilled(min, max, fillColor, 2.0f);
         if (semanticOverlayObject) {
             drawList->AddRect(
                 ImVec2(min.x - 3.0f, min.y - 3.0f),
@@ -787,6 +925,9 @@ PreviewInteraction DrawWorldPreview(const bunker::World& world,
 
         if (showObjectLabels) {
             drawList->AddText(ImVec2(min.x, max.y + 2.0f), IM_COL32(220, 220, 220, 255), object.displayName.c_str());
+            if (layerLocked) {
+                drawList->AddText(ImVec2(min.x, max.y + 14.0f), IM_COL32(206, 186, 120, 220), "[locked]");
+            }
         }
     }
 
@@ -816,6 +957,10 @@ PreviewInteraction DrawWorldPreview(const bunker::World& world,
 
         for (int index = static_cast<int>(world.objects.size()) - 1; index >= 0; --index) {
             const auto& object = world.objects[static_cast<std::size_t>(index)];
+            if (!IsObjectVisibleInEditorLayerView(object, layerStates) ||
+                IsObjectLockedInEditorLayerView(object, layerStates)) {
+                continue;
+            }
             const bool withinX = worldPoint.x >= object.x - object.width * 0.5f && worldPoint.x <= object.x + object.width * 0.5f;
             const bool withinY = worldPoint.y >= object.y - object.depth * 0.5f && worldPoint.y <= object.y + object.depth * 0.5f;
             if (withinX && withinY) {
@@ -828,7 +973,12 @@ PreviewInteraction DrawWorldPreview(const bunker::World& world,
     }
 
     interactionResult.draggingSelectedObject =
-        hovered && selectedObjectIndex >= 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left);
+        hovered &&
+        selectedObjectIndex >= 0 &&
+        selectedObjectIndex < static_cast<int>(world.objects.size()) &&
+        IsObjectVisibleInEditorLayerView(world.objects[static_cast<std::size_t>(selectedObjectIndex)], layerStates) &&
+        !IsObjectLockedInEditorLayerView(world.objects[static_cast<std::size_t>(selectedObjectIndex)], layerStates) &&
+        ImGui::IsMouseDragging(ImGuiMouseButton_Left);
 
     ImGui::EndChild();
     return interactionResult;

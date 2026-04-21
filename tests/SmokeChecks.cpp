@@ -56,6 +56,9 @@ bool RunWorldRoundtrip() {
     savedWorld.metadata.name = "Smoke Test World";
     savedWorld.metadata.objective = "Roundtrip world persistence";
     savedWorld.EnsureStarterInfrastructure();
+    if (auto* archiveTerminal = savedWorld.FindObjectByRegistryId("[%archive_0001]")) {
+        archiveTerminal->editorLayer = "Archive";
+    }
 
     const auto saveStatus = bunker::SaveWorldAtomically(savedWorld, bunker::DefaultWorldPath());
     if (!Check(saveStatus.ok, "world save failed: " + saveStatus.message)) {
@@ -78,7 +81,9 @@ bool RunWorldRoundtrip() {
         Check(loadedWorld.HasLinkTarget("inner_spur_capacitor"), "capacitor link target missing after roundtrip") &&
         Check(loadedWorld.HasLinkTarget("shelter17_backbone"), "relay substation link target missing after roundtrip") &&
         Check(loadedWorld.HasLinkTarget("inner_spur_service"), "service bay link target missing after roundtrip") &&
-        Check(loadedWorld.HasLinkTarget("inner_spur_water"), "water reclaimer link target missing after roundtrip");
+        Check(loadedWorld.HasLinkTarget("inner_spur_water"), "water reclaimer link target missing after roundtrip") &&
+        Check(loadedWorld.CountObjectsInEditorLayer("Service") >= 1, "world roundtrip should preserve inferred service layers") &&
+        Check(loadedWorld.CountObjectsInEditorLayer("Archive") == 1, "world roundtrip should preserve custom editor layer assignment");
 }
 
 bool RunProfileRoundtrip() {
@@ -596,6 +601,7 @@ bool RunPrefabLibrarySemanticStateSmoke() {
     authoredPrefab.object.category = bunker::ObjectCategory::Terminal;
     authoredPrefab.object.scriptTag = "relay_substation";
     authoredPrefab.object.linkTarget = "shelter17_backbone";
+    authoredPrefab.object.editorLayer = "Service";
     authoredPrefab.object.semanticAutoCreated = false;
     authoredPrefab.object.semanticLayoutPinned = true;
     savedPrefabs.push_back(authoredPrefab);
@@ -608,6 +614,7 @@ bool RunPrefabLibrarySemanticStateSmoke() {
     autoPrefab.object.category = bunker::ObjectCategory::Terminal;
     autoPrefab.object.scriptTag = "water_reclaimer";
     autoPrefab.object.linkTarget = "inner_spur_water";
+    autoPrefab.object.editorLayer = "Waterworks";
     autoPrefab.object.semanticAutoCreated = true;
     autoPrefab.object.semanticLayoutPinned = false;
     autoPrefab.object.manualLoot = false;
@@ -627,9 +634,11 @@ bool RunPrefabLibrarySemanticStateSmoke() {
     }
 
     return Check(loadedPrefabs[0].label == authoredPrefab.label, "prefab library should preserve authored prefab label") &&
+        Check(loadedPrefabs[0].object.editorLayer == authoredPrefab.object.editorLayer, "prefab library should preserve authored prefab layer") &&
         Check(loadedPrefabs[0].object.semanticLayoutPinned, "prefab library should preserve authored pinned semantic state") &&
         Check(!loadedPrefabs[0].object.semanticAutoCreated, "prefab library should preserve authored semantic origin") &&
         Check(loadedPrefabs[1].label == autoPrefab.label, "prefab library should preserve auto prefab label") &&
+        Check(loadedPrefabs[1].object.editorLayer == autoPrefab.object.editorLayer, "prefab library should preserve custom prefab layer") &&
         Check(loadedPrefabs[1].object.semanticAutoCreated, "prefab library should preserve auto semantic origin") &&
         Check(!loadedPrefabs[1].object.semanticLayoutPinned, "prefab library should preserve unpinned auto semantic state");
 }
@@ -1072,75 +1081,229 @@ bool RunExportHistoryCheckpointSelectionSmoke() {
 
     const std::string serviceBayRegistryId = serviceBay->registryId;
     const auto exportPath = bunker::WorldDirectory() / "export_history_selection_smoke.bwld";
+    std::error_code cleanupEc;
+    std::filesystem::remove(exportPath, cleanupEc);
+    std::filesystem::remove(bunker::ValidationReportPathForWorld(exportPath), cleanupEc);
+    std::filesystem::remove(bunker::ExportAuditTrailPathForWorld(exportPath), cleanupEc);
+    std::filesystem::remove(bunker::ValidationBaselinePathForWorld(exportPath), cleanupEc);
+    const std::string snapshotPrefix = exportPath.stem().string() + ".validation-snapshot-";
+    for (const auto& entry : std::filesystem::directory_iterator(exportPath.parent_path(), cleanupEc)) {
+        if (!entry.is_regular_file()) {
+            continue;
+        }
+        const auto filePath = entry.path();
+        const std::string fileName = filePath.filename().string();
+        if (fileName.rfind(snapshotPrefix, 0) == 0 && filePath.extension() == ".txt") {
+            std::filesystem::remove(filePath, cleanupEc);
+        }
+    }
+
+    const auto shippingExport = bunker::ExportWorldWithValidation(
+        world,
+        exportPath,
+        bunker::ExportValidationPolicy::BlockAutoCreatedSemanticAnchors);
+    if (!Check(shippingExport.ok, "export history selection smoke expected shipping export to pass")) {
+        return false;
+    }
+    if (!Check(shippingExport.baselineUpdated, "export history selection smoke expected shipping export to update baseline")) {
+        return false;
+    }
+    if (!Check(std::filesystem::exists(shippingExport.validationSnapshotPath),
+            "export history selection smoke expected shipping export snapshot archive")) {
+        return false;
+    }
 
     serviceBay->linkTarget = "service_bay_history_drift";
-    const auto firstExport = bunker::ExportWorldWithValidation(
+    const auto firstPrototypeExport = bunker::ExportWorldWithValidation(
         world,
         exportPath,
         bunker::ExportValidationPolicy::AllowWarnings);
-    if (!Check(firstExport.ok, "export history selection smoke expected first prototype export to pass")) {
+    if (!Check(firstPrototypeExport.ok, "export history selection smoke expected first prototype export to pass")) {
         return false;
     }
-    if (!Check(std::filesystem::exists(firstExport.validationSnapshotPath),
+    if (!Check(std::filesystem::exists(firstPrototypeExport.validationSnapshotPath),
             "export history selection smoke expected first export snapshot archive")) {
         return false;
     }
 
     serviceBay->linkTarget = "inner_spur_service";
     currentWaterReclaimer->linkTarget = "water_reclaimer_history_drift";
-    const auto secondExport = bunker::ExportWorldWithValidation(
+    const auto secondPrototypeExport = bunker::ExportWorldWithValidation(
         world,
         exportPath,
         bunker::ExportValidationPolicy::AllowWarnings);
-    if (!Check(secondExport.ok, "export history selection smoke expected second prototype export to pass")) {
+    if (!Check(secondPrototypeExport.ok, "export history selection smoke expected second prototype export to pass")) {
         return false;
     }
-    if (!Check(std::filesystem::exists(secondExport.validationSnapshotPath),
+    if (!Check(std::filesystem::exists(secondPrototypeExport.validationSnapshotPath),
             "export history selection smoke expected second export snapshot archive")) {
         return false;
     }
+
+    currentWaterReclaimer->linkTarget = "[%missing_history_target]";
+    const auto blockedExport = bunker::ExportWorldWithValidation(
+        world,
+        exportPath,
+        bunker::ExportValidationPolicy::AllowWarnings);
+    if (!Check(!blockedExport.ok && blockedExport.blockedByValidation,
+            "export history selection smoke expected blocked export to fail validation")) {
+        return false;
+    }
+    if (!Check(std::filesystem::exists(blockedExport.validationSnapshotPath),
+            "export history selection smoke expected blocked export snapshot archive")) {
+        return false;
+    }
+
+    currentWaterReclaimer->linkTarget = "water_reclaimer_history_drift";
 
     std::vector<bunker::WorldExportHistoryEntry> historyEntries;
     if (!Check(bunker::LoadWorldExportHistory(exportPath, historyEntries),
             "export history selection smoke expected audit history to load")) {
         return false;
     }
-    if (!Check(historyEntries.size() >= 2, "export history selection smoke expected at least two history entries")) {
+    if (!Check(historyEntries.size() >= 4, "export history selection smoke expected at least four history entries")) {
         return false;
     }
-    if (!Check(historyEntries[0].validationSnapshotPath == secondExport.validationSnapshotPath,
-            "export history selection smoke expected newest history entry to match second export snapshot")) {
+    if (!Check(historyEntries[0].validationSnapshotPath == blockedExport.validationSnapshotPath,
+            "export history selection smoke expected newest history entry to match blocked export snapshot")) {
         return false;
     }
-    if (!Check(historyEntries[1].validationSnapshotPath == firstExport.validationSnapshotPath,
-            "export history selection smoke expected older history entry to match first export snapshot")) {
+    if (!Check(historyEntries[1].validationSnapshotPath == secondPrototypeExport.validationSnapshotPath,
+            "export history selection smoke expected second history entry to match second prototype export snapshot")) {
+        return false;
+    }
+    if (!Check(historyEntries[2].validationSnapshotPath == firstPrototypeExport.validationSnapshotPath,
+            "export history selection smoke expected third history entry to match first prototype export snapshot")) {
+        return false;
+    }
+    if (!Check(historyEntries[3].validationSnapshotPath == shippingExport.validationSnapshotPath,
+            "export history selection smoke expected shipping snapshot to remain in history")) {
+        return false;
+    }
+
+    bunker::WorldExportHistoryQuery latestShippingQuery;
+    latestShippingQuery.filter = bunker::WorldExportHistoryFilter::ShippingOnly;
+    latestShippingQuery.requireSuccessful = true;
+    latestShippingQuery.requireValidationSnapshot = true;
+    const auto latestShippingSelection = bunker::FindLatestMatchingHistoryEntry(historyEntries, latestShippingQuery);
+    if (!Check(latestShippingSelection.found && latestShippingSelection.historyIndex == 3,
+            "export history selection smoke expected latest successful shipping selection to resolve shipping checkpoint")) {
+        return false;
+    }
+
+    bunker::WorldExportHistoryQuery latestPrototypeQuery;
+    latestPrototypeQuery.filter = bunker::WorldExportHistoryFilter::PrototypeOnly;
+    latestPrototypeQuery.requireSuccessful = true;
+    latestPrototypeQuery.requireValidationSnapshot = true;
+    const auto latestPrototypeSelection = bunker::FindLatestMatchingHistoryEntry(historyEntries, latestPrototypeQuery);
+    if (!Check(latestPrototypeSelection.found && latestPrototypeSelection.historyIndex == 1,
+            "export history selection smoke expected latest successful prototype selection to resolve newest successful prototype")) {
+        return false;
+    }
+
+    bunker::WorldExportHistoryQuery latestBlockedQuery;
+    latestBlockedQuery.filter = bunker::WorldExportHistoryFilter::Blocked;
+    latestBlockedQuery.requireValidationSnapshot = true;
+    const auto latestBlockedSelection = bunker::FindLatestMatchingHistoryEntry(historyEntries, latestBlockedQuery);
+    if (!Check(latestBlockedSelection.found && latestBlockedSelection.historyIndex == 0,
+            "export history selection smoke expected latest blocked selection to resolve blocked checkpoint")) {
+        return false;
+    }
+
+    bunker::WorldExportHistoryQuery baselineUpdatedQuery;
+    baselineUpdatedQuery.filter = bunker::WorldExportHistoryFilter::BaselineUpdatedOnly;
+    baselineUpdatedQuery.requireValidationSnapshot = true;
+    const auto baselineUpdatedSelections =
+        bunker::FilterWorldExportHistoryEntries(historyEntries, baselineUpdatedQuery);
+    if (!Check(baselineUpdatedSelections.size() == 1,
+            "export history selection smoke expected baseline-updated filter to return one checkpoint")) {
+        return false;
+    }
+    if (!Check(baselineUpdatedSelections[0].historyIndex == 3,
+            "export history selection smoke expected baseline-updated filter to resolve shipping checkpoint")) {
+        return false;
+    }
+
+    bunker::WorldExportHistoryQuery saveFailedQuery;
+    saveFailedQuery.filter = bunker::WorldExportHistoryFilter::SaveFailed;
+    saveFailedQuery.requireValidationSnapshot = true;
+    const auto noMatchSelection = bunker::FindLatestMatchingHistoryEntry(historyEntries, saveFailedQuery);
+    if (!Check(!noMatchSelection.found && !noMatchSelection.fallbackMessage.empty(),
+            "export history selection smoke expected no-match fallback for missing save-failed checkpoint")) {
+        return false;
+    }
+
+    const auto shippingPresetSelection = bunker::ResolveComparePresetTarget(
+        historyEntries,
+        bunker::WorldExportComparePreset::LatestSuccessfulShipping,
+        0);
+    const auto prototypePresetSelection = bunker::ResolveComparePresetTarget(
+        historyEntries,
+        bunker::WorldExportComparePreset::LatestSuccessfulPrototype,
+        0);
+    const auto blockedPresetSelection = bunker::ResolveComparePresetTarget(
+        historyEntries,
+        bunker::WorldExportComparePreset::LatestBlocked,
+        0);
+    const auto baselinePresetSelection = bunker::ResolveComparePresetTarget(
+        historyEntries,
+        bunker::WorldExportComparePreset::LatestBaselineUpdated,
+        0);
+    const auto manualPresetSelection = bunker::ResolveComparePresetTarget(
+        historyEntries,
+        bunker::WorldExportComparePreset::ManualSelection,
+        2);
+    if (!Check(shippingPresetSelection.found && shippingPresetSelection.historyIndex == latestShippingSelection.historyIndex,
+            "export history selection smoke expected shipping preset resolution to match latest shipping selection")) {
+        return false;
+    }
+    if (!Check(prototypePresetSelection.found && prototypePresetSelection.historyIndex == latestPrototypeSelection.historyIndex,
+            "export history selection smoke expected prototype preset resolution to match latest prototype selection")) {
+        return false;
+    }
+    if (!Check(blockedPresetSelection.found && blockedPresetSelection.historyIndex == latestBlockedSelection.historyIndex,
+            "export history selection smoke expected blocked preset resolution to match latest blocked selection")) {
+        return false;
+    }
+    if (!Check(baselinePresetSelection.found && baselinePresetSelection.historyIndex == baselineUpdatedSelections[0].historyIndex,
+            "export history selection smoke expected baseline preset resolution to match baseline-updated selection")) {
+        return false;
+    }
+    if (!Check(manualPresetSelection.found && manualPresetSelection.historyIndex == 2,
+            "export history selection smoke expected manual preset resolution to preserve manual checkpoint")) {
         return false;
     }
 
     const auto currentIssues = bunker::ValidateWorldForRuntime(world);
-    const auto latestDelta = bunker::CompareValidationToSnapshot(currentIssues, historyEntries[0].validationSnapshotPath);
-    if (!Check(latestDelta.hasBaseline, "export history selection smoke expected latest history snapshot to load")) {
+    const auto latestPrototypeDelta =
+        bunker::CompareValidationToSnapshot(currentIssues, historyEntries[1].validationSnapshotPath);
+    if (!Check(latestPrototypeDelta.hasBaseline, "export history selection smoke expected latest prototype snapshot to load")) {
         return false;
     }
-    if (!Check(latestDelta.issueRegressions.empty() && latestDelta.issueImprovements.empty(),
-            "export history selection smoke expected current world to match latest history checkpoint")) {
+    if (!Check(latestPrototypeDelta.issueRegressions.empty() && latestPrototypeDelta.issueImprovements.empty(),
+            "export history selection smoke expected current world to match latest successful prototype checkpoint")) {
         return false;
     }
 
-    const auto olderDelta = bunker::CompareValidationToSnapshot(currentIssues, historyEntries[1].validationSnapshotPath);
+    const auto olderDelta = bunker::CompareValidationToSnapshot(currentIssues, historyEntries[2].validationSnapshotPath);
     const std::string olderReport =
         bunker::BuildValidationSnapshotDeltaReport(olderDelta, "Historical export checkpoint");
-    if (!Check(olderDelta.hasBaseline, "export history selection smoke expected older history snapshot to load")) {
+    if (!Check(olderDelta.hasBaseline, "export history selection smoke expected older prototype snapshot to load")) {
         return false;
     }
     if (!Check(olderDelta.regressions.empty() && olderDelta.improvements.empty(),
-            "export history selection smoke expected same warning count versus older checkpoint")) {
+            "export history selection smoke expected same warning count versus older prototype checkpoint")) {
         return false;
     }
     if (!Check(olderDelta.issueRegressions.size() == 1, "export history selection smoke expected one historical regression")) {
         return false;
     }
     if (!Check(olderDelta.issueImprovements.size() == 1, "export history selection smoke expected one historical improvement")) {
+        return false;
+    }
+    const auto blockedDelta =
+        bunker::CompareValidationToSnapshot(currentIssues, historyEntries[0].validationSnapshotPath);
+    if (!Check(blockedDelta.hasBaseline, "export history selection smoke expected blocked snapshot to load")) {
         return false;
     }
     return Check(olderDelta.issueRegressions[0].objectId == "[%water_0005]",
@@ -1154,9 +1317,21 @@ bool RunExportHistoryCheckpointSelectionSmoke() {
         Check(olderReport.find(serviceBayRegistryId) != std::string::npos,
             "export history selection smoke expected report to mention improved service_bay object") &&
         Check(historyEntries[0].policyLabel == "prototype / allow warnings",
-            "export history selection smoke expected parsed policy label in audit history") &&
-        Check(historyEntries[0].decisionLabel == "exported",
-            "export history selection smoke expected parsed decision label in audit history");
+            "export history selection smoke expected parsed policy label in blocked audit history") &&
+        Check(historyEntries[0].decisionLabel == "blocked by validation",
+            "export history selection smoke expected parsed blocked decision label in audit history") &&
+        Check(historyEntries[3].policyLabel == "shipping-safe",
+            "export history selection smoke expected parsed shipping policy label in audit history") &&
+        Check(historyEntries[3].baselineUpdated,
+            "export history selection smoke expected shipping audit entry to carry baseline update metadata") &&
+        Check(blockedDelta.issueImprovements.size() == 1,
+            "export history selection smoke expected blocked checkpoint compare to show one repaired issue") &&
+        Check(blockedDelta.issueImprovements[0].code == "broken_link_target",
+            "export history selection smoke expected blocked checkpoint compare to identify repaired broken-link issue") &&
+        Check(noMatchSelection.fallbackMessage.find("save-failed export") != std::string::npos,
+            "export history selection smoke expected no-match fallback to mention save-failed export") &&
+        Check(shippingPresetSelection.summaryLabel.find("[shipping]") != std::string::npos,
+            "export history selection smoke expected compact history summary to carry shipping badge");
 }
 
 bool RunLegacySemanticAutoInferenceSmoke() {
@@ -1222,6 +1397,160 @@ bool RunLegacySemanticAutoInferenceSmoke() {
     return Check(serviceBay != nullptr, "legacy semantic inference should load service_bay") &&
         Check(bunker::IsAutoGeneratedSemanticAnchor(*serviceBay), "legacy BWL2 auto anchor should infer semanticAutoCreated from registryId") &&
         Check(!bunker::IsPinnedSemanticAnchor(*serviceBay), "legacy BWL2 auto anchor should not infer pinned semantic placement");
+}
+
+bool RunLegacyWorldEditorLayerInferenceSmoke() {
+    std::ofstream file(bunker::DefaultWorldPath(), std::ios::binary);
+    if (!Check(file.is_open(), "legacy editor-layer inference smoke failed to open world file for write")) {
+        return false;
+    }
+
+    file.write("BWL3", 4);
+    WriteRawString(file, "Legacy Layer Inference");
+    WriteRawString(file, "Bunker Interior");
+    WriteRawString(file, "Load BWL3 worlds without explicit editor layers.");
+    const float spawnX = 1.0f;
+    const float spawnY = -2.0f;
+    file.write(reinterpret_cast<const char*>(&spawnX), sizeof(spawnX));
+    file.write(reinterpret_cast<const char*>(&spawnY), sizeof(spawnY));
+
+    const std::uint32_t count = 1;
+    file.write(reinterpret_cast<const char*>(&count), sizeof(count));
+
+    WriteRawString(file, "[%services_0001]");
+    WriteRawString(file, "Lanline Services Relay");
+    WriteRawString(file, "lanline_service_hub");
+    WriteRawString(file, "shelter17_services");
+
+    const std::uint32_t interaction = static_cast<std::uint32_t>(bunker::InteractionType::Terminal);
+    const std::uint32_t category = static_cast<std::uint32_t>(bunker::ObjectCategory::Terminal);
+    const float x = 6.0f;
+    const float y = 4.0f;
+    const float z = 0.0f;
+    const float width = 2.2f;
+    const float depth = 1.8f;
+    const float height = 2.4f;
+    const float health = 100.0f;
+    const bool blocksMovement = false;
+    const bool discovered = true;
+    const bool manualLoot = false;
+    const bool semanticAutoCreated = false;
+    const bool semanticLayoutPinned = false;
+
+    file.write(reinterpret_cast<const char*>(&interaction), sizeof(interaction));
+    file.write(reinterpret_cast<const char*>(&category), sizeof(category));
+    file.write(reinterpret_cast<const char*>(&x), sizeof(x));
+    file.write(reinterpret_cast<const char*>(&y), sizeof(y));
+    file.write(reinterpret_cast<const char*>(&z), sizeof(z));
+    file.write(reinterpret_cast<const char*>(&width), sizeof(width));
+    file.write(reinterpret_cast<const char*>(&depth), sizeof(depth));
+    file.write(reinterpret_cast<const char*>(&height), sizeof(height));
+    file.write(reinterpret_cast<const char*>(&health), sizeof(health));
+    file.write(reinterpret_cast<const char*>(&blocksMovement), sizeof(blocksMovement));
+    file.write(reinterpret_cast<const char*>(&discovered), sizeof(discovered));
+    file.write(reinterpret_cast<const char*>(&manualLoot), sizeof(manualLoot));
+    file.write(reinterpret_cast<const char*>(&semanticAutoCreated), sizeof(semanticAutoCreated));
+    file.write(reinterpret_cast<const char*>(&semanticLayoutPinned), sizeof(semanticLayoutPinned));
+    WriteRawString(file, "");
+    WriteRawString(file, "");
+    WriteRawString(file, "");
+    WriteRawString(file, "");
+    file.close();
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(bunker::DefaultWorldPath().string()), "legacy editor-layer inference world load failed")) {
+        return false;
+    }
+
+    const auto* servicesHub = loadedWorld.FindObjectByScriptTag("lanline_service_hub");
+    const auto collectedLayers = loadedWorld.CollectEditorLayerNames();
+    return Check(servicesHub != nullptr, "legacy editor-layer inference should load service hub") &&
+        Check(servicesHub->editorLayer == "Service", "legacy BWL3 object should infer Service editor layer from scriptTag") &&
+        Check(loadedWorld.CountObjectsInEditorLayer("Service") == 1, "legacy BWL3 object should count inside inferred Service layer") &&
+        Check(std::find(collectedLayers.begin(), collectedLayers.end(), "Service") != collectedLayers.end(),
+            "legacy BWL3 object should surface inferred Service layer in layer list");
+}
+
+bool RunWorldReferenceGraphSmoke() {
+    bunker::World world;
+    world.metadata.name = "World Reference Graph Smoke";
+
+    bunker::MapObject target;
+    target.registryId = "[%target_0001]";
+    target.displayName = "Target Anchor";
+    target.interaction = bunker::InteractionType::Terminal;
+    target.category = bunker::ObjectCategory::Terminal;
+    world.objects.push_back(target);
+
+    bunker::MapObject source;
+    source.registryId = "[%source_0001]";
+    source.displayName = "Source Anchor";
+    source.interaction = bunker::InteractionType::Terminal;
+    source.category = bunker::ObjectCategory::Terminal;
+    source.scriptTag = "remote_link";
+    source.linkTarget = target.registryId;
+    world.objects.push_back(source);
+
+    bunker::MapObject brokenSource;
+    brokenSource.registryId = "[%broken_source_0001]";
+    brokenSource.displayName = "Broken Source";
+    brokenSource.interaction = bunker::InteractionType::Transition;
+    brokenSource.category = bunker::ObjectCategory::Landmark;
+    brokenSource.linkTarget = "[%missing_target_0001]";
+    world.objects.push_back(brokenSource);
+
+    const auto references = world.BuildObjectReferences();
+    if (!Check(references.size() == 2, "world reference graph smoke expected two registry-style references")) {
+        return false;
+    }
+
+    const auto incomingReferences = world.FindIncomingObjectReferences(target.registryId);
+    if (!Check(incomingReferences.size() == 1, "world reference graph smoke expected one incoming reference")) {
+        return false;
+    }
+    if (!Check(incomingReferences[0].sourceObjectId == source.registryId,
+            "world reference graph smoke expected incoming reference to come from source anchor")) {
+        return false;
+    }
+    if (!Check(incomingReferences[0].resolved && incomingReferences[0].targetObjectIndex == 0,
+            "world reference graph smoke expected incoming reference to resolve to target object")) {
+        return false;
+    }
+
+    const auto outgoingResolvedReferences = world.FindOutgoingObjectReferences(source.registryId);
+    if (!Check(outgoingResolvedReferences.size() == 1,
+            "world reference graph smoke expected one outgoing reference for resolved source")) {
+        return false;
+    }
+    if (!Check(outgoingResolvedReferences[0].resolved &&
+            outgoingResolvedReferences[0].targetObjectId == target.registryId,
+            "world reference graph smoke expected resolved outgoing reference to target anchor")) {
+        return false;
+    }
+
+    const auto outgoingBrokenReferences = world.FindOutgoingObjectReferences(brokenSource.registryId);
+    if (!Check(outgoingBrokenReferences.size() == 1,
+            "world reference graph smoke expected one outgoing reference for broken source")) {
+        return false;
+    }
+    if (!Check(!outgoingBrokenReferences[0].resolved &&
+            outgoingBrokenReferences[0].targetObjectIndex < 0,
+            "world reference graph smoke expected broken outgoing reference to remain unresolved")) {
+        return false;
+    }
+
+    const auto* resolvedTarget = world.FindObjectByRegistryId(target.registryId);
+    if (!Check(resolvedTarget != nullptr && resolvedTarget->displayName == "Target Anchor",
+            "world reference graph smoke expected find-by-registry to resolve target")) {
+        return false;
+    }
+
+    return Check(world.HasIncomingObjectReferences(target.registryId),
+            "world reference graph smoke expected incoming reference flag on target") &&
+        Check(!world.HasIncomingObjectReferences(source.registryId),
+            "world reference graph smoke expected no incoming reference flag on source") &&
+        Check(std::string(bunker::WorldObjectReferenceFieldLabel(references[0].field)) == "linkTarget",
+            "world reference graph smoke expected linkTarget field label");
 }
 
 bool RunSemanticAuthoringCascadeSmoke() {
@@ -1429,6 +1758,8 @@ int main() {
         RunShippingBaselineObjectAwareDriftSmoke() &&
         RunExportHistoryCheckpointSelectionSmoke() &&
         RunLegacySemanticAutoInferenceSmoke() &&
+        RunLegacyWorldEditorLayerInferenceSmoke() &&
+        RunWorldReferenceGraphSmoke() &&
         RunSemanticAuthoringCascadeSmoke() &&
         RunStarterSemanticLinkTargetSmoke() &&
         RunLegacyWorldAliasMigrationSmoke();
