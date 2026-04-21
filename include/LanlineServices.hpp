@@ -87,7 +87,8 @@ enum class SupportOrderState {
     Draft,
     Queued,
     Routed,
-    Delivered
+    Delivered,
+    Claimed
 };
 
 enum class FeyGateState {
@@ -199,6 +200,10 @@ LanlineServicesState MakeLanlineServicesStateFromSave(const LanlineServicesSave&
 LanlineServicesSave BuildLanlineServicesSave(const LanlineServicesState& state);
 void ApplyLanlineServicesProfileSnapshot(LanlineServicesState& state, const LanlineServicesProfile& profile);
 void SyncLanlineServicesProfileSnapshot(LanlineServicesProfile& profile, const LanlineServicesState& state);
+void SyncLanlineServicesSessionProfile(SessionProfile& profile, const LanlineServicesState& state);
+void AdvanceLanlineSupportOrders(LanlineServicesState& state, std::int64_t nowUnix);
+int CountSupportOrdersInState(const LanlineServicesState& state, SupportOrderState orderState);
+int ClaimDeliveredSupportOrders(LanlineServicesState& state, SessionProfile& profile, std::string* summary = nullptr);
 ServiceHubMode ResolveLanlineServicesMode(const ServicesUnlockState& unlockState, const LanlineSessionState* sessionState);
 void SyncLanlineServicesPresence(LanlineServicesState& state,
     const LanlineSessionState* sessionState,

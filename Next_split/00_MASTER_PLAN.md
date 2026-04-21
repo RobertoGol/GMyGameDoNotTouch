@@ -20,15 +20,16 @@
 
 ## Следующий рабочий пакет
 
-1. `Launcher / Lanline Services / runtime` consistency
-2. `Lanline Services` + `SessionProfile` + runtime/launcher glue по `Next_split/*`
-3. затем `start vertical slice polish`
+1. `start vertical slice polish`
+2. `BT-72 / combat / RPG depth`
+3. затем углубление `recovery / industry / logistics`
 
 ## Только что закрыто
 
 - `prefab/library strengthening`
 - `import assistant hardening`
 - `export discipline / world-format tightening`
+- `Launcher / Lanline Services / runtime return`
 
 ## Правила
 

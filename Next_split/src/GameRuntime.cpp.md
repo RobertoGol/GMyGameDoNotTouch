@@ -1,13 +1,10 @@
 # src/GameRuntime.cpp
 
-Из `Next.md`:
+Уже закрыто:
 
-- добавить helper `IsNearTaggedObject(...)`
-- через `World::FindObjectByScriptTag(...)` проверять proximity к:
-  - `lanline_service_hub`
-  - `tank_service`
-  - `medical_support`
-- обновлять флаги близости в runtime
-- сделать `Lanline Services` реальной gameplay UI, а не только launcher-shell
+- proximity/service hooks живут в runtime: `lanline_service_hub`, `tank_service`, `medical_support`, `fey_ring`
+- `Lanline Services` существуют не только в launcher-shell: `Pip-Pad` показывает service state, умеет claim delivered orders и синхронизирует их обратно в profile/world glue
 
-Смысл: service-layer должен существовать и внутри игры, а не только в launcher.
+Следующее:
+
+- vertical slice polish вокруг BT-72 / recovery / service payoff, а не новый service-shell

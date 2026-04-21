@@ -223,11 +223,41 @@ bool RunLanlineServicesRoundtripSmoke() {
 
     bunker::LanlineServicesState loadedState = bunker::MakeLanlineServicesStateFromSave(loadedSave, 1200);
     bunker::ApplyLanlineServicesProfileSnapshot(loadedState, profileSnapshot);
+    bunker::AdvanceLanlineSupportOrders(loadedState, 1500);
+    if (!Check(bunker::CountSupportOrdersInState(loadedState, bunker::SupportOrderState::Delivered) == 1,
+            "lanline services smoke expected one delivered support order after time advance")) {
+        return false;
+    }
+
+    std::string claimSummary;
+    if (!Check(bunker::ClaimDeliveredSupportOrders(loadedState, profile, &claimSummary) == 1,
+            "lanline services smoke expected delivered support order claim")) {
+        return false;
+    }
+
+    profile.lanlineServices.relayCredits = loadedState.relayCredits + 23;
+    bunker::SyncLanlineServicesSessionProfile(profile, loadedState);
+    bunker::SyncLanlineServicesProfileSnapshot(profileSnapshot, loadedState);
     return Check(loadedState.relayCredits == 777, "lanline services smoke expected relay credits after roundtrip") &&
         Check(loadedState.ownedCosmetics.size() == 2, "lanline services smoke expected owned cosmetics after roundtrip") &&
         Check(loadedState.supportOrders.size() == 1, "lanline services smoke expected one support order after roundtrip") &&
         Check(loadedState.supportOrders[0].destinationNode == "Shelter 17",
-            "lanline services smoke expected destination node after roundtrip");
+            "lanline services smoke expected destination node after roundtrip") &&
+        Check(loadedState.supportOrders[0].state == bunker::SupportOrderState::Claimed,
+            "lanline services smoke expected claimed support order after runtime claim") &&
+        Check(profileSnapshot.pendingSupportOrders.empty(),
+            "lanline services smoke expected pending support orders to clear after claim") &&
+        Check(worldState->relayCreditsSpent == 23,
+            "lanline services smoke expected world relay credit spend mirror after session sync") &&
+        Check(claimSummary.find("BT-72 Engine Service Kit") != std::string::npos,
+            "lanline services smoke expected claim summary to mention delivered order") &&
+        Check(std::any_of(
+                profile.character.inventory.begin(),
+                profile.character.inventory.end(),
+                [](const bunker::InventoryEntry& item) {
+                    return item.itemId == "engine_seal" && item.count >= 1;
+                }),
+            "lanline services smoke expected engine service kit delivery to grant engine_seal inventory");
 }
 
 bool RunLaunchTicketFlow() {

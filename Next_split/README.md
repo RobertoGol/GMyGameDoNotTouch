@@ -32,6 +32,6 @@
 
 Текущий активный пакет:
 
-- `Next_split/include/LanlineServices.hpp.md` / `Next_split/src/LanlineServices.cpp.md`
-- затем `Next_split/src/GameRuntime.cpp.md` / `Next_split/Launcher/src/Launcher_Main.cpp.md`
-- editor split-файл теперь держим только для follow-up UX, а не как главный активный блок
+- vertical-slice / gameplay polish по runtime/story/BT-72 split-файлам
+- `Lanline Services` и launcher/runtime glue больше не являются главным блоком, а остаются follow-up hardening
+- editor split-файл держим только для follow-up UX, а не как главный активный блок

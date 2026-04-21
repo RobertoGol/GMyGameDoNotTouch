@@ -6,9 +6,9 @@
 Старый длинный текст ниже оставлен как архив контекста, чтобы ничего не терялось.
 ### Следующий рабочий пакет
 
-- `Launcher / Lanline Services / runtime return`
-- `Lanline Services` / profile / runtime glue по `Next_split/include/LanlineServices.hpp.md`, `Next_split/src/LanlineServices.cpp.md`, `Next_split/src/GameRuntime.cpp.md`, `Next_split/Launcher/src/Launcher_Main.cpp.md`
-- затем `start vertical slice polish` и более крупные product layers из `ROADMAP.md`
+- `start vertical slice polish`
+- затем `BT-72 / combat / RPG depth`
+- затем `recovery / industry / logistics` как более плотный mid-game backbone
 
 ### Закрыто в этом проходе
 
@@ -39,6 +39,7 @@
 - `import assistant` больше не просто backlog-список: есть typed classification `Prop / Item / Structure / Environment / Scene Module`, safe prefab-draft generation, прямое add/update в library, seed current draft fields и richer concept manifest вместо голой текстовой заметки
 - export discipline tightened без переписывания history-path: `WorldValidation` теперь ловит missing world metadata / empty object table / invalid spawn, validation report пишет `BWL5`, layers, prefab-derived counts, broken prefab refs и library-load status, а smoke-check фиксирует prefab-aware export report
 - shared `Lanline Services` contract теперь прозрачно связывает launcher/runtime/profile: unlock-state хранит explicit `tower / relay / service / water / fey` flags поверх tier, launcher/runtime overlay-ят service state поверх `SessionProfile`, а smoke-check покрывает unlock resolution, services save roundtrip и profile snapshot sync
+- `Lanline Services` больше не заканчиваются на panel-state: support orders проходят `Queued -> Routed -> Delivered -> Claimed`, runtime `Pip-Pad` умеет claim delivered parcels в профиль/инвентарь, а `SessionProfile/WorldFieldState` теперь получают mirror по pending orders, cosmetics и relay-credit spend
 
 ### Правило на следующие проходы
 

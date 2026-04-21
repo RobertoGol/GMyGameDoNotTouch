@@ -755,14 +755,16 @@ void DrawPipPadServicesTab(const World& world, const PlayerState& player, Sessio
         if (LoadLanlineServicesSave(DefaultLanlineServicesSavePath(), lanlineSave)) {
             lanlineServices = MakeLanlineServicesStateFromSave(lanlineSave, std::time(nullptr));
         }
-        ApplyLanlineServicesProfileSnapshot(lanlineServices, profile.lanlineServices);
         lanlineServicesLoaded = true;
     }
 
+    ApplyLanlineServicesProfileSnapshot(lanlineServices, profile.lanlineServices);
     LanlineSessionState sessionState;
     const bool hasSessionState = LoadLanlineSessionState(sessionState);
+    const auto nowUnix = static_cast<std::int64_t>(std::time(nullptr));
     const auto servicesUnlock = BuildServicesUnlockState(profile, currentWorldFieldState);
     SyncLanlineServicesPresence(lanlineServices, hasSessionState ? &sessionState : nullptr, servicesUnlock);
+    AdvanceLanlineSupportOrders(lanlineServices, nowUnix);
     gameState.supportTerminalNearby = IsNearTaggedObject(world, player.x, player.y, "lanline_service_hub", 4.0f);
     gameState.tankServiceNearby = IsNearTaggedObject(world, player.x, player.y, "tank_service", 4.0f);
     gameState.medicalSupportNearby = IsNearTaggedObject(world, player.x, player.y, "medical_support", 4.0f);
@@ -773,14 +775,33 @@ void DrawPipPadServicesTab(const World& world, const PlayerState& player, Sessio
     ImGui::BulletText("Tank service nearby: %s", gameState.tankServiceNearby ? "yes" : "no");
     ImGui::BulletText("Medical support nearby: %s", gameState.medicalSupportNearby ? "yes" : "no");
     ImGui::BulletText("Fey schedule visible: %s", gameState.feyRingScheduleVisible ? "yes" : "no");
+    const int deliveredOrders = CountSupportOrdersInState(lanlineServices, SupportOrderState::Delivered);
+    const bool canClaimDeliveredOrders =
+        deliveredOrders > 0 &&
+        servicesUnlock.localRelayAvailable &&
+        (gameState.supportTerminalNearby || profile.lanlineServices.serviceHubKnown);
+    ImGui::BulletText("Delivered orders awaiting claim: %d", deliveredOrders);
+    if (deliveredOrders > 0) {
+        if (canClaimDeliveredOrders) {
+            if (ImGui::Button("Claim Delivered Orders")) {
+                std::string claimSummary;
+                if (ClaimDeliveredSupportOrders(lanlineServices, profile, &claimSummary) > 0) {
+                    gameState.lastSupportAction = claimSummary;
+                    gameState.lastEvent = claimSummary;
+                }
+            }
+        } else {
+            ImGui::TextDisabled("Delivered orders can be claimed after a Lanline service hub handshake.");
+        }
+    }
     if (!gameState.lastSupportAction.empty()) {
         ImGui::TextWrapped("Support action: %s", gameState.lastSupportAction.c_str());
     }
     if (!gameState.lastPortalAction.empty()) {
         ImGui::TextWrapped("Portal action: %s", gameState.lastPortalAction.c_str());
     }
-    DrawLanlineServicesPanel(lanlineServices, servicesUnlock, static_cast<std::int64_t>(std::time(nullptr)));
-    SyncLanlineServicesProfileSnapshot(profile.lanlineServices, lanlineServices);
+    DrawLanlineServicesPanel(lanlineServices, servicesUnlock, nowUnix);
+    SyncLanlineServicesSessionProfile(profile, lanlineServices);
     SaveLanlineServicesSave(BuildLanlineServicesSave(lanlineServices), DefaultLanlineServicesSavePath());
 }
 

@@ -1110,10 +1110,12 @@ int main() {
         ImGui::Text("Lanline Services");
         bunker::SessionProfile previewProfile = sessionProfile;
         previewProfile.selectedWorld = bunker::NormalizeWorldReference(SelectedWorldPath(launcherData.worlds, launcherState.selectedWorldIndex).string());
+        sessionProfile.selectedWorld = previewProfile.selectedWorld;
+        bunker::ApplyLanlineServicesProfileSnapshot(lanlineServices, sessionProfile.lanlineServices);
         const auto* previewWorldState = bunker::FindWorldFieldState(previewProfile, previewProfile.selectedWorld);
         const auto servicesUnlock = bunker::BuildServicesUnlockState(previewProfile, previewWorldState);
         bunker::DrawLanlineServicesPanel(lanlineServices, servicesUnlock, static_cast<std::int64_t>(std::time(nullptr)));
-        bunker::SyncLanlineServicesProfileSnapshot(sessionProfile.lanlineServices, lanlineServices);
+        bunker::SyncLanlineServicesSessionProfile(sessionProfile, lanlineServices);
         bunker::SaveLanlineServicesSave(
             bunker::BuildLanlineServicesSave(lanlineServices),
             bunker::DefaultLanlineServicesSavePath());

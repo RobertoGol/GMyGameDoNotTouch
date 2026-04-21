@@ -40,6 +40,7 @@ const char* ToLabel(SupportOrderState state) {
         case SupportOrderState::Queued: return "Queued";
         case SupportOrderState::Routed: return "Routed";
         case SupportOrderState::Delivered: return "Delivered";
+        case SupportOrderState::Claimed: return "Claimed";
     }
     return "Unknown";
 }
@@ -131,13 +132,112 @@ std::vector<std::string> CollectPendingSupportOrderIds(const std::vector<Support
     std::vector<std::string> ids;
     ids.reserve(orders.size());
     for (const auto& order : orders) {
-        if (order.orderId.empty() || order.state == SupportOrderState::Delivered) {
+        if (order.orderId.empty() ||
+            order.state == SupportOrderState::Delivered ||
+            order.state == SupportOrderState::Claimed) {
             continue;
         }
         ids.push_back(order.orderId);
     }
     NormalizeStringInventory(ids);
     return ids;
+}
+
+std::string JoinLabels(const std::vector<std::string>& labels) {
+    std::ostringstream out;
+    for (std::size_t index = 0; index < labels.size(); ++index) {
+        if (index > 0) {
+            out << ", ";
+        }
+        out << labels[index];
+    }
+    return out.str();
+}
+
+void AddProfileInventoryItem(SessionProfile& profile, const std::string& itemId, int count, float unitWeight) {
+    if (itemId.empty() || count <= 0) {
+        return;
+    }
+
+    for (auto& entry : profile.character.inventory) {
+        if (entry.itemId == itemId) {
+            entry.count += count;
+            if (entry.unitWeight <= 0.0f && unitWeight > 0.0f) {
+                entry.unitWeight = unitWeight;
+            }
+            return;
+        }
+    }
+
+    profile.character.inventory.push_back({itemId, count, unitWeight});
+}
+
+const SupportCatalogItem* FindSupportCatalogItem(const LanlineServicesState& state, std::string_view itemId) {
+    for (const auto& item : state.supportCatalog) {
+        if (item.id == itemId) {
+            return &item;
+        }
+    }
+    return nullptr;
+}
+
+void GrantSupportDeliveryItem(SessionProfile& profile,
+    const std::string& itemId,
+    int count,
+    float unitWeight,
+    std::vector<std::string>& grantedLabels) {
+    AddProfileInventoryItem(profile, itemId, count, unitWeight);
+    grantedLabels.push_back(itemId + " x" + std::to_string(count));
+}
+
+void GrantSupportDeliveryContent(SessionProfile& profile,
+    std::string_view contentId,
+    std::vector<std::string>& grantedLabels) {
+    if (contentId == "bulk_salvage") {
+        GrantSupportDeliveryItem(profile, "steel_scrap", 3, 0.5f, grantedLabels);
+        GrantSupportDeliveryItem(profile, "old_plate", 1, 0.5f, grantedLabels);
+        return;
+    }
+    if (contentId == "repair_parts" || contentId == "sealant_roll") {
+        GrantSupportDeliveryItem(profile, "repair_patch", 1, 0.2f, grantedLabels);
+        return;
+    }
+    if (contentId == "circuit_scrap") {
+        GrantSupportDeliveryItem(profile, "copper_wire", 2, 0.2f, grantedLabels);
+        return;
+    }
+    if (contentId == "filter_media") {
+        GrantSupportDeliveryItem(profile, "clean_water", 1, 0.4f, grantedLabels);
+        return;
+    }
+    if (contentId == "field_battery") {
+        GrantSupportDeliveryItem(profile, "power_cell", 1, 0.3f, grantedLabels);
+        return;
+    }
+    if (contentId == "track_patch") {
+        GrantSupportDeliveryItem(profile, "track_patch", 1, 0.2f, grantedLabels);
+        return;
+    }
+    if (contentId == "servo_patch") {
+        GrantSupportDeliveryItem(profile, "servo_patch", 1, 0.2f, grantedLabels);
+        return;
+    }
+    if (contentId == "engine_seal") {
+        GrantSupportDeliveryItem(profile, "engine_seal", 1, 0.2f, grantedLabels);
+        return;
+    }
+    if (contentId == "lens_pack") {
+        GrantSupportDeliveryItem(profile, "lens_pack", 1, 0.2f, grantedLabels);
+        return;
+    }
+    if (contentId == "medkit") {
+        GrantSupportDeliveryItem(profile, "cryo_medkit", 1, 0.5f, grantedLabels);
+        return;
+    }
+    if (contentId == "trauma_kit") {
+        GrantSupportDeliveryItem(profile, "cryo_medkit", 2, 0.5f, grantedLabels);
+        return;
+    }
 }
 
 void AddChatMessage(ChatChannel& channel, const std::string& author, const std::string& body, const std::string& timeLabel) {
@@ -498,6 +598,10 @@ void DrawSupportOrdersSummary(const LanlineServicesState& state, std::int64_t no
     }
 
     ImGui::Separator();
+    ImGui::BulletText("Queued: %d", CountSupportOrdersInState(state, SupportOrderState::Queued));
+    ImGui::BulletText("Routed: %d", CountSupportOrdersInState(state, SupportOrderState::Routed));
+    ImGui::BulletText("Delivered: %d", CountSupportOrdersInState(state, SupportOrderState::Delivered));
+    ImGui::BulletText("Claimed: %d", CountSupportOrdersInState(state, SupportOrderState::Claimed));
     if (ImGui::TreeNode("Active Orders")) {
         for (const auto& order : state.supportOrders) {
             ImGui::BulletText("%s | %s | %s | ETA %s",
@@ -704,6 +808,92 @@ void SyncLanlineServicesProfileSnapshot(LanlineServicesProfile& profile, const L
     profile.cosmeticsShopSeen = profile.cosmeticsShopSeen || !profile.ownedCosmetics.empty();
 }
 
+void SyncLanlineServicesSessionProfile(SessionProfile& profile, const LanlineServicesState& state) {
+    const int previousCredits = std::max(0, profile.lanlineServices.relayCredits);
+    SyncLanlineServicesProfileSnapshot(profile.lanlineServices, state);
+    if (profile.selectedWorld.empty()) {
+        return;
+    }
+
+    WorldFieldState* worldState = FindWorldFieldState(profile, profile.selectedWorld, true);
+    if (worldState == nullptr) {
+        return;
+    }
+
+    const int currentCredits = std::max(0, profile.lanlineServices.relayCredits);
+    if (currentCredits > previousCredits) {
+        worldState->relayCreditsEarned += currentCredits - previousCredits;
+    } else if (previousCredits > currentCredits) {
+        worldState->relayCreditsSpent += previousCredits - currentCredits;
+    }
+}
+
+void AdvanceLanlineSupportOrders(LanlineServicesState& state, std::int64_t nowUnix) {
+    for (auto& order : state.supportOrders) {
+        if (order.state == SupportOrderState::Queued && order.etaUnix > 0 && nowUnix >= (order.createdAtUnix + 120)) {
+            order.state = SupportOrderState::Routed;
+        }
+        if ((order.state == SupportOrderState::Queued || order.state == SupportOrderState::Routed) &&
+            order.etaUnix > 0 && nowUnix >= order.etaUnix) {
+            order.state = SupportOrderState::Delivered;
+        }
+    }
+}
+
+int CountSupportOrdersInState(const LanlineServicesState& state, SupportOrderState orderState) {
+    return static_cast<int>(std::count_if(
+        state.supportOrders.begin(),
+        state.supportOrders.end(),
+        [&](const SupportOrder& order) { return order.state == orderState; }));
+}
+
+int ClaimDeliveredSupportOrders(LanlineServicesState& state, SessionProfile& profile, std::string* summary) {
+    int claimedCount = 0;
+    std::vector<std::string> claimedOrderSummaries;
+
+    for (auto& order : state.supportOrders) {
+        if (order.state != SupportOrderState::Delivered) {
+            continue;
+        }
+
+        std::vector<std::string> grantedLabels;
+        if (const auto* catalogItem = FindSupportCatalogItem(state, order.itemId); catalogItem != nullptr) {
+            for (const auto& contentId : catalogItem->contents) {
+                GrantSupportDeliveryContent(profile, contentId, grantedLabels);
+            }
+            if (catalogItem->currency == StoreCurrency::SymbolicSupport) {
+                profile.lanlineServices.ownedCosmetics.push_back(catalogItem->id);
+            }
+        } else if (order.paymentCurrency == StoreCurrency::SymbolicSupport) {
+            profile.lanlineServices.ownedCosmetics.push_back(order.itemId);
+        }
+
+        NormalizeStringInventory(profile.lanlineServices.ownedCosmetics);
+        order.state = SupportOrderState::Claimed;
+        ++claimedCount;
+
+        if (!grantedLabels.empty()) {
+            claimedOrderSummaries.push_back(order.itemLabel + " -> " + JoinLabels(grantedLabels));
+        } else if (order.paymentCurrency == StoreCurrency::SymbolicSupport) {
+            claimedOrderSummaries.push_back(order.itemLabel + " -> symbolic support logged");
+        } else {
+            claimedOrderSummaries.push_back(order.itemLabel + " -> depot manifest received");
+        }
+    }
+
+    if (summary != nullptr) {
+        summary->clear();
+        if (claimedCount == 1) {
+            *summary = "Lanline delivery received: " + claimedOrderSummaries.front() + ".";
+        } else if (claimedCount > 1) {
+            *summary = "Lanline deliveries received: " + std::to_string(claimedCount) +
+                " parcels. Latest: " + claimedOrderSummaries.back() + ".";
+        }
+    }
+
+    return claimedCount;
+}
+
 ServiceHubMode ResolveLanlineServicesMode(const ServicesUnlockState& unlockState, const LanlineSessionState* sessionState) {
     if (!IsLanlineServicesUnlocked(unlockState)) {
         return ServiceHubMode::OfflineLocal;
@@ -902,15 +1092,7 @@ bool LoadLanlineServicesSave(const std::filesystem::path& path, LanlineServicesS
 void DrawLanlineServicesPanel(LanlineServicesState& state,
     const ServicesUnlockState& unlockState,
     std::int64_t nowUnix) {
-    for (auto& order : state.supportOrders) {
-        if (order.state == SupportOrderState::Queued && order.etaUnix > 0 && nowUnix >= (order.createdAtUnix + 120)) {
-            order.state = SupportOrderState::Routed;
-        }
-        if ((order.state == SupportOrderState::Queued || order.state == SupportOrderState::Routed) &&
-            order.etaUnix > 0 && nowUnix >= order.etaUnix) {
-            order.state = SupportOrderState::Delivered;
-        }
-    }
+    AdvanceLanlineSupportOrders(state, nowUnix);
 
     if (!IsLanlineServicesUnlocked(unlockState)) {
         DrawLanlineServicesLockedScreen(unlockState);

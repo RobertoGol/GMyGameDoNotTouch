@@ -1,22 +1,12 @@
 # Launcher/src/Launcher_Main.cpp
 
-Что из `Next.md` относится сюда:
+Уже закрыто:
 
-- исправить риск с `ImGui::Combo`, если список миров собирается через временные `world.string().c_str()`
-- сделать запуск `BunkerGame.exe` и `BunkerEditor.exe` устойчивым к случайному `current_path`
-- добавить проверки индексов для:
-  - выбранного мира
-  - выбранного персонажа
-  - `knownLanlineSessions`
-- обновлять список миров и LAN snapshot-ов не только один раз при старте
-- подключить `LanlineServicesSave`:
-  - загрузка при старте launcher
-  - сохранение после изменений или на выходе
-- реально рисовать панель `Lanline Services`, если состояние уже поднимается, но UI не вызывается
+- world/session indexes и launcher refresh path больше не висят на старом одноразовом состоянии
+- запуск sibling executables не зависит от случайного `current_path`
+- `LanlineServicesSave` грузится/сохраняется из launcher
+- launcher реально рисует shared `Lanline Services` panel и теперь синхронизирует её обратно в `SessionProfile/WorldFieldState`
 
-Связанные файлы:
+Следующее:
 
-- `include/LanlineServices.hpp`
-- `src/LanlineServices.cpp`
-- `include/SessionProfiles.hpp`
-- `ROADMAP.md`
+- launcher-side polish и richer vertical-slice summaries, а не базовый service glue
