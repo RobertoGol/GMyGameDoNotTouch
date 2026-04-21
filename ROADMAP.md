@@ -91,6 +91,9 @@
 - `2026-04-21`
 - `build_verify_ninja_fresh`
 - после `prefab/library` strengthening, import-assistant hardening, `BWL5` export tightening и `Lanline Services` profile/runtime sync снова успешно собраны `BunkerSmokeChecks`, `BunkerEditor`, `BunkerGame`, `BunkerLauncher`, а `BunkerSmokeChecks.exe` прошёл
+- `2026-04-21`
+- `build_verify_ninja_fresh`
+- после добавления launcher-side announcement widget с local read-state снова успешно собраны `BunkerSmokeChecks`, `BunkerGame`, `BunkerLauncher`, а `BunkerSmokeChecks.exe` прошёл
 - `2026-04-13`
 - `build_verify_ninja`
 - после добавления раннего `Pip-Pad AR / Echo Trace` authored-behavior снова успешно собраны `BunkerGame` и `BunkerEditor`
@@ -572,3 +575,4 @@
 - editor prefab/import/export package moved out of “early stub” territory: shared prefab records теперь держат stable metadata (`id / target / source / completion`), authored world хранит `prefabSourceId` в `BWL5`, import assistant собирает typed prefab drafts и безопасно отправляет их в library/current draft, а export report стал prefab-aware и показывает format/layer/prefab integrity summary
 - `Lanline Services` glue tightened beyond UI-only panel: unlock-state теперь явно показывает `tower / relay / service bay / water reclaimer / Fey` progression, launcher/runtime sync-ят service snapshot обратно в `SessionProfile`, а smoke-check покрывает unlock resolution и services save/profile roundtrip
 - service/runtime/profile/world glue tightened one step further: `Lanline Services` теперь ведут order lifecycle до `Claimed`, runtime `Pip-Pad` может забирать delivered parcels в реальный inventory/profile state, а selected `WorldFieldState` получает mirror по relay-credit spend вместо слепого panel-only drift
+- launcher polish stopped relying on silent version drift: главный экран теперь показывает compact system notice в левом верхнем углу для новой build/announcement записи, хранит read-state локально в профиле и не требует сети или modal popup flow

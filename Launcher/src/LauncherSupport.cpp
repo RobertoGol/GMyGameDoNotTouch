@@ -18,6 +18,8 @@
 #include "imgui.h"
 
 #include "../../include/AppPaths.hpp"
+#include "../../include/AtomicPersistence.hpp"
+#include "../../include/BuildAnnouncement.hpp"
 #include "../../include/LanlineLobbyLogic.hpp"
 #include "../../include/LanlineServices.hpp"
 #include "../../include/SessionFlow.hpp"
@@ -525,6 +527,65 @@ const bunker::LanlineDiagnostics& CachedLanlineDiagnostics(const bunker::Lanline
     }
     cached->second = bunker::ProbeLanlineHost(session, runtimeWorldName);
     return cached->second;
+}
+
+float DrawLauncherAnnouncementWidget(
+    bunker::SessionProfile& sessionProfile,
+    const std::filesystem::path& profilePath,
+    LauncherState& launcherState) {
+    const auto& announcement = bunker::CurrentBuildAnnouncement();
+    const bool shouldShow = bunker::ShouldShowBuildAnnouncement(
+        sessionProfile.launcherAnnouncements.lastSeenBuildNumber,
+        sessionProfile.launcherAnnouncements.lastSeenAnnouncementId);
+    if (!shouldShow) {
+        launcherState.activeAnnouncementId.clear();
+        launcherState.announcementDetailsOpen = false;
+        return 0.0f;
+    }
+
+    if (launcherState.activeAnnouncementId != announcement.announcementId) {
+        launcherState.activeAnnouncementId = announcement.announcementId;
+        launcherState.announcementDetailsOpen = false;
+    }
+
+    ImGui::SetNextWindowPos(ImVec2(18.0f, 18.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.96f);
+    ImGui::Begin(
+        "Node Notice",
+        nullptr,
+        ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::TextColored(ImVec4(0.72f, 0.86f, 0.52f, 1.0f), "%s", announcement.title);
+    ImGui::TextWrapped("%s", announcement.summary);
+    ImGui::TextDisabled("Version %s | %s | %s",
+        announcement.versionLabel,
+        announcement.dateLabel,
+        announcement.buildId);
+    if (announcement.details[0] != '\0') {
+        if (ImGui::Button(launcherState.announcementDetailsOpen ? "Hide Details" : "Details")) {
+            launcherState.announcementDetailsOpen = !launcherState.announcementDetailsOpen;
+        }
+        ImGui::SameLine();
+    }
+    if (ImGui::Button("Dismiss")) {
+        sessionProfile.launcherAnnouncements.lastSeenBuildNumber = announcement.buildNumber;
+        sessionProfile.launcherAnnouncements.lastSeenAnnouncementId = announcement.announcementId;
+        sessionProfile.launcherAnnouncements.lastSeenVersionLabel = announcement.versionLabel;
+        const auto saveStatus = bunker::SaveProfileAtomically(sessionProfile, profilePath);
+        launcherState.statusText = saveStatus.ok
+            ? "Launcher notice dismissed."
+            : "Failed to persist launcher notice state: " + saveStatus.message;
+        launcherState.announcementDetailsOpen = false;
+    }
+    if (launcherState.announcementDetailsOpen && announcement.details[0] != '\0') {
+        ImGui::Separator();
+        ImGui::TextWrapped("%s", announcement.details);
+    }
+    const float heightWithGap = ImGui::GetWindowSize().y + 12.0f;
+    ImGui::End();
+    return heightWithGap;
 }
 
 void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char* selectedCharacterLabel, const char* selectedModeLabel, const std::filesystem::path& selectedWorld) {

@@ -1,5 +1,6 @@
 #include "../include/AppPaths.hpp"
 #include "../include/AtomicPersistence.hpp"
+#include "../include/BuildAnnouncement.hpp"
 #include "../include/GameplayDescriptorRegistry.hpp"
 #include "../include/LanlineServices.hpp"
 #include "../include/LaunchSession.hpp"
@@ -99,6 +100,9 @@ bool RunProfileRoundtrip() {
     savedProfile.fieldCheckpointKnown = true;
     savedProfile.fieldCheckpointWorld.clear();
     savedProfile.lanlineServices.relayCredits = 1337;
+    savedProfile.launcherAnnouncements.lastSeenBuildNumber = bunker::kCurrentBuildNumber;
+    savedProfile.launcherAnnouncements.lastSeenAnnouncementId = bunker::CurrentBuildAnnouncement().announcementId;
+    savedProfile.launcherAnnouncements.lastSeenVersionLabel = std::string(bunker::kCurrentVersionLabel);
 
     const auto saveStatus = bunker::SaveProfileAtomically(savedProfile, bunker::DefaultSessionProfilePath());
     if (!Check(saveStatus.ok, "profile save failed: " + saveStatus.message)) {
@@ -113,7 +117,40 @@ bool RunProfileRoundtrip() {
     return Check(loadedProfile.account.username == savedProfile.account.username, "profile username mismatch") &&
         Check(loadedProfile.selectedWorld == savedProfile.selectedWorld, "profile selected world mismatch") &&
         Check(loadedProfile.fieldCheckpointWorld == savedProfile.selectedWorld, "profile migration/normalize checkpoint mismatch") &&
-        Check(loadedProfile.lanlineServices.relayCredits == savedProfile.lanlineServices.relayCredits, "profile relay credits mismatch");
+        Check(loadedProfile.lanlineServices.relayCredits == savedProfile.lanlineServices.relayCredits, "profile relay credits mismatch") &&
+        Check(loadedProfile.launcherAnnouncements.lastSeenBuildNumber == savedProfile.launcherAnnouncements.lastSeenBuildNumber,
+            "profile launcher last-seen build mismatch") &&
+        Check(loadedProfile.launcherAnnouncements.lastSeenAnnouncementId == savedProfile.launcherAnnouncements.lastSeenAnnouncementId,
+            "profile launcher last-seen announcement mismatch");
+}
+
+bool RunLauncherAnnouncementSmoke() {
+    bunker::SessionProfile unseenProfile = bunker::MakeDefaultSessionProfile();
+    if (!Check(
+            bunker::ShouldShowBuildAnnouncement(
+                unseenProfile.launcherAnnouncements.lastSeenBuildNumber,
+                unseenProfile.launcherAnnouncements.lastSeenAnnouncementId),
+            "launcher announcement smoke expected unseen profile to show current announcement")) {
+        return false;
+    }
+
+    unseenProfile.launcherAnnouncements.lastSeenBuildNumber = bunker::kCurrentBuildNumber;
+    unseenProfile.launcherAnnouncements.lastSeenAnnouncementId = bunker::CurrentBuildAnnouncement().announcementId;
+    unseenProfile.launcherAnnouncements.lastSeenVersionLabel = std::string(bunker::kCurrentVersionLabel);
+    if (!Check(
+            !bunker::ShouldShowBuildAnnouncement(
+                unseenProfile.launcherAnnouncements.lastSeenBuildNumber,
+                unseenProfile.launcherAnnouncements.lastSeenAnnouncementId),
+            "launcher announcement smoke expected dismissed current announcement to stay hidden")) {
+        return false;
+    }
+
+    unseenProfile.launcherAnnouncements.lastSeenAnnouncementId = "older_announcement";
+    return Check(
+        bunker::ShouldShowBuildAnnouncement(
+            unseenProfile.launcherAnnouncements.lastSeenBuildNumber,
+            unseenProfile.launcherAnnouncements.lastSeenAnnouncementId),
+        "launcher announcement smoke expected newer local announcement id to resurface widget");
 }
 
 bool RunLanlineServicesRoundtripSmoke() {
@@ -2119,6 +2156,7 @@ int main() {
 
     const bool ok = RunWorldRoundtrip() &&
         RunProfileRoundtrip() &&
+        RunLauncherAnnouncementSmoke() &&
         RunLanlineServicesRoundtripSmoke() &&
         RunLaunchTicketFlow() &&
         RunGameplayDescriptorValidationSmoke() &&

@@ -18,9 +18,10 @@
   - `selectedWorld`
   - `sessionMode`
   - `lanlineServices`
+  - launcher announcement read-state
   - `fieldCheckpointKnown`, `fieldCheckpointX`, `fieldCheckpointY`
 - helper-нормализация:
   - `NormalizeLanlineServicesProfile`
   - `NormalizeWorldFieldState`
 
-Смысл этого блока: держать сервисный прогресс и world-state не в UI, а в профиле сессии.
+Смысл этого блока: держать сервисный прогресс, launcher read-state и world-state не в UI, а в профиле сессии.

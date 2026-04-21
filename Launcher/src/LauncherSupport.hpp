@@ -23,6 +23,8 @@ struct LauncherState {
     char password[64] = "prototype";
     char lanHost[64] = "127.0.0.1";
     char lanPort[16] = "27015";
+    bool announcementDetailsOpen = false;
+    std::string activeAnnouncementId{};
     std::string statusText = "System ready. Authorize to continue.";
 };
 
@@ -74,6 +76,10 @@ bool TryLaunchSiblingExecutable(const char* executableName, std::string& statusT
 void PrepareSelectedCharacter(bunker::SessionProfile& sessionProfile, const LauncherState& launcherState, const char* const* characters, int characterCount);
 std::string BuildLauncherObjectivePreview(const bunker::SessionProfile& sessionProfile, const bunker::WorldFieldState* worldState);
 const bunker::LanlineDiagnostics& CachedLanlineDiagnostics(const bunker::LanlineSessionState& session, std::string_view runtimeWorldName);
+float DrawLauncherAnnouncementWidget(
+    bunker::SessionProfile& sessionProfile,
+    const std::filesystem::path& profilePath,
+    LauncherState& launcherState);
 void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char* selectedCharacterLabel, const char* selectedModeLabel, const std::filesystem::path& selectedWorld);
 
 }  // namespace launcher_support

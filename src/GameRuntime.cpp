@@ -1,5 +1,6 @@
 #include "../include/GameRuntime.hpp"
 #include "../include/GameplayDescriptorRegistry.hpp"
+#include "../include/BuildAnnouncement.hpp"
 #include "../include/HangarSystem.hpp"
 #include "../include/LanlineLobbyLogic.hpp"
 #include "../include/LanlineServices.hpp"
@@ -1514,16 +1515,17 @@ void UpdateWorldMetadata(World& world, const SessionProfile& profile, const Stat
 
 void UpdateWindowTitle(GLFWwindow* window, const PlayerState& player, const World& world, const SessionProfile& sessionProfile) {
     const auto* worldState = FindWorldFieldState(sessionProfile, sessionProfile.selectedWorld);
-    char title[256];
+    char title[320];
     std::snprintf(
         title,
         sizeof(title),
-        "BunkerGame | %s | %s | %s | %s | %s",
+        "BunkerGame | %s | %s | %s | %s | %s | %s",
         sessionProfile.character.displayName.c_str(),
         player.insideTank ? sessionProfile.partnerTank.callSign.c_str() : "On Foot",
         ToString(player.viewMode),
         world.metadata.name.c_str(),
-        RecoveryStatusLabel(sessionProfile, worldState));
+        RecoveryStatusLabel(sessionProfile, worldState),
+        kCurrentVersionLabel.data());
     glfwSetWindowTitle(window, title);
 }
 

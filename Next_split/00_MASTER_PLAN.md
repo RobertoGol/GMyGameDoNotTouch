@@ -30,6 +30,7 @@
 - `import assistant hardening`
 - `export discipline / world-format tightening`
 - `Launcher / Lanline Services / runtime return`
+- launcher-side local announcement widget / build notice
 
 ## Правила
 

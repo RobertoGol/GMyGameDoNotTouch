@@ -7,7 +7,7 @@ namespace bunker {
 namespace {
 
 constexpr char kSessionProfileFormat[] = "BPF1";
-constexpr int kCurrentSessionProfileVersion = 2;
+constexpr int kCurrentSessionProfileVersion = 3;
 
 void MigrateSessionProfile(SessionProfile& profile, int loadedVersion) {
     if (loadedVersion < 2) {
@@ -71,6 +71,7 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     }
     profile.worldFieldStates = std::move(normalizedWorldStates);
     profile.lanlineServices.relayCredits = std::max(0, profile.lanlineServices.relayCredits);
+    profile.launcherAnnouncements.lastSeenBuildNumber = std::max(0, profile.launcherAnnouncements.lastSeenBuildNumber);
     if (const auto* selectedWorldState = FindWorldFieldState(profile, profile.selectedWorld); selectedWorldState != nullptr) {
         if (!selectedWorldState->towerSyncRecovered) {
             profile.lanlineServices.serviceHubKnown = false;
@@ -142,6 +143,9 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
     out << "lanline_relay_credits=" << profile.lanlineServices.relayCredits << '\n';
     out << "lanline_service_hub_known=" << (profile.lanlineServices.serviceHubKnown ? 1 : 0) << '\n';
     out << "lanline_cosmetics_seen=" << (profile.lanlineServices.cosmeticsShopSeen ? 1 : 0) << '\n';
+    out << "launcher_last_seen_build=" << profile.launcherAnnouncements.lastSeenBuildNumber << '\n';
+    out << "launcher_last_seen_announcement=" << profile.launcherAnnouncements.lastSeenAnnouncementId << '\n';
+    out << "launcher_last_seen_version=" << profile.launcherAnnouncements.lastSeenVersionLabel << '\n';
     out << "shelter_doctrine=" << static_cast<int>(profile.doctrine) << '\n';
     out << "field_checkpoint_known=" << (profile.fieldCheckpointKnown ? 1 : 0) << '\n';
     out << "field_checkpoint_x=" << profile.fieldCheckpointX << '\n';
@@ -307,6 +311,9 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         else if (key == "lanline_relay_credits") outProfile.lanlineServices.relayCredits = std::stoi(value);
         else if (key == "lanline_service_hub_known") outProfile.lanlineServices.serviceHubKnown = (std::stoi(value) != 0);
         else if (key == "lanline_cosmetics_seen") outProfile.lanlineServices.cosmeticsShopSeen = (std::stoi(value) != 0);
+        else if (key == "launcher_last_seen_build") outProfile.launcherAnnouncements.lastSeenBuildNumber = std::stoi(value);
+        else if (key == "launcher_last_seen_announcement") outProfile.launcherAnnouncements.lastSeenAnnouncementId = value;
+        else if (key == "launcher_last_seen_version") outProfile.launcherAnnouncements.lastSeenVersionLabel = value;
         else if (key == "shelter_doctrine") outProfile.doctrine = static_cast<ShelterDoctrine>(std::stoi(value));
         else if (key == "field_checkpoint_known") outProfile.fieldCheckpointKnown = (std::stoi(value) != 0);
         else if (key == "field_checkpoint_x") outProfile.fieldCheckpointX = std::stof(value);

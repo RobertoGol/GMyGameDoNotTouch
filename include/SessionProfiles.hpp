@@ -59,6 +59,12 @@ struct LanlineServicesProfile {
     bool cosmeticsShopSeen = false;
 };
 
+struct LauncherAnnouncementState {
+    int lastSeenBuildNumber = 0;
+    std::string lastSeenAnnouncementId{};
+    std::string lastSeenVersionLabel{};
+};
+
 struct WorldFieldState {
     std::string worldName;
     float etherErosion = 0.0f;
@@ -314,6 +320,7 @@ struct SessionProfile {
     std::vector<SpecialistEntry> rescuedSpecialists{};
     std::vector<WorldFieldState> worldFieldStates{};
     LanlineServicesProfile lanlineServices{};
+    LauncherAnnouncementState launcherAnnouncements{};
     ShelterDoctrine doctrine = ShelterDoctrine::Balanced;
     std::string selectedWorld = "start_zone.bwld";
     std::string sessionMode = "Solo";

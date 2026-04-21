@@ -40,6 +40,7 @@
 - export discipline tightened без переписывания history-path: `WorldValidation` теперь ловит missing world metadata / empty object table / invalid spawn, validation report пишет `BWL5`, layers, prefab-derived counts, broken prefab refs и library-load status, а smoke-check фиксирует prefab-aware export report
 - shared `Lanline Services` contract теперь прозрачно связывает launcher/runtime/profile: unlock-state хранит explicit `tower / relay / service / water / fey` flags поверх tier, launcher/runtime overlay-ят service state поверх `SessionProfile`, а smoke-check покрывает unlock resolution, services save roundtrip и profile snapshot sync
 - `Lanline Services` больше не заканчиваются на panel-state: support orders проходят `Queued -> Routed -> Delivered -> Claimed`, runtime `Pip-Pad` умеет claim delivered parcels в профиль/инвентарь, а `SessionProfile/WorldFieldState` теперь получают mirror по pending orders, cosmetics и relay-credit spend
+- launcher main screen теперь держит compact non-modal announcement widget в левом верхнем углу: local build notice показывается по `build/announcement` drift, хранит read-state в `SessionProfile`, не требует интернета и не блокирует основной UI
 
 ### Правило на следующие проходы
 

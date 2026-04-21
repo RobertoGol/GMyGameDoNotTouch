@@ -25,6 +25,7 @@
 
 #include "../../include/AppPaths.hpp"
 #include "../../include/AtomicPersistence.hpp"
+#include "../../include/BuildAnnouncement.hpp"
 #include "../../include/LanlineLobbyLogic.hpp"
 #include "../../include/LanlineServices.hpp"
 #include "../../include/LanlineSession.hpp"
@@ -839,11 +840,14 @@ int main() {
         glClearColor(0.05f, 0.06f, 0.08f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        ImGui::SetNextWindowPos(ImVec2(18.0f, 18.0f), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(420.0f, 784.0f), ImGuiCond_Always);
+        const float announcementOffsetY = DrawLauncherAnnouncementWidget(sessionProfile, profilePath, launcherState);
+        ImGui::SetNextWindowPos(ImVec2(18.0f, 18.0f + announcementOffsetY), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(420.0f, 784.0f - announcementOffsetY), ImGuiCond_Always);
         ImGui::Begin("Access Console", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
         ImGui::Text("Bunker Protocol Launcher");
-        ImGui::TextDisabled("Required entry point for BunkerGame");
+        ImGui::TextDisabled("Required entry point for BunkerGame | %s | %s",
+            bunker::kCurrentVersionLabel.data(),
+            bunker::kCurrentBuildId.data());
         ImGui::Separator();
 
         ImGui::InputText("Login", launcherState.login, IM_ARRAYSIZE(launcherState.login));
