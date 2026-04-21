@@ -4,9 +4,12 @@
 
 Этот верхний блок теперь главный.
 Старый длинный текст ниже оставлен как архив контекста, чтобы ничего не терялось.
-### Еще осталось из старого плана
+### Следующий рабочий пакет
 
-- верхний блок старого плана сейчас закрыт
+- `prefab/library strengthening`
+- `import assistant hardening`
+- `export discipline / world-format tightening`
+- после editor-hardening возвращаться к `Launcher / Lanline Services / runtime` через `Next_split/*`
 
 ### Закрыто в этом проходе
 
@@ -30,13 +33,16 @@
 - `MapObject` / `World` / `PrefabLibrary` теперь держат `editorLayer`: `BWL4` пишет его явно, legacy `BWL3` world-файлы получают inferred layer по object semantics, а smoke-check фиксирует roundtrip и backward-compatible layer inference
 - `BunkerEditor` получил production-useful `layer manager`: `show/hide`, `lock/unlock`, `filter by layer`, `select first`, compact layer badges в object list и preview discipline для hidden/locked layers
 - выбранный объект теперь собран в более цельный inspector: `display name` и `layer` редактируются рядом с identity/gameplay полями, секции `Semantic / Validation`, `XREF`, `Descriptor Presets`, `Transform / Runtime`, `Loot`, `Actions` больше не размазаны одной простыней, а runtime notes подсказывают service/fey/tank context
+- shared `WorldEditorUndoStack` теперь ведет add/remove/update/world-metadata/batch-edit историю, коалесцирует повторные edits и покрыт smoke-check на add/update/metadata/remove/batch redo-flow
+- `BunkerEditor` теперь держит живой `undo/redo` поверх authoring session: dirty-state синхронизирован с `load/export`, а быстрые semantic/layout/edit actions не остаются одноразовыми без отката
+- world preview дожат до рабочего authoring viewport: есть grid-step snap, bounds gizmos для `width/depth`, drag player spawn, selected-object `XREF/link` overlay и interaction/service radius overlays поверх уже существующего selection/focus/semantic-chain flow
 
 ### Правило на следующие проходы
 
 Сначала закрываем пункты из этого верхнего блока.
 Старые заметки ниже не удаляются, а служат архивом и пояснением.
 
-Продуктовая граница `Lanline` зафиксирована отдельно: `LANLINE_BOUNDARY.md`.
+Границу `Lanline` не выносим в новый отдельный md: рабочий канон держим в коде, `ROADMAP.md` и верхнем блоке этого файла.
 
 Старое содержимое `Next.md` разложено по отдельным файлам, чтобы этот файл больше не был гигантской свалкой текста.
 
@@ -68,6 +74,10 @@
   - `Next_split/trash.tasks.md`
 
 Если понадобится, следующим проходом можно уже не раскладывать заметки, а прямо пройтись по этим файлам и добить код по одному блоку за раз.
+
+## Архив старых заметок
+
+Ниже оставлен сырой исторический контекст. Он больше не является главным планом и не должен спорить с верхним блоком этого файла.
 
 разберу в двух слоях — что уже есть сейчас по факту, и что именно нужно, чтобы проект выглядел как показываемый/почти релизный. Параллельно вытащу сильные места архитектуры и дам готовые вставляемые куски кода там, где вижу самые дорогие пробелы.
 
@@ -10195,9 +10205,13 @@ import assistant,
 есть smoke-тест `RunExportHistoryCheckpointSelectionSmoke()`, который теперь проверяет latest shipping/prototype/blocked selection, baseline-updated filter, compare preset resolution и no-match fallback;
 в `Editor_Main.cpp` теперь есть filter row, compare preset combo, jump actions, compact filtered audit list, preview snapshot, historical diff, baseline diff и focus/fix по regressions.
 
-Следующий точный ход после этого слоя:
+Следующий точный ход после этого слоя уже закрыт:
 
-`undo/redo`
+`undo/redo` и `viewport authoring`
+
+Следующий рабочий пакет теперь:
+
+`prefab/library strengthening`, затем `import assistant`, затем `export discipline / world-format tightening`
 
 Иначе говоря:
 compare/history path заново не перепридумывать — он уже закрыт и дальше нужен только как поддерживаемый production слой editor/export pipeline.

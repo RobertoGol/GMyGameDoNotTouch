@@ -85,6 +85,9 @@
 - `2026-04-19`
 - `build_verify_ninja_fresh`
 - после cleanup root build-артефактов (`CMakeCache.txt`) и подтверждения схемы `main + fallback` сборка осталась рабочей без новых rebuild-ошибок
+- `2026-04-21`
+- `build_verify_ninja_fresh`
+- после shared `undo/redo` stack и viewport authoring hardening снова успешно собраны `BunkerSmokeChecks`, `BunkerEditor`, `BunkerGame`, `BunkerLauncher`
 - `2026-04-13`
 - `build_verify_ninja`
 - после добавления раннего `Pip-Pad AR / Echo Trace` authored-behavior снова успешно собраны `BunkerGame` и `BunkerEditor`
@@ -561,3 +564,5 @@
 - editor reference discipline moved beyond duplicate-ID checks: shared `World` теперь строит incoming/outgoing weak-ref graph по `registryId`-style `linkTarget`, `BunkerEditor` показывает `Weak References / XREF` block с jump-to-reference и предупреждает перед удалением referenced objects, а smoke-check фиксирует resolved/unresolved reference graph
 - editor validation panel hardened toward production workflow: `BunkerEditor` теперь умеет искать issues по `code / registry / scriptTag / related`, фильтровать `all/errors/warnings`, переключаться в `selected object only` режим и фокусировать объект уже из filtered issue list, чтобы validation не упиралась в один плоский поток
 - editor authoring surface hardened further: `MapObject/world/prefab` теперь хранят `editorLayer` c legacy `BWL3` infer, `BunkerEditor` получил layer manager (`show/hide`, `lock/unlock`, `filter`, `select first`) и unified inspector-секции с `display name/layer` editing и specialized runtime notes, а smoke-check покрывает layer roundtrip и backward-compatible layer inference
+- editor undo discipline is now shared instead of ad-hoc: `WorldEditorUndoStack` хранит add/remove/update/world-metadata/batch-edit дельты, коалесцирует повторные edits, `BunkerEditor` показывает dirty-state и next undo/redo actions, а smoke-check покрывает add/update/metadata/remove/batch roundtrip
+- world preview moved closer to a real authoring viewport: `BunkerEditor` теперь поддерживает grid-step snap, bounds gizmos для `width/depth`, drag player spawn, selected-object `XREF/link` overlay и interaction/service radius overlays поверх уже существующего selection/focus/semantic preview flow

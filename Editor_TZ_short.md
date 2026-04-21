@@ -148,19 +148,23 @@ water_reclaimer
 
 Viewport должен быть реальным рабочим authoring-пространством, а не просто картинкой.
 
-Нужно добавить или дожать
+Уже есть в текущем репозитории
 выбор объекта кликом;
-raycast selection;
-move gizmo;
-rotate gizmo;
-scale gizmo;
-snap to grid;
+raycast-like selection в preview;
+move drag по выбранному объекту;
+grid-step snap;
 focus on selected;
-camera orbit / pan / zoom;
-bounds overlay;
+camera pan / zoom;
+bounds gizmos для `width/depth`;
 interaction radius overlay;
 service radius overlay;
-route/link visualization.
+route/XREF visualization;
+drag player spawn.
+
+Дожать дальше
+rotate gizmo, если появится явный orientation field в world data;
+scale/shape authoring beyond current `width/depth` handles;
+дальнейшую полировку hybrid viewport.
 Для service/fey объектов
 
 Показывать:
@@ -202,6 +206,12 @@ mass select by layer.
 Цель
 
 Любое значимое действие должно откатываться.
+
+Уже есть в текущем репозитории
+shared undo stack по дельтам/командам;
+coalescing повторных object/world edits;
+undo/redo для add/remove/update/world metadata/batch semantic actions;
+dirty-state относительно последнего load/export.
 
 Минимальный стек команд
 add object
@@ -394,13 +404,17 @@ Object Inspector
 Этап 3
 Undo / Redo
 Layer Manager
+Статус: закрыто в текущем коде
 Этап 4
 Gizmo / Raycast / Snap / Viewport overlays
+Статус: рабочий `v1` уже есть; дальше только hardening
 Этап 5
 Prefab / Library
 Object Window / Palette
+Статус: следующий активный пакет
 Этап 6
 Import Assistant
+Статус: следующий после prefab/library
 Этап 7
 Export discipline
 World format tightening

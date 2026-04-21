@@ -247,6 +247,12 @@
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerEditor.dir\\src\\WorldEditorUndo.cpp.obj /FdCMakeFiles\\BunkerEditor.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\WorldEditorUndo.cpp",
+  "file": "D:/Projects/Game_Project/src/WorldEditorUndo.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerEditor.dir/src/WorldEditorUndo.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
   "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerEditor.dir\\src\\WorldExport.cpp.obj /FdCMakeFiles\\BunkerEditor.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\WorldExport.cpp",
   "file": "D:/Projects/Game_Project/src/WorldExport.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerEditor.dir/src/WorldExport.cpp.obj"
@@ -334,6 +340,12 @@
   "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\World.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\World.cpp",
   "file": "D:/Projects/Game_Project/src/World.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/World.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\WorldEditorUndo.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\WorldEditorUndo.cpp",
+  "file": "D:/Projects/Game_Project/src/WorldEditorUndo.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/WorldEditorUndo.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",

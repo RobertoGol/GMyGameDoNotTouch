@@ -1,35 +1,32 @@
 # Master Plan
 
-Короткая выжимка из `Next.md`.
+Короткая актуальная выжимка из `Next.md`.
 
 ## Контекст
 
-- Проект уже не пустой прототип, а поздний vertical slice / ранняя системная `v1`.
-- Базовая форма проекта считается канонической: `BunkerLauncher`, `BunkerGame`, `BunkerEditor`.
-- `Lanline - optime` считается каноническим названием LAN-слоя.
-- Вопросы к автору держать в `Use_this_One.md`.
-- Идеи автора и дальний backlog держать в `trash.md`.
+- канон проекта остается прежним: `BunkerLauncher`, `BunkerGame`, `BunkerEditor`
+- `solo + LAN first`, `Lanline - optime`, `Lanline Services`, `Fey Ring Network`
+- сначала код и smoke-checks, потом чистка `Next.md` / `ROADMAP.md`
 
-## Ближайший приоритет
+## Уже закрыто в текущем editor-hardening проходе
 
-1. Добить стабильность `BunkerLauncher`.
-2. Закрыть launcher до честного `v1`.
-3. После кода синхронизировать `ROADMAP.md`.
-4. Затем двигать `Lanline Services` и сервисный runtime-layer.
+- `export/history path`
+- `Registry ID / weak refs / XREF`
+- `warnings / validation hardening`
+- `unified property inspector`
+- `layer manager`
+- `undo/redo`
+- `viewport authoring`: grid-step snap, bounds gizmos, spawn drag, XREF/service overlays
 
-## Уже зафиксировано как база
+## Следующий рабочий пакет
 
-- запуск игры через launcher
-- рабочий editor
-- ранний recovery backbone
-- `Relay Substation`
-- `Service Bay`
-- `Water Reclaimer`
-- ранний `Lanline` session-state / launcher-runtime glue
+1. `prefab/library strengthening`
+2. `import assistant hardening`
+3. `export discipline / world-format tightening`
+4. затем возврат к `Launcher / Lanline Services / runtime` хвостам по `Next_split/*`
 
-## Правила из старого Next
+## Правила
 
-- не делать крупный распил файлов без явного желания
-- не уходить в абстрактный рефакторинг
-- новый слой закрывать как минимум через runtime + editor + docs
-- не держать рабочие патчи только в заметках, если они уже реально внедрены
+- не перепридумывать архитектуру и не делать большой рефакторинг ради красоты
+- если пункт уже живет в коде, не держать его как основной todo в md
+- после реального внедрения синхронизировать `ROADMAP.md` и сокращать дублирующие заметки

@@ -1056,6 +1056,7 @@ using editor_support::NormalizeExportWorldName;
 using editor_support::ObjectPreset;
 using editor_support::PrepareSpecializedDraft;
 using editor_support::PreviewInteraction;
+using editor_support::PreviewRenderOptions;
 using editor_support::PreviewViewportState;
 using editor_support::PinSemanticAnchorPlacement;
 using editor_support::RequiredSemanticDependencyTagsForScript;
@@ -1102,9 +1103,15 @@ int main() {
     bool showImportAssistant = true;
     bool previewAsPlayer = true;
     bool snapToGrid = true;
+    float snapStep = 1.0f;
     bool aiPathPreview = true;
     bool showInteractionHelpers = true;
     bool showObjectLabels = false;
+    bool showGridOverlay = true;
+    bool showBoundsOverlay = true;
+    bool showReferenceLinks = true;
+    bool showInteractionRadiusOverlay = true;
+    bool showServiceRadiusOverlay = true;
     bool autoSemanticOverlay = true;
     bool autoSemanticLayout = true;
     bool preserveManualSemanticAnchors = true;
@@ -1291,6 +1298,23 @@ int main() {
         draftObject.category = useDraftCategoryOverride ? draftCategoryOverride : preset.category;
         draftObject.manualLoot = preset.manualLoot;
         CopyStringToBuffer(bunker::DefaultEditorLayerName(draftObject), draftLayerInput, IM_ARRAYSIZE(draftLayerInput));
+    };
+    auto resolvedSnapStep = [&]() {
+        return std::max(0.25f, snapStep);
+    };
+    auto snapCoordinate = [&](float value) {
+        if (!snapToGrid) {
+            return value;
+        }
+        const float step = resolvedSnapStep();
+        return std::round(value / step) * step;
+    };
+    auto snapDimension = [&](float value) {
+        if (!snapToGrid) {
+            return std::max(0.25f, value);
+        }
+        const float step = resolvedSnapStep();
+        return std::max(step, std::round(value / step) * step);
     };
     auto focusObjectInEditor = [&](int objectIndex, float zoom = 1.4f) {
         if (objectIndex < 0 || objectIndex >= static_cast<int>(editorWorld.objects.size())) {
@@ -1530,10 +1554,18 @@ int main() {
         ImGui::BulletText("Scene export for BunkerGame runtime");
         ImGui::Separator();
         ImGui::Checkbox("Snap to grid", &snapToGrid);
+        if (snapToGrid) {
+            ImGui::SliderFloat("Grid step", &snapStep, 0.25f, 4.0f, "%.2f");
+        }
         ImGui::Checkbox("AI path preview", &aiPathPreview);
         ImGui::Checkbox("Preview as player", &previewAsPlayer);
         ImGui::Checkbox("Show interaction helpers", &showInteractionHelpers);
         ImGui::Checkbox("Show object labels", &showObjectLabels);
+        ImGui::Checkbox("Show grid overlay", &showGridOverlay);
+        ImGui::Checkbox("Show bounds gizmos", &showBoundsOverlay);
+        ImGui::Checkbox("Show XREF links", &showReferenceLinks);
+        ImGui::Checkbox("Show interaction radius", &showInteractionRadiusOverlay);
+        ImGui::Checkbox("Show service radius", &showServiceRadiusOverlay);
         if (ImGui::Checkbox("Auto semantic overlay", &autoSemanticOverlay)) {
             if (autoSemanticOverlay && selectedObjectIndex >= 0) {
                 applySemanticOverlayForObject(selectedObjectIndex);
@@ -1656,8 +1688,8 @@ int main() {
                 if (useDraftCategoryOverride) {
                     object.category = draftCategoryOverride;
                 }
-                object.x = snapToGrid ? std::round(placeX) : placeX;
-                object.y = snapToGrid ? std::round(placeY) : placeY;
+                object.x = snapCoordinate(placeX);
+                object.y = snapCoordinate(placeY);
                 object.width = preset.width;
                 object.depth = preset.depth;
                 object.height = preset.height;
@@ -1689,8 +1721,8 @@ int main() {
             if (selectedPrefabIndex >= 0 && selectedPrefabIndex < static_cast<int>(savedPrefabs.size())) {
                 bunker::MapObject placed = savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)].object;
                 placed.registryId = MakeDuplicateRegistryId(editorWorld, placed.registryId);
-                placed.x = snapToGrid ? std::round(placeX) : placeX;
-                placed.y = snapToGrid ? std::round(placeY) : placeY;
+                placed.x = snapCoordinate(placeX);
+                placed.y = snapCoordinate(placeY);
                 placed.editorLayer = bunker::NormalizeEditorLayerName(placed.editorLayer);
                 if (placed.editorLayer.empty()) {
                     placed.editorLayer = bunker::NormalizeEditorLayerName(draftLayerInput);
@@ -1769,11 +1801,11 @@ int main() {
             editorWorld.metadata.objective = worldObjectiveInput;
         }
         if (ImGui::InputFloat("Player Spawn X", &worldSpawnX, 0.5f, 2.0f, "%.1f")) {
-            editorWorld.metadata.playerSpawnX = snapToGrid ? std::round(worldSpawnX) : worldSpawnX;
+            editorWorld.metadata.playerSpawnX = snapCoordinate(worldSpawnX);
             worldSpawnX = editorWorld.metadata.playerSpawnX;
         }
         if (ImGui::InputFloat("Player Spawn Y", &worldSpawnY, 0.5f, 2.0f, "%.1f")) {
-            editorWorld.metadata.playerSpawnY = snapToGrid ? std::round(worldSpawnY) : worldSpawnY;
+            editorWorld.metadata.playerSpawnY = snapCoordinate(worldSpawnY);
             worldSpawnY = editorWorld.metadata.playerSpawnY;
         }
         ImGui::Separator();
@@ -2715,13 +2747,17 @@ int main() {
                 selectedObject.category = CategoryFromIndex(categoryIndex);
             }
             if (ImGui::InputFloat("Edit X", &selectedObject.x, 0.5f, 2.0f, "%.1f") && snapToGrid) {
-                selectedObject.x = std::round(selectedObject.x);
+                selectedObject.x = snapCoordinate(selectedObject.x);
             }
             if (ImGui::InputFloat("Edit Y", &selectedObject.y, 0.5f, 2.0f, "%.1f") && snapToGrid) {
-                selectedObject.y = std::round(selectedObject.y);
+                selectedObject.y = snapCoordinate(selectedObject.y);
             }
-            ImGui::InputFloat("Width", &selectedObject.width, 0.1f, 0.5f, "%.1f");
-            ImGui::InputFloat("Depth", &selectedObject.depth, 0.1f, 0.5f, "%.1f");
+            if (ImGui::InputFloat("Width", &selectedObject.width, 0.1f, 0.5f, "%.1f")) {
+                selectedObject.width = snapDimension(selectedObject.width);
+            }
+            if (ImGui::InputFloat("Depth", &selectedObject.depth, 0.1f, 0.5f, "%.1f")) {
+                selectedObject.depth = snapDimension(selectedObject.depth);
+            }
             ImGui::InputFloat("Height", &selectedObject.height, 0.1f, 0.5f, "%.1f");
             ImGui::InputFloat("Health", &selectedObject.health, 5.0f, 20.0f, "%.0f");
             ImGui::Checkbox("Blocks Movement", &selectedObject.blocksMovement);
@@ -2754,8 +2790,8 @@ int main() {
             ImGui::Separator();
             ImGui::TextDisabled("Actions");
             if (ImGui::Button("Use Selected Object As Player Spawn", ImVec2(-1.0f, 28.0f))) {
-                editorWorld.metadata.playerSpawnX = snapToGrid ? std::round(selectedObject.x) : selectedObject.x;
-                editorWorld.metadata.playerSpawnY = snapToGrid ? std::round(selectedObject.y) : selectedObject.y;
+                editorWorld.metadata.playerSpawnX = snapCoordinate(selectedObject.x);
+                editorWorld.metadata.playerSpawnY = snapCoordinate(selectedObject.y);
                 worldSpawnX = editorWorld.metadata.playerSpawnX;
                 worldSpawnY = editorWorld.metadata.playerSpawnY;
                 statusText = "Player spawn moved to selected object.";
@@ -2764,12 +2800,9 @@ int main() {
                 bunker::MapObject duplicate = selectedObject;
                 duplicate.registryId = MakeDuplicateRegistryId(editorWorld, selectedObject.registryId);
                 duplicate.displayName += " Copy";
-                duplicate.x += snapToGrid ? 1.0f : 0.75f;
-                duplicate.y += snapToGrid ? 1.0f : 0.75f;
-                if (snapToGrid) {
-                    duplicate.x = std::round(duplicate.x);
-                    duplicate.y = std::round(duplicate.y);
-                }
+                const float duplicateOffset = snapToGrid ? resolvedSnapStep() : 0.75f;
+                duplicate.x = snapCoordinate(duplicate.x + duplicateOffset);
+                duplicate.y = snapCoordinate(duplicate.y + duplicateOffset);
                 editorWorld.AddObject(duplicate);
                 undoStack.PushObjectAdded(
                     "Duplicate object",
@@ -2940,6 +2973,8 @@ int main() {
         ImGui::BulletText("Cockpit/tank clearance");
         ImGui::BulletText("Collision sanity");
         ImGui::BulletText("Terminal reach and interact distance");
+        ImGui::BulletText("Route/XREF legibility");
+        ImGui::BulletText("Service radius coverage");
         if (showInteractionHelpers) {
             ImGui::Separator();
             ImGui::Text("Marker Legend");
@@ -2950,6 +2985,17 @@ int main() {
             ImGui::BulletText("C = Container");
             ImGui::BulletText("V = Vehicle Anchor");
         }
+        if (showBoundsOverlay) {
+            ImGui::TextDisabled("Selected object exposes width/depth handles in preview.");
+        }
+        ImGui::Separator();
+        ImGui::Text("Viewport overlays");
+        ImGui::BulletText("Grid step: %.2f", resolvedSnapStep());
+        ImGui::BulletText("Bounds gizmos: %s", showBoundsOverlay ? "enabled" : "disabled");
+        ImGui::BulletText("XREF links: %s", showReferenceLinks ? "selected object" : "hidden");
+        ImGui::BulletText("Radius overlays: %s / %s",
+            showInteractionRadiusOverlay ? "interaction" : "no interaction",
+            showServiceRadiusOverlay ? "service" : "no service");
         ImGui::Separator();
         if (!previewViewport.semanticOverlayLabel.empty()) {
             ImGui::TextWrapped("Semantic Overlay: %s", previewViewport.semanticOverlayLabel.c_str());
@@ -2973,14 +3019,23 @@ int main() {
             ImGui::TextDisabled("Semantic overlay is idle.");
         }
         ImGui::Separator();
+        const PreviewRenderOptions previewRenderOptions = {
+            showInteractionHelpers,
+            showObjectLabels,
+            showGridOverlay,
+            showBoundsOverlay,
+            showReferenceLinks,
+            showInteractionRadiusOverlay,
+            showServiceRadiusOverlay,
+            resolvedSnapStep()
+        };
         const PreviewInteraction previewInteraction = DrawWorldPreview(
             editorWorld,
             selectedObjectIndex,
             previewAsPlayer,
             previewViewport,
             editorLayerStates,
-            showInteractionHelpers,
-            showObjectLabels);
+            previewRenderOptions);
         if (previewInteraction.draggingSelectedObject &&
             selectedObjectIndex >= 0 &&
             selectedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
@@ -2990,16 +3045,41 @@ int main() {
             } else if (!isLayerVisibleForObject(draggedObject)) {
                 statusText = "Selected object layer is hidden; preview drag is disabled.";
             } else {
-                draggedObject.x = snapToGrid ? std::round(previewInteraction.worldX) : previewInteraction.worldX;
-                draggedObject.y = snapToGrid ? std::round(previewInteraction.worldY) : previewInteraction.worldY;
+                draggedObject.x = snapCoordinate(previewInteraction.worldX);
+                draggedObject.y = snapCoordinate(previewInteraction.worldY);
                 placeX = draggedObject.x;
                 placeY = draggedObject.y;
                 statusText = "Moved selected object through world preview.";
             }
         }
+        if ((previewInteraction.draggingSelectedWidth || previewInteraction.draggingSelectedDepth) &&
+            selectedObjectIndex >= 0 &&
+            selectedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
+            auto& draggedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+            if (isLayerLockedForObject(draggedObject)) {
+                statusText = "Selected object layer is locked; preview bounds gizmos are disabled.";
+            } else if (!isLayerVisibleForObject(draggedObject)) {
+                statusText = "Selected object layer is hidden; preview bounds gizmos are disabled.";
+            } else {
+                if (previewInteraction.draggingSelectedWidth) {
+                    draggedObject.width = snapDimension(previewInteraction.suggestedWidth);
+                }
+                if (previewInteraction.draggingSelectedDepth) {
+                    draggedObject.depth = snapDimension(previewInteraction.suggestedDepth);
+                }
+                statusText = "Adjusted selected object bounds through world preview.";
+            }
+        }
+        if (previewInteraction.draggingSpawn) {
+            editorWorld.metadata.playerSpawnX = snapCoordinate(previewInteraction.worldX);
+            editorWorld.metadata.playerSpawnY = snapCoordinate(previewInteraction.worldY);
+            worldSpawnX = editorWorld.metadata.playerSpawnX;
+            worldSpawnY = editorWorld.metadata.playerSpawnY;
+            statusText = "Moved player spawn through world preview.";
+        }
         if (previewInteraction.clicked) {
-            placeX = snapToGrid ? std::round(previewInteraction.worldX) : previewInteraction.worldX;
-            placeY = snapToGrid ? std::round(previewInteraction.worldY) : previewInteraction.worldY;
+            placeX = snapCoordinate(previewInteraction.worldX);
+            placeY = snapCoordinate(previewInteraction.worldY);
             if (previewInteraction.clickedObject &&
                 previewInteraction.clickedObjectIndex >= 0 &&
                 previewInteraction.clickedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
@@ -3019,7 +3099,7 @@ int main() {
             statusText = "Preview camera reset.";
         }
         ImGui::SameLine();
-        ImGui::TextDisabled("LMB select/drag/place | MMB pan | Wheel zoom | Double-click focus");
+        ImGui::TextDisabled("LMB select/drag/resize | Spawn handle drag | MMB pan | Wheel zoom | Double-click focus");
         ImGui::End();
 
         ImGui::SetNextWindowPos(ImVec2(1088.0f, 16.0f), ImGuiCond_Always);

@@ -1,22 +1,20 @@
 # Editor/src/Editor_Main.cpp
 
-Из `Next.md` сюда относятся service/fey presets и authoring validation:
+Актуальный статус по editor-файлу:
 
-Новые пресеты:
+Уже закрыто:
 
-- `lanline_service_hub`
-- `fey_ring`
-- `medical_support`
-- `tank_service`
+- service/fey/industrial presets на канонических `scriptTag`
+- validation panel с search/filter/focus/fix
+- export history filters / compare presets / jump actions
+- `Weak References / XREF` блок и delete warning
+- unified inspector + layer manager
+- `undo/redo`
+- viewport authoring: grid-step snap, bounds gizmos, spawn drag, XREF/link overlays, interaction/service radius overlays
 
-Ожидаемый смысл:
+Следующее сюда по очереди:
 
-- authoring этих узлов прямо через editor
-- заполнение `scriptTag`
-- заполнение `linkTarget`
-- корректные `interaction/category`
-
-Дополнительно:
-
-- проверить валидацию `scriptTag/linkTarget`
-- не переделывать editor целиком, а просто расширить уже существующий preset-flow
+- `prefab/library strengthening`
+- `import assistant hardening`
+- object/palette UX cleanup без переписывания editor целиком
+- export discipline и более жёсткий world-format handoff

@@ -19,14 +19,28 @@ namespace editor_support {
 
 using SavedPrefab = bunker::PrefabRecord;
 
+enum class PreviewDragMode {
+    None,
+    MoveSelection,
+    ResizeWidth,
+    ResizeDepth,
+    ResizeBoth,
+    MoveSpawn
+};
+
 struct PreviewInteraction {
     bool clicked = false;
     bool clickedObject = false;
     int clickedObjectIndex = -1;
     bool doubleClickedObject = false;
     bool draggingSelectedObject = false;
+    bool draggingSelectedWidth = false;
+    bool draggingSelectedDepth = false;
+    bool draggingSpawn = false;
     float worldX = 0.0f;
     float worldY = 0.0f;
+    float suggestedWidth = 0.0f;
+    float suggestedDepth = 0.0f;
 };
 
 struct PreviewOverlayLink {
@@ -40,6 +54,7 @@ struct PreviewViewportState {
     float zoom = 1.0f;
     float offsetX = 0.0f;
     float offsetY = 0.0f;
+    PreviewDragMode activeDragMode = PreviewDragMode::None;
     bool hasFocusRequest = false;
     float focusWorldX = 0.0f;
     float focusWorldY = 0.0f;
@@ -48,6 +63,17 @@ struct PreviewViewportState {
     std::vector<int> semanticObjectIndices{};
     std::vector<PreviewOverlayLink> semanticLinks{};
     std::string semanticOverlayLabel;
+};
+
+struct PreviewRenderOptions {
+    bool showInteractionHelpers = true;
+    bool showObjectLabels = false;
+    bool showGrid = true;
+    bool showBoundsOverlay = true;
+    bool showReferenceLinks = true;
+    bool showInteractionRadius = true;
+    bool showServiceRadius = true;
+    float gridStep = 1.0f;
 };
 
 struct ObjectPreset {
@@ -205,7 +231,6 @@ PreviewInteraction DrawWorldPreview(const bunker::World& world,
     bool previewAsPlayer,
     PreviewViewportState& viewportState,
     const std::vector<EditorLayerViewState>& layerStates,
-    bool showInteractionHelpers,
-    bool showObjectLabels);
+    const PreviewRenderOptions& options);
 
 }  // namespace editor_support
