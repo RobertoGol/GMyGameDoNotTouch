@@ -32,6 +32,11 @@ void NormalizeLoadedObject(MapObject& object) {
     object.scriptTag = std::string(NormalizeGameplayDescriptorTag(object.scriptTag));
 }
 
+bool LooksLikeLegacySemanticAutoAnchor(const MapObject& object) {
+    return object.registryId.find("_auto_") != std::string::npos &&
+        !object.scriptTag.empty();
+}
+
 }  // namespace
 
 void World::Clear() {
@@ -51,8 +56,9 @@ bool World::Load(const std::string& path) {
     char header[4]{};
     file.read(header, 4);
     const std::string format(header, 4);
-    const bool hasExtendedObjectData = (format == "BWL2");
-    if (format != "BWLD" && format != "BWL2") {
+    const bool hasExtendedObjectData = (format == "BWL2" || format == "BWL3");
+    const bool hasSemanticAuthoringState = (format == "BWL3");
+    if (format != "BWLD" && format != "BWL2" && format != "BWL3") {
         return false;
     }
 
@@ -99,6 +105,10 @@ bool World::Load(const std::string& path) {
         file.read(reinterpret_cast<char*>(&object.blocksMovement), sizeof(object.blocksMovement));
         file.read(reinterpret_cast<char*>(&object.discovered), sizeof(object.discovered));
         file.read(reinterpret_cast<char*>(&object.manualLoot), sizeof(object.manualLoot));
+        if (hasSemanticAuthoringState) {
+            file.read(reinterpret_cast<char*>(&object.semanticAutoCreated), sizeof(object.semanticAutoCreated));
+            file.read(reinterpret_cast<char*>(&object.semanticLayoutPinned), sizeof(object.semanticLayoutPinned));
+        }
 
         if (!file) {
             return false;
@@ -113,6 +123,9 @@ bool World::Load(const std::string& path) {
             }
         }
 
+        if (!hasSemanticAuthoringState && hasExtendedObjectData && LooksLikeLegacySemanticAutoAnchor(object)) {
+            object.semanticAutoCreated = true;
+        }
         NormalizeLoadedObject(object);
         objects.push_back(object);
     }
@@ -126,7 +139,7 @@ bool World::Save(const std::string& path) const {
         return false;
     }
 
-    file.write("BWL2", 4);
+    file.write("BWL3", 4);
     WriteString(file, metadata.name);
     WriteString(file, metadata.biome);
     WriteString(file, metadata.objective);
@@ -156,6 +169,8 @@ bool World::Save(const std::string& path) const {
         file.write(reinterpret_cast<const char*>(&object.blocksMovement), sizeof(object.blocksMovement));
         file.write(reinterpret_cast<const char*>(&object.discovered), sizeof(object.discovered));
         file.write(reinterpret_cast<const char*>(&object.manualLoot), sizeof(object.manualLoot));
+        file.write(reinterpret_cast<const char*>(&object.semanticAutoCreated), sizeof(object.semanticAutoCreated));
+        file.write(reinterpret_cast<const char*>(&object.semanticLayoutPinned), sizeof(object.semanticLayoutPinned));
 
         for (const auto& lootId : object.manualLootIds) {
             WriteString(file, lootId);

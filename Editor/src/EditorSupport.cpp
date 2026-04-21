@@ -7,11 +7,14 @@
 #include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <sstream>
 
 #include "../../include/AppPaths.hpp"
 #include "../../include/AtomicPersistence.hpp"
 #include "../../include/GameplayDescriptorRegistry.hpp"
 #include "../../include/RegistryId.hpp"
+#include "../../include/WorldExport.hpp"
+#include "../../include/WorldSemanticAuthoring.hpp"
 #include "../../include/WorldValidation.hpp"
 
 namespace editor_support {
@@ -140,8 +143,12 @@ void ApplyGameplayDescriptorPreset(
         object.interaction = spec->preferredInteraction;
         object.category = spec->preferredCategory;
     }
-    if (defaultLinkTarget != nullptr && object.linkTarget.empty()) {
-        object.linkTarget = defaultLinkTarget;
+    const char* resolvedDefaultLinkTarget = defaultLinkTarget;
+    if (resolvedDefaultLinkTarget == nullptr) {
+        resolvedDefaultLinkTarget = bunker::DefaultGameplayDescriptorLinkTarget(object.scriptTag);
+    }
+    if (resolvedDefaultLinkTarget != nullptr && object.linkTarget.empty()) {
+        object.linkTarget = resolvedDefaultLinkTarget;
     }
     CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
     if (linkTargetBuffer != nullptr && linkTargetSize > 0) {
@@ -174,6 +181,46 @@ void SyncEditorWorldBindings(const bunker::World& editorWorld,
     CopyStringToBuffer(editorWorld.metadata.objective, worldObjectiveInput, worldObjectiveInputSize);
     worldSpawnX = editorWorld.metadata.playerSpawnX;
     worldSpawnY = editorWorld.metadata.playerSpawnY;
+}
+
+void SyncSelectedObjectBindings(const bunker::World& editorWorld,
+    int selectedObjectIndex,
+    char* selectedRegistryEdit,
+    std::size_t selectedRegistryEditSize,
+    char* selectedScriptTagEdit,
+    std::size_t selectedScriptTagEditSize,
+    char* selectedLinkTargetEdit,
+    std::size_t selectedLinkTargetEditSize) {
+    if (selectedObjectIndex < 0 || selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+        CopyStringToBuffer("", selectedRegistryEdit, selectedRegistryEditSize);
+        CopyStringToBuffer("", selectedScriptTagEdit, selectedScriptTagEditSize);
+        CopyStringToBuffer("", selectedLinkTargetEdit, selectedLinkTargetEditSize);
+        return;
+    }
+
+    const auto& object = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+    CopyStringToBuffer(object.registryId, selectedRegistryEdit, selectedRegistryEditSize);
+    CopyStringToBuffer(object.scriptTag, selectedScriptTagEdit, selectedScriptTagEditSize);
+    CopyStringToBuffer(object.linkTarget, selectedLinkTargetEdit, selectedLinkTargetEditSize);
+}
+
+int FindObjectIndexByRegistryId(const bunker::World& world, const std::string& registryId) {
+    for (int index = 0; index < static_cast<int>(world.objects.size()); ++index) {
+        if (world.objects[static_cast<std::size_t>(index)].registryId == registryId) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+int FindObjectIndexByScriptTag(const bunker::World& world, std::string_view scriptTag) {
+    const std::string normalizedTag = std::string(bunker::NormalizeGameplayDescriptorTag(scriptTag));
+    for (int index = 0; index < static_cast<int>(world.objects.size()); ++index) {
+        if (world.objects[static_cast<std::size_t>(index)].scriptTag == normalizedTag) {
+            return index;
+        }
+    }
+    return -1;
 }
 
 const ObjectPreset& SelectedPreset(const std::array<ObjectPreset, 6>& presets, int index) {
@@ -241,218 +288,99 @@ void ApplyWorkshopDescriptorPreset(bunker::MapObject& object, char* scriptTagBuf
 }
 
 void ApplyTowerDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    ApplyGameplayDescriptorPreset(object, "tower_sync", "regional_grid", scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "tower_sync", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyPowerPylonDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "power_pylon";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "regional_grid_north";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "power_pylon", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyDroneStationDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "drone_station";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "salvage_sweep";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "drone_station", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyRailDepotDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    ApplyGameplayDescriptorPreset(object, "rail_depot", "industrial_spur_alpha", scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "rail_depot", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyOrbitalUplinkDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "orbital_uplink";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "low_orbit_scan";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "orbital_uplink", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyRailFortressDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    ApplyGameplayDescriptorPreset(object, "rail_fortress_hub", "magistral_anchor_alpha", scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "rail_fortress_hub", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyRecoveryFabricatorDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "recovery_fabricator";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "shelter17_refinery";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "recovery_fabricator", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyIndustrialGateDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    ApplyGameplayDescriptorPreset(object, "industrial_gate", "inner_spur_alpha", scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "industrial_gate", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyIndustrialSurveyDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "industrial_survey";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "inner_spur_survey";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "industrial_survey", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyIndustrialOutpostDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "industrial_outpost";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "inner_spur_outpost";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "industrial_outpost", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyAssemblyCellDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "assembly_cell";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "assembly_cell_alpha";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "assembly_cell", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyFoundryLineDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "foundry_line";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "foundry_line_alpha";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "foundry_line", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyReactorYardDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "reactor_yard";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "reactor_yard_alpha";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "reactor_yard", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyCapacitorBankDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "capacitor_bank";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "capacitor_bank_alpha";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "capacitor_bank", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyRelaySubstationDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "relay_substation";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "relay_substation_alpha";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "relay_substation", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyServiceBayDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "service_bay";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "service_bay_alpha";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "service_bay", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyWaterReclaimerDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "water_reclaimer";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "water_reclaimer_alpha";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "water_reclaimer", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyServiceHubDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    ApplyGameplayDescriptorPreset(object, "lanline_service_hub", "relay_service_console", scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "lanline_service_hub", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyFeyRingDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    ApplyGameplayDescriptorPreset(object, "fey_ring", "fey_ring_schedule", scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "fey_ring", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyMedicalSupportDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "medical_support";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "field_medical_queue";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "medical_support", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyTankServiceDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    ApplyGameplayDescriptorPreset(object, "tank_service", "bt72_service_queue", scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "tank_service", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyRemoteLinkDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "remote_link";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "remote_world_anchor";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "remote_link", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplyEchoDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "echo_trace";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "[%workshop_cache_0001]";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "echo_trace", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 void ApplySpecialistDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize, char* linkTargetBuffer, std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "specialist_cryo";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "engineer";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
+    ApplyGameplayDescriptorPreset(object, "specialist_cryo", nullptr, scriptTagBuffer, scriptTagSize, linkTargetBuffer, linkTargetSize);
 }
 
 std::string ToLowerCopy(std::string value) {
@@ -495,6 +423,14 @@ std::string TrimCopy(const char* text) {
     return value.substr(first, last - first + 1);
 }
 
+std::vector<std::string> RequiredSemanticDependencyTagsForScript(std::string_view scriptTag) {
+    std::vector<std::string> dependencyTags;
+    for (const std::string_view dependencyTag : bunker::RequiredSemanticDependencyTags(scriptTag)) {
+        dependencyTags.emplace_back(dependencyTag);
+    }
+    return dependencyTags;
+}
+
 std::string NormalizeExportWorldName(const char* exportWorldFileInput) {
     std::string exportName = TrimCopy(exportWorldFileInput);
     if (exportName.empty()) {
@@ -525,6 +461,81 @@ std::string MakeDuplicateRegistryId(const bunker::World& world, const std::strin
     return stem + "_copy_overflow";
 }
 
+bool AlignObjectToDescriptorDefaults(bunker::MapObject& object, bool overwriteLinkTarget) {
+    return bunker::AlignObjectToDescriptorDefaults(object, overwriteLinkTarget);
+}
+
+bool IsAutoGeneratedSemanticAnchor(const bunker::MapObject& object) {
+    return bunker::IsAutoGeneratedSemanticAnchor(object);
+}
+
+bool IsPinnedSemanticAnchor(const bunker::MapObject& object) {
+    return bunker::IsPinnedSemanticAnchor(object);
+}
+
+bool PinSemanticAnchorPlacement(bunker::MapObject& object, bool pinned) {
+    return bunker::PinSemanticAnchorPlacement(object, pinned);
+}
+
+bool AdoptSemanticAnchorAsAuthored(bunker::MapObject& object, bool pinPlacement) {
+    return bunker::AdoptSemanticAnchorAsAuthored(object, pinPlacement);
+}
+
+int AdoptAllAutoCreatedSemanticAnchors(bunker::World& world, std::string& statusText) {
+    return bunker::AdoptAllAutoCreatedSemanticAnchors(world, statusText);
+}
+
+int AdoptSemanticDependencyChainAsAuthored(bunker::World& world, int rootObjectIndex, bool includeRoot, std::string& statusText) {
+    return bunker::AdoptSemanticDependencyChainAsAuthored(world, rootObjectIndex, includeRoot, statusText);
+}
+
+int AutoLayoutSemanticDependencyChain(bunker::World& world,
+    int rootObjectIndex,
+    std::string& statusText,
+    bool preserveManualPlacement) {
+    bunker::SemanticLayoutOptions options;
+    options.preserveManualPlacement = preserveManualPlacement;
+    return bunker::AutoLayoutSemanticDependencyChain(world, rootObjectIndex, statusText, options);
+}
+
+int AutoLayoutSemanticDependencyChain(bunker::World& world, int rootObjectIndex, std::string& statusText) {
+    return bunker::AutoLayoutSemanticDependencyChain(world, rootObjectIndex, statusText);
+}
+
+bool CanAutoFixValidationIssue(const bunker::ValidationIssue& issue) {
+    return bunker::CanAutoFixValidationIssue(issue);
+}
+
+bool AutoFixValidationIssue(bunker::World& world, const bunker::ValidationIssue& issue, std::string& statusText) {
+    return bunker::AutoFixValidationIssue(world, issue, statusText);
+}
+
+int AutoFixSafeValidationIssues(bunker::World& world, std::string& statusText) {
+    return bunker::AutoFixSafeValidationIssues(world, statusText);
+}
+
+bool CanCreateMissingDependencyAnchor(const bunker::ValidationIssue& issue) {
+    return bunker::CanCreateMissingDependencyAnchor(issue);
+}
+
+bool CreateMissingDependencyAnchorForIssue(bunker::World& world, const bunker::ValidationIssue& issue, int& createdObjectIndex, std::string& statusText) {
+    return bunker::CreateMissingDependencyAnchorForIssue(world, issue, createdObjectIndex, statusText);
+}
+
+AnchorCascadeResult CreateMissingDependencyAnchorsCascadeDetailed(bunker::World& world, std::string& statusText) {
+    const auto batch = bunker::CreateMissingDependencyAnchorsCascade(world, statusText);
+    return {
+        batch.createdCount,
+        batch.lastCreatedObjectIndex,
+        batch.createdObjectIndices,
+        batch.createdScriptTags
+    };
+}
+
+int CreateMissingDependencyAnchorsCascade(bunker::World& world, std::string& statusText) {
+    return CreateMissingDependencyAnchorsCascadeDetailed(world, statusText).createdCount;
+}
+
 bool HasOtherObjectWithRegistryId(const bunker::World& world, const std::string& registryId, int selectedIndex) {
     for (int index = 0; index < static_cast<int>(world.objects.size()); ++index) {
         if (index == selectedIndex) {
@@ -538,48 +549,7 @@ bool HasOtherObjectWithRegistryId(const bunker::World& world, const std::string&
 }
 
 bool LoadPrefabLibrary(std::vector<SavedPrefab>& prefabs) {
-    prefabs.clear();
-
-    std::ifstream file(bunker::EditorPrefabLibraryPath());
-    if (!file.is_open()) {
-        return false;
-    }
-
-    SavedPrefab prefab;
-    while (file >> std::quoted(prefab.label)
-                >> std::quoted(prefab.object.registryId)
-                >> std::quoted(prefab.object.displayName)
-                >> std::quoted(prefab.object.scriptTag)
-                >> std::quoted(prefab.object.linkTarget)) {
-        int interaction = 0;
-        int category = 0;
-        file >> interaction
-             >> category
-             >> prefab.object.x
-             >> prefab.object.y
-             >> prefab.object.z
-             >> prefab.object.width
-             >> prefab.object.depth
-             >> prefab.object.height
-             >> prefab.object.health
-             >> prefab.object.blocksMovement
-             >> prefab.object.discovered
-             >> prefab.object.manualLoot;
-        if (!file) {
-            break;
-        }
-
-        prefab.object.interaction = static_cast<bunker::InteractionType>(interaction);
-        prefab.object.category = static_cast<bunker::ObjectCategory>(category);
-        for (auto& lootId : prefab.object.manualLootIds) {
-            if (!(file >> std::quoted(lootId))) {
-                return false;
-            }
-        }
-        prefabs.push_back(prefab);
-    }
-
-    return true;
+    return bunker::LoadPrefabLibrary(prefabs);
 }
 
 std::string BuildEditorValidationStatus(const bunker::World& world) {
@@ -587,57 +557,63 @@ std::string BuildEditorValidationStatus(const bunker::World& world) {
     return bunker::BuildValidationSummary(issues);
 }
 
-bool TryExportValidatedWorld(const bunker::World& world, const std::filesystem::path& path, std::string& statusText) {
-    const auto issues = bunker::ValidateWorldForRuntime(world);
-    if (bunker::HasBlockingValidationIssues(issues)) {
-        statusText = "Export blocked: " + bunker::BuildValidationSummary(issues);
-        return false;
+bool TryExportValidatedWorld(const bunker::World& world,
+    const std::filesystem::path& path,
+    std::string& statusText,
+    bunker::ExportValidationPolicy policy,
+    bunker::WorldExportResult* exportResult) {
+    const auto detailedResult = bunker::ExportWorldWithValidation(world, path, policy);
+    if (exportResult != nullptr) {
+        *exportResult = detailedResult;
     }
-
-    const auto saveResult = bunker::SaveWorldAtomically(world, path);
-    if (!saveResult.ok) {
-        statusText = "Export failed: " + saveResult.message;
-        return false;
-    }
-
-    const int warningCount = bunker::CountValidationWarnings(issues);
-    statusText = warningCount > 0
-        ? "Exported with warnings (" + std::to_string(warningCount) + "): " + path.string()
-        : "Exported world: " + path.string();
-    return true;
+    statusText = detailedResult.message;
+    return detailedResult.ok;
 }
 
 bool SavePrefabLibrary(const std::vector<SavedPrefab>& prefabs) {
-    std::ofstream file(bunker::EditorPrefabLibraryPath());
-    if (!file.is_open()) {
-        return false;
+    return bunker::SavePrefabLibrary(prefabs);
+}
+
+void RequestPreviewFocus(PreviewViewportState& viewportState, float worldX, float worldY, float zoom) {
+    viewportState.hasFocusRequest = true;
+    viewportState.focusWorldX = worldX;
+    viewportState.focusWorldY = worldY;
+    viewportState.focusZoom = std::clamp(zoom, 0.25f, 3.0f);
+}
+
+void ClearPreviewSemanticOverlay(PreviewViewportState& viewportState) {
+    viewportState.semanticOverlayRootIndex = -1;
+    viewportState.semanticObjectIndices.clear();
+    viewportState.semanticLinks.clear();
+    viewportState.semanticOverlayLabel.clear();
+}
+
+void ShowPreviewSemanticDependencies(const bunker::World& world, int rootObjectIndex, PreviewViewportState& viewportState) {
+    ClearPreviewSemanticOverlay(viewportState);
+    if (rootObjectIndex < 0 || rootObjectIndex >= static_cast<int>(world.objects.size())) {
+        return;
     }
 
-    for (const auto& prefab : prefabs) {
-        file << std::quoted(prefab.label) << ' '
-             << std::quoted(prefab.object.registryId) << ' '
-             << std::quoted(prefab.object.displayName) << ' '
-             << std::quoted(prefab.object.scriptTag) << ' '
-             << std::quoted(prefab.object.linkTarget) << ' '
-             << static_cast<int>(prefab.object.interaction) << ' '
-             << static_cast<int>(prefab.object.category) << ' '
-             << prefab.object.x << ' '
-             << prefab.object.y << ' '
-             << prefab.object.z << ' '
-             << prefab.object.width << ' '
-             << prefab.object.depth << ' '
-             << prefab.object.height << ' '
-             << prefab.object.health << ' '
-             << prefab.object.blocksMovement << ' '
-             << prefab.object.discovered << ' '
-             << prefab.object.manualLoot;
-        for (const auto& lootId : prefab.object.manualLootIds) {
-            file << ' ' << std::quoted(lootId);
-        }
-        file << '\n';
+    const auto dependencyGraph = bunker::BuildSemanticDependencyGraph(world, rootObjectIndex);
+    if (dependencyGraph.empty()) {
+        return;
     }
 
-    return static_cast<bool>(file);
+    viewportState.semanticOverlayRootIndex = rootObjectIndex;
+    viewportState.semanticObjectIndices = bunker::CollectSemanticDependencyObjectIndices(world, rootObjectIndex, true);
+    viewportState.semanticLinks.reserve(dependencyGraph.size());
+    for (const auto& edge : dependencyGraph) {
+        viewportState.semanticLinks.push_back({
+            edge.sourceObjectIndex,
+            edge.dependencyObjectIndex,
+            edge.dependencyScriptTag,
+            edge.dependencyPresent
+        });
+    }
+
+    const auto& rootObject = world.objects[static_cast<std::size_t>(rootObjectIndex)];
+    viewportState.semanticOverlayLabel = rootObject.displayName;
+    viewportState.semanticOverlayLabel += " semantic chain";
 }
 
 ImU32 ColorForCategory(bunker::ObjectCategory category) {
@@ -717,6 +693,14 @@ PreviewInteraction DrawWorldPreview(const bunker::World& world,
     const float scaleX = (size.x - 12.0f) / worldWidth;
     const float scaleY = (size.y - 12.0f) / worldHeight;
     const float baseScale = std::max(1.0f, std::min(scaleX, scaleY));
+
+    if (viewportState.hasFocusRequest) {
+        viewportState.zoom = std::clamp(viewportState.focusZoom, 0.25f, 3.0f);
+        const float focusScale = std::max(0.25f, baseScale * viewportState.zoom);
+        viewportState.offsetX = (size.x * 0.5f) - 6.0f - ((viewportState.focusWorldX - minX) * focusScale);
+        viewportState.offsetY = (size.y * 0.5f) - 6.0f - ((viewportState.focusWorldY - minY) * focusScale);
+        viewportState.hasFocusRequest = false;
+    }
     const float scale = std::max(0.25f, baseScale * viewportState.zoom);
 
     auto toCanvas = [&](float worldX, float worldY) {
@@ -731,11 +715,62 @@ PreviewInteraction DrawWorldPreview(const bunker::World& world,
         return ImVec2(worldX, worldY);
     };
 
+    if (!viewportState.semanticOverlayLabel.empty()) {
+        drawList->AddText(
+            ImVec2(origin.x + 10.0f, origin.y + 8.0f),
+            IM_COL32(132, 220, 240, 255),
+            viewportState.semanticOverlayLabel.c_str());
+    }
+
+    auto isSemanticOverlayObject = [&](int objectIndex) {
+        return std::find(
+            viewportState.semanticObjectIndices.begin(),
+            viewportState.semanticObjectIndices.end(),
+            objectIndex) != viewportState.semanticObjectIndices.end();
+    };
+
+    for (int edgeIndex = 0; edgeIndex < static_cast<int>(viewportState.semanticLinks.size()); ++edgeIndex) {
+        const auto& edge = viewportState.semanticLinks[static_cast<std::size_t>(edgeIndex)];
+        if (edge.sourceObjectIndex < 0 || edge.sourceObjectIndex >= static_cast<int>(world.objects.size())) {
+            continue;
+        }
+
+        const auto& sourceObject = world.objects[static_cast<std::size_t>(edge.sourceObjectIndex)];
+        const ImVec2 sourcePoint = toCanvas(sourceObject.x, sourceObject.y);
+        if (edge.resolved &&
+            edge.targetObjectIndex >= 0 &&
+            edge.targetObjectIndex < static_cast<int>(world.objects.size())) {
+            const auto& targetObject = world.objects[static_cast<std::size_t>(edge.targetObjectIndex)];
+            const ImVec2 targetPoint = toCanvas(targetObject.x, targetObject.y);
+            drawList->AddLine(sourcePoint, targetPoint, IM_COL32(74, 190, 220, 210), 2.0f);
+            const ImVec2 labelPoint((sourcePoint.x + targetPoint.x) * 0.5f + 4.0f, (sourcePoint.y + targetPoint.y) * 0.5f - 12.0f);
+            drawList->AddText(labelPoint, IM_COL32(140, 220, 235, 230), edge.label.c_str());
+        } else {
+            const float xOffset = 28.0f + static_cast<float>(edgeIndex % 3) * 14.0f;
+            const float yOffset = -26.0f + static_cast<float>(edgeIndex % 2) * 18.0f;
+            const ImVec2 unresolvedPoint(sourcePoint.x + xOffset, sourcePoint.y + yOffset);
+            drawList->AddLine(sourcePoint, unresolvedPoint, IM_COL32(240, 174, 78, 220), 2.0f);
+            drawList->AddCircleFilled(unresolvedPoint, 4.0f, IM_COL32(240, 174, 78, 255), 12);
+            drawList->AddText(ImVec2(unresolvedPoint.x + 6.0f, unresolvedPoint.y - 10.0f), IM_COL32(250, 206, 122, 240), edge.label.c_str());
+        }
+    }
+
     for (int index = 0; index < static_cast<int>(world.objects.size()); ++index) {
         const auto& object = world.objects[static_cast<std::size_t>(index)];
         const ImVec2 min = toCanvas(object.x - object.width * 0.5f, object.y - object.depth * 0.5f);
         const ImVec2 max = toCanvas(object.x + object.width * 0.5f, object.y + object.depth * 0.5f);
+        const bool semanticOverlayObject = isSemanticOverlayObject(index);
+        const bool semanticOverlayRoot = index == viewportState.semanticOverlayRootIndex;
         drawList->AddRectFilled(min, max, ColorForCategory(object.category), 2.0f);
+        if (semanticOverlayObject) {
+            drawList->AddRect(
+                ImVec2(min.x - 3.0f, min.y - 3.0f),
+                ImVec2(max.x + 3.0f, max.y + 3.0f),
+                semanticOverlayRoot ? IM_COL32(84, 230, 255, 255) : IM_COL32(92, 196, 214, 235),
+                3.0f,
+                0,
+                semanticOverlayRoot ? 3.0f : 2.0f);
+        }
         drawList->AddRect(min, max,
             index == selectedObjectIndex ? IM_COL32(255, 255, 180, 255) : IM_COL32(25, 25, 25, 220),
             2.0f,

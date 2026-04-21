@@ -49,6 +49,8 @@ struct MapObject {
     std::array<std::string, 4> manualLootIds{};
     std::string scriptTag;
     std::string linkTarget;
+    bool semanticAutoCreated = false;
+    bool semanticLayoutPinned = false;
 };
 
 }  // namespace bunker

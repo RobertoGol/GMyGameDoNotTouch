@@ -57,6 +57,7 @@ add_executable(BunkerGame
     src/StoryRoute.cpp
     src/WorldEvents.cpp
     src/World.cpp
+    src/WorldSemanticAuthoring.cpp
     src/WorldValidation.cpp
     ${IMGUI_SRC}
 )
@@ -77,9 +78,12 @@ configure_bunker_target(BunkerLauncher)
 add_executable(BunkerEditor
     Editor/src/Editor_Main.cpp
     Editor/src/EditorSupport.cpp
+    src/PrefabLibrary.cpp
     src/GameplayDescriptorRegistry.cpp
     src/SessionProfiles.cpp
     src/World.cpp
+    src/WorldExport.cpp
+    src/WorldSemanticAuthoring.cpp
     src/WorldValidation.cpp
     ${IMGUI_SRC}
 )
@@ -87,10 +91,13 @@ configure_bunker_target(BunkerEditor)
 
 add_executable(BunkerSmokeChecks
     tests/SmokeChecks.cpp
+    src/PrefabLibrary.cpp
     src/GameplayDescriptorRegistry.cpp
     src/LaunchSession.cpp
     src/SessionProfiles.cpp
     src/World.cpp
+    src/WorldExport.cpp
+    src/WorldSemanticAuthoring.cpp
     src/WorldValidation.cpp
 )
 target_include_directories(BunkerSmokeChecks PRIVATE ${COMMON_INCLUDE_DIRS})

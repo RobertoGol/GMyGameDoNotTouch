@@ -9560,3 +9560,618 @@ WorldValidation.cpp → validation domain / issue / summary
 GameRuntime.cpp → tank / route / terminal sync structures
 LauncherSupport.cpp → Lanline digest / readiness
 main.cpp → bootstrap report / save outcome
+
+жесткая выжимка для нашего редактора, если брать не весь файл с разбором Creation Kit, а только то, что реально подходит под Bunker Protocol / Game_Project.
+
+Сразу главный фильтр:
+мы не переносим чужую архитектуру как есть, не копируем Bethesda-подход, а берем только полезные инженерные роли модулей и адаптируем их под уже зафиксированный канон проекта:
+Launcher + Game + Editor, solo + LAN first, BunkerEditor как отдельный toolset уровня Creation Kit, бинарный формат мира BWLD/BWL2, Registry ID, authored world, world preview, object library, prefab/library workflow, semantic authoring и экспорт обратно в runtime-мир.
+
+Что берем из файла точно
+1. Реестр объектов и typed ID
+
+Из файла очень полезна идея, что редактор не должен работать с “просто указателями”, а должен иметь центральный реестр сущностей, где каждый объект живет по своему ID, а связи между объектами идут через ID, а не через прямые адреса памяти. В самом файле это прямо описано как UID/FormID, слабые ссылки, XREF и переназначение временных ID при сохранении. Это идеально ложится на уже подтвержденную для проекта идею Registry_ID.
+
+Для нашего редактора это значит:
+
+у каждого authored object должен быть стабильный Registry ID;
+ссылки между объектами должны храниться как targetRegistryId, а не как pointer/reference на runtime-объект;
+редактор должен уметь находить “кто на кого ссылается”;
+при дублировании и импорте должен выдаваться новый ID;
+при сохранении нужен remap временных ID в постоянные.
+2. Weak references и cross-reference map
+
+Из файла надо брать не весь CK-style form database, а именно:
+
+weak reference модель;
+XREF карту;
+предупреждение при удалении объекта, на который есть ссылки.
+Это прямо полезно для нашего BunkerEditor, потому что у нас уже есть authored interaction/category/scriptTag/linkTarget flow, а значит связи начнут расти.
+
+Нужный результат:
+
+удаляешь tower_sync → редактор предупреждает, что на него ссылаются lanline_service_hub, power_pylon, relay_substation;
+удаляешь prefab base object → видно, сколько размещений это затронет;
+удаляешь fey_ring → видно, какие route-узлы ломаются.
+3. Property editor / property grid
+
+Из файла надо брать идею Property Sheets / Property Grid, но в современном виде, без копирования MFC/старого UI. В проекте редактор уже умеет редактировать позицию, размеры, здоровье, loot, interaction, category, spawn и метаданные мира, а значит property-layer уже есть и его надо развивать как единый инспектор объекта, а не как набор разрозненных полей.
+
+Для нас это значит:
+
+один правый инспектор объекта;
+секции Transform, Gameplay, Interaction, Semantic, Loot, Visual, Runtime Notes;
+если объект tank_service, показывать service-specific fields;
+если объект fey_ring, показывать route fields;
+если объект lanline_service_hub, показывать relay/service fields.
+4. World preview + viewport interaction
+
+Из файла стоит брать:
+
+gizmos,
+raycast/select,
+snapping,
+layer visibility,
+bounds/debug overlays.
+Это прямо совпадает с тем, что уже идет у тебя в Editor v1: world preview, selection, spawn marker, object move, viewport navigation в духе Creation Kit, interaction-helper overlay. То есть это не новая идея, а направление, которое уже подтверждено roadmap и которое надо продолжать.
+
+Для нашего редактора это означает:
+
+2D preview надо дальше вести к гибридному authoring viewport;
+клик по объекту → select;
+drag → move;
+snap to grid;
+focus/double click;
+debug overlay для interaction radius, service radius, spawn зоны, power links.
+5. Layer manager и visibility filters
+
+Из файла полезен слой Layers & Visibility: это очень подходит для authored worlds с большим количеством сущностей. У тебя уже есть object search/filter и category-filter, значит следующий логичный шаг — layer manager и сохранение видимости слоев внутри editor session.
+
+Нужные editor layers:
+
+Terrain
+Structures
+Gameplay
+Loot
+Service
+Fey
+Spawn
+Debug
+Markers
+Rail/Industrial
+6. Dirty flags + Undo/Redo
+
+Из файла это одна из самых полезных вещей для редактора:
+не весь большой CK stack, а именно:
+
+dirty state у объекта;
+dirty state у мира;
+undo/redo как стек дельт.
+
+Для нас это означает:
+
+любое изменение объекта помечает объект как dirty;
+экспорт мира очищает dirty-флаг;
+undo/redo хранит не весь мир целиком, а команду/дельту:
+add object
+remove object
+move object
+duplicate object
+change property
+assign spawn
+assign semantic preset
+7. Validation + warnings window
+
+Из файла надо брать именно это.
+В нем явно выделены Validation Module, Warnings & Logs, thread-safe logging, categorized warnings. Для нашего редактора это критично, потому что editor уже перестал быть просто map tool и стал toolset.
+
+Нужные проверки редактора:
+
+duplicate Registry ID
+fey_ring без route target
+lanline_service_hub без tower_sync
+tank_service без service_bay / hangar context
+medical_support без service backbone
+spawn вне walkable/start-safe зоны
+объект с interaction, но без radius/semantic target
+broken linkTarget
+orphaned prefab reference
+invalid world export metadata
+8. Virtual lists / object window / cell view
+
+Из файла надо брать принцип, что большие списки должны быть виртуализированными, а не тупо рендерить все. Это подходит под Object Window, Cell View, prefab library, object palette и warnings list.
+
+Для редактора это означает:
+
+Object Window
+Cell View
+Prefab Library
+Warnings
+Search Results
+должны быть готовы к большим authored worlds.
+9. Binary world format и asset manifest
+
+Из файла полезен не ESM/ESP как таковой, а идея, что мир должен хранить:
+
+стабильную структуру;
+ссылки на ресурсы;
+секции/чанки;
+версию формата;
+asset manifest.
+Это хорошо ложится на уже существующий BWLD/BWL2-контур проекта.
+
+Для нас:
+
+BWL2 надо держать как основной authored world format;
+в заголовке мира должны быть:
+version
+world metadata
+next available registry id
+asset manifest
+layer table
+object table
+prefab references
+semantic links
+10. Import assistant / small smart import window
+
+Это прямо совпадает с каноном проекта: у тебя уже зафиксировано, что editor должен быть не только map editor, а полноценный authoring toolset, плюс есть отдельная идея маленького окна интеллектуального импорта по картинке/референсу. Это полезно брать как editor-side Import Assistant, а не как full AI generator.
+
+Для нас это значит:
+
+отдельное маленькое окно импорта;
+drag/drop картинки;
+ручная классификация:
+prop
+item
+environment
+structure
+scene module
+потом отправка в palette/prefab draft, а не магическое автосоздание готового мира.
+Что брать ограниченно, не целиком
+1. Plug-in / override logic
+
+Из файла идея override-подмены полезна, но не как ESM/ESP-клон прямо сейчас. Нам нужна легкая layered world override model только для будущего:
+
+base world
+override layer
+mission layer
+temporary session layer.
+
+Сейчас для редактора это значит:
+
+заложить формат мира так, чтобы override потом был возможен;
+но не строить сейчас полный mod stack как у Bethesda.
+2. Asset provider / external libraries
+
+Из файла можно взять идею AssetProvider, asset manifest, VFS, внешних библиотек ресурсов. Это полезно архитектурно. Но не надо сейчас уводить editor в реальную BA2/Fallout pipeline, если это не часть ближайшего production-плана. В файле это обсуждается как направление, но для нашего проекта это только дальняя опция.
+
+Для нас:
+
+да: AssetProvider
+да: virtual paths
+да: resource manifest
+нет сейчас: обязательная поддержка BA2/DDS/Fallout 4 в production editor
+3. Quest/dialogue/AI graph editing
+
+Из файла это интересно, но для текущего Editor v1 брать это рано.
+Сейчас редактор уже в работе как world/prefab/semantic authoring toolset; значит сначала нужно дожать мир, объекты, interaction, layers, warnings, import pipeline. Квестовый граф, dialogue tree и AI packages — это уже Editor v2+, не ближайший must-have.
+
+Что не берем сейчас вообще
+1. MFC / WinAPI / old CK shell
+
+Нам не нужен старый Windows-монолит из CK. Из файла полезны роли окон, но не сама старая оболочка. Брать надо современную модульную форму уже существующего редактора, а не копировать MFC-подход.
+
+2. Papyrus VM и полная скриптовая машина
+
+Для нашего редактора сейчас это лишнее. Из файла стоит запомнить, что нужен мост между данными и логикой, но не строить полноценный CK-like VM слой на этом этапе.
+
+3. ESM/ESP exact format
+
+Не брать.
+У нас свой BWLD/BWL2, свой editor, свой runtime. Из файла берем только принципы:
+
+records
+references
+overrides
+validation
+asset manifest.
+Но не формат Bethesda.
+4. Полный BA2/DDS/Fallout asset compatibility как обязательную цель редактора
+
+Это не должно сейчас уводить редактор в сторону. В твоем проекте канонически важнее:
+
+authored worlds
+item/object authoring
+interaction semantics
+export to runtime format
+import assistant
+а не совместимость с Fallout-архивами.
+5. Security / firmware / чужие экосистемы
+
+Это уже отдельно зафиксировано как нерелевантное для production stack проекта. Брать нельзя.
+
+Что это значит именно для нашего редактора
+
+Наша каноническая роль редактора уже зафиксирована:
+он должен быть не облегчённым map tool, а полноценным authoring-комплексом уровня Creation Kit, адаптированным под Bunker Protocol, и работать не только с картой, но и с предметами, контейнерами, объектами мира, техническими и интерактивными сущностями.
+
+Значит, редактор надо строить как набор этих слоев:
+
+Editor Core
+world open/save/export
+current world session
+dirty state
+undo/redo
+selected object context
+Registry & References
+Registry ID
+weak references
+XREF map
+duplicate protection
+remap on duplicate/import/save
+World Authoring
+object palette
+prefab library
+placement
+spawn tools
+semantic presets
+layer manager
+Viewport / Preview
+select
+move
+focus
+pan/zoom
+snap
+interaction overlays
+debug markers
+Inspectors
+transform
+category
+interaction
+loot
+health
+semantic tags
+runtime notes
+Validation / Warnings
+errors
+warnings
+quick fix hints
+export blockers
+Import Assistant
+drag/drop image
+classify
+create prefab draft
+assign category
+send to library
+Export Pipeline
+BWLD/BWL2
+asset manifest
+metadata
+layer table
+object refs
+semantic links
+Практический приоритет для внедрения
+
+Если переводить это в реальную очередь для твоего проекта, то из всего файла для нашего editor надо внедрять в таком порядке:
+
+Registry / weak refs / XREF
+Dirty flags + Undo/Redo
+Warnings / validation window
+Layer Manager
+Unified Property Inspector
+World/object semantic references
+Import Assistant
+Asset manifest / export discipline
+Override-ready world format
+Только потом — сложные graphs / scripting editors
+Готовая формулировка для ИИ
+
+Можно вставить в файл как рабочее правило:
+
+Берем из разобранного файла Creation Kit не конкретную реализацию Bethesda, а роли модулей, полезные для нашего BunkerEditor:
+
+Registry ID и weak references
+cross-reference map
+property inspector
+gizmo/raycast/snap
+layer manager
+dirty flags
+undo/redo
+warnings/validation
+object window / cell view / virtual lists
+binary world serialization with asset manifest
+import assistant
+
+Не берем сейчас:
+
+MFC/старую оболочку
+Papyrus VM
+точный ESM/ESP формат
+обязательную BA2/Fallout compatibility
+full quest/dialogue/AI compiler
+security / firmware / нерелевантные внешние ветки
+
+Редактор проекта остается отдельным приложением уровня Creation Kit, но адаптированным под Bunker Protocol, BWLD/BWL2, Registry ID, authored world, BT-72, service/fey/industrial semantics и pipeline импорта пользовательских референсов.
+Основа — наш проект.
+Главный источник правды — текущий Bunker Protocol: его roadmap, текущий editor/runtime split, BWLD/BWL2, Registry ID, authored world, Launcher / Game / Editor, service/fey/industrial semantics. В текущих материалах прямо зафиксировано, что BunkerEditor должен вырасти в полноценный toolset уровня Creation Kit, но остаться редактором именно для нашего проекта, а не чужим клоном.
+
+2. Файл с анализом CK — это надстройка.
+Он нужен, чтобы подсветить, каких модулей и дисциплины обычно не хватает редактору:
+
+typed ID / registry;
+weak refs / XREF;
+property inspector;
+object window / cell view;
+gizmos, raycast, snap;
+warnings / validation;
+chunked world serialization;
+asset/provider layer.
+
+3. Берем только совместимое с нашим каноном.
+То, что уже совпадает с проектом:
+
+редактор как отдельное приложение;
+world authoring;
+object/property editing;
+export в бинарный world format;
+Registry ID;
+import pipeline;
+Object Window, Cell View, Layer Manager, snap to grid.
+
+4. Не берем буквально fallout-специфику.
+Не надо тащить в проект:
+
+MFC/старую оболочку CK;
+Papyrus VM;
+точный ESM/ESP пайплайн;
+обязательную BA2/DDS/Fallout 4 совместимость как текущую цель;
+чужую архитектуру целиком.
+Даже сам файл местами уходит в эту сторону, но для нас это только дальние технические идеи, не production-приоритет.
+
+5. Сам файл местами уже устарел относительно нашего текущего состояния.
+В нем есть куски, где проект описан как очень ранний “скелет”, которому только предстоит ожить как редактор. Но по текущему состоянию это уже не так: Editor v1 у нас реально умеет загружать текущий runtime-мир, экспортировать *.bwld, валидировать конфликт Registry ID, дублировать объекты, работать с preview, prefab/library workflow, scriptTag/linkTarget и semantic presets. То есть файл надо читать как полезный инженерный комментарий, но не как точную диагностику текущего состояния редактора.
+
+Если зафиксировать это одной фразой:
+
+анализ Creation Kit из Fallout 4 — это дополнительный референсный слой для нашего BunkerEditor, который помогает понять, какие модули должен иметь серьезный редактор, но все решения принимаются только через канон и текущее состояние нашего проекта.
+
+Дальше правильный способ использовать этот файл такой:
+
+брать из него роли модулей;
+сверять с текущим Editor v1;
+добавлять только то, что усиливает наш pipeline;
+не превращать проект в Fallout-tool clone.
+Прописываю что именно добавим, если брать твой текущий проект как основу, а файл с разбором Creation Kit — только как дополнение по полезным модулям, без копирования чужой архитектуры.
+
+Что добавим в редактор в первую очередь
+1. Реестр объектов
+
+Добавим нормальный Registry ID слой:
+
+уникальный ID у каждого объекта мира;
+генератор новых ID;
+защита от дублей;
+remap ID при дублировании и импорте;
+weak references между объектами через ID, а не через прямые ссылки.
+2. Cross-reference система
+
+Добавим карту связей:
+
+кто на кого ссылается;
+предупреждение при удалении объекта, если он используется;
+быстрый поиск зависимостей;
+отдельный блок References в инспекторе объекта.
+3. Единый Property Inspector
+
+Сделаем один сильный правый инспектор:
+
+Transform
+Gameplay
+Interaction
+Semantic
+Loot
+Visual
+Runtime Notes
+
+И специальные секции для:
+
+lanline_service_hub
+fey_ring
+tank_service
+medical_support
+4. Undo / Redo
+
+Добавим нормальный стек действий:
+
+add object
+remove object
+duplicate
+move
+rotate
+scale
+property change
+semantic preset apply
+spawn move
+5. Warnings / Validation
+
+Добавим окно предупреждений редактора:
+
+duplicate Registry ID
+broken linkTarget
+fey_ring без route target
+lanline_service_hub без tower_sync
+tank_service без service_bay/hangar контекста
+medical_support без backbone-контекста
+объект вне допустимой зоны
+некорректный export
+6. Layer Manager
+
+Добавим управляемые слои:
+
+Terrain
+Structures
+Gameplay
+Loot
+Service
+Fey
+Spawn
+Debug
+Rail
+Industrial
+
+С возможностью:
+
+скрывать/показывать;
+блокировать редактирование слоя;
+фильтровать поиск по слоям.
+7. Улучшенный viewport
+
+Добавим:
+
+raycast select;
+gizmo move/rotate/scale;
+snap to grid;
+focus on selected;
+bounds overlay;
+interaction radius overlay;
+service radius overlay;
+route/link visualization для service/fey объектов.
+8. Object Window / Palette
+
+Сделаем нормальное окно объектов:
+
+поиск;
+фильтр по категории;
+фильтр по слою;
+фильтр по semantic tag;
+быстрый placement;
+recent objects;
+favorites.
+9. Prefab / Library слой
+
+Усилим библиотеку:
+
+сохранение prefab из выбранных объектов;
+prefab metadata;
+preview и category;
+повторное использование prefab в мирах;
+предупреждения при изменении base prefab;
+future support для prefab overrides.
+10. Import Assistant
+
+Добавим маленькое окно импорта:
+
+drag/drop картинки или референса;
+ручная классификация:
+prop
+item
+structure
+environment
+scene module
+создание prefab draft;
+отправка в palette/library.
+Что добавим в формат мира
+11. Усиление BWLD/BWL2
+
+Добавим/дожмем:
+
+version header;
+next available registry id;
+asset manifest;
+layer table;
+object table;
+semantic links;
+prefab references;
+export validation.
+12. Override-ready структура
+
+Не полный ESM/ESP-клон, а задел на будущее:
+
+base world;
+authoring override;
+mission/session override;
+merge-ready chunks.
+Что добавим в связи editor ↔ runtime
+13. Semantic world glue
+
+Добавим editor/runtime bridge для:
+
+tower_sync
+lanline_service_hub
+fey_ring
+tank_service
+medical_support
+relay_substation
+service_bay
+water_reclaimer
+14. Runtime-facing export discipline
+
+Сделаем так, чтобы editor экспортировал мир без “скрытых ручных правок”:
+
+export blockers;
+export summary;
+missing refs summary;
+auto-fix простых ошибок.
+Что добавим в сам проект вокруг редактора
+15. Service/world glue
+
+Дожмем:
+
+unlock Lanline Services строго через tower_sync;
+authored service anchors;
+Fey Ring Network как authored world layer;
+tank/medical/service hooks из editor в runtime.
+16. Gameplay hooks
+
+Добавим нормальные связи:
+
+tank_service → реальные service kits;
+medical_support → реальные medical supply hooks;
+fey_ring → route state / schedule hooks;
+service terminals → authored world interactions.
+17. Relay / Registry инструменты
+
+Добавим helper-слой:
+
+поиск объекта по Registry ID;
+поиск по scriptTag;
+поиск по linkTarget;
+поиск ссылок на объект;
+jump-to-object from warnings/reference list.
+Что не добавляем сейчас
+
+Чтобы не расползтись:
+
+не делаем Papyrus-подобную VM;
+не делаем старый CK-style монолит;
+не делаем полный quest/dialogue/AI editor прямо сейчас;
+не делаем Fallout-совместимость как основную цель;
+не делаем BA2/DDS интеграцию как обязательный production слой.
+Самый правильный порядок внедрения
+Registry ID + weak refs + XREF
+Warnings / Validation
+Undo / Redo
+Layer Manager
+Unified Property Inspector
+Viewport gizmos / overlays / snap
+Prefab / Library
+Import Assistant
+BWLD/BWL2 export discipline
+Service/Fey authored glue
+Короткая формула
+
+Для нашего редактора добавляем не “Creation Kit целиком”, а его самые полезные функции:
+
+реестр объектов,
+связи по ID,
+инспектор свойств,
+viewport-инструменты,
+слои,
+validation,
+undo/redo,
+prefab library,
+import assistant,
+сильный world export.
+
+Считаем этот файл дополнительным референсом по ролям модулей редактора, а основу решений держим на нашем проекте и его каноне. Дальше логично собрать из этого уже чистое, короткое Editor_TZ.md без мусора и без Bethesda-перегруза
+

@@ -3,8 +3,63 @@
 #include <unordered_set>
 
 #include "../include/GameplayDescriptorRegistry.hpp"
+#include "../include/WorldSemanticAuthoring.hpp"
 
 namespace bunker {
+
+namespace {
+
+bool HasSemanticAnchor(const World& world, std::string_view scriptTag) {
+    return world.FindObjectByScriptTag(std::string(scriptTag)) != nullptr;
+}
+
+void AddMissingDependencyIssue(std::vector<ValidationIssue>& issues,
+                               const MapObject& object,
+                               std::string_view scriptTag,
+                               std::string_view dependencyTag) {
+    issues.push_back({
+        ValidationSeverity::Warning,
+        "missing_authored_dependency",
+        object.registryId,
+        "scriptTag '" + std::string(scriptTag) + "' is authored without required anchor '" +
+            std::string(dependencyTag) + "' in this world.",
+        std::string(scriptTag),
+        std::string(dependencyTag)
+    });
+}
+
+void ValidateSemanticDependencies(const World& world,
+                                  const MapObject& object,
+                                  std::string_view scriptTag,
+                                  std::vector<ValidationIssue>& issues) {
+    auto require = [&](std::string_view dependencyTag) {
+        if (!HasSemanticAnchor(world, dependencyTag)) {
+            AddMissingDependencyIssue(issues, object, scriptTag, dependencyTag);
+        }
+    };
+
+    for (const std::string_view dependencyTag : RequiredSemanticDependencyTags(scriptTag)) {
+        require(dependencyTag);
+    }
+}
+
+void AddAutoCreatedSemanticAnchorIssue(const MapObject& object, std::vector<ValidationIssue>& issues) {
+    std::string message = "Semantic anchor was auto-created and still needs authoring adoption before ship/export.";
+    if (IsPinnedSemanticAnchor(object)) {
+        message = "Semantic anchor was auto-created, then pinned in place. Adopt it as authored before ship/export.";
+    }
+
+    issues.push_back({
+        ValidationSeverity::Warning,
+        "auto_created_semantic_anchor",
+        object.registryId,
+        message,
+        object.scriptTag,
+        IsPinnedSemanticAnchor(object) ? "pinned" : "auto"
+    });
+}
+
+}  // namespace
 
 bool LooksLikeRegistryReference(const std::string& value) {
     return value.size() >= 2 && value.front() == '[' && value.back() == ']';
@@ -81,14 +136,45 @@ std::vector<ValidationIssue> ValidateWorldForRuntime(const World& world) {
                 });
             }
 
+            const char* defaultLinkTarget = DefaultGameplayDescriptorLinkTarget(spec->scriptTag);
+            if (defaultLinkTarget != nullptr) {
+                if (obj.linkTarget.empty() && !spec->requiresLinkTarget) {
+                    issues.push_back({
+                        ValidationSeverity::Warning,
+                        "missing_canonical_link_target",
+                        obj.registryId,
+                        "scriptTag '" + std::string(spec->scriptTag) + "' is missing its canonical linkTarget '" +
+                            std::string(defaultLinkTarget) + "'.",
+                        std::string(spec->scriptTag),
+                        std::string(defaultLinkTarget)
+                    });
+                } else if (!obj.linkTarget.empty() &&
+                           !linkLooksLikeRegistryRef &&
+                           obj.linkTarget != defaultLinkTarget) {
+                    issues.push_back({
+                        ValidationSeverity::Warning,
+                        "descriptor_link_target_mismatch",
+                        obj.registryId,
+                        "scriptTag '" + std::string(spec->scriptTag) + "' uses linkTarget '" + obj.linkTarget +
+                            "' instead of canonical '" + std::string(defaultLinkTarget) + "'.",
+                        std::string(spec->scriptTag),
+                        std::string(defaultLinkTarget)
+                    });
+                }
+            }
+
             if (spec->requiresLinkTarget && obj.linkTarget.empty()) {
                 issues.push_back({
                     ValidationSeverity::Error,
                     "missing_required_link_target",
                     obj.registryId,
-                    "scriptTag '" + std::string(spec->scriptTag) + "' requires a linkTarget."
+                    "scriptTag '" + std::string(spec->scriptTag) + "' requires a linkTarget.",
+                    std::string(spec->scriptTag),
+                    defaultLinkTarget != nullptr ? std::string(defaultLinkTarget) : std::string()
                 });
             }
+
+            ValidateSemanticDependencies(world, obj, spec->scriptTag, issues);
         } else if (!obj.scriptTag.empty() && ScriptTagRequiresLinkTarget(obj.scriptTag) && obj.linkTarget.empty()) {
             issues.push_back({
                 ValidationSeverity::Error,
@@ -103,6 +189,10 @@ std::vector<ValidationIssue> ValidateWorldForRuntime(const World& world) {
                 obj.registryId,
                 "Unknown scriptTag: '" + obj.scriptTag + "'."
             });
+        }
+
+        if (obj.semanticAutoCreated) {
+            AddAutoCreatedSemanticAnchorIssue(obj, issues);
         }
 
         if (obj.interaction == InteractionType::Transition && obj.linkTarget.empty()) {
@@ -145,6 +235,29 @@ int CountValidationWarnings(const std::vector<ValidationIssue>& issues) {
         }
     }
     return count;
+}
+
+int CountValidationIssuesByCode(const std::vector<ValidationIssue>& issues, std::string_view code) {
+    int count = 0;
+    for (const auto& issue : issues) {
+        if (issue.code == code) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool ExportPolicyBlocksWorld(const std::vector<ValidationIssue>& issues, ExportValidationPolicy policy, std::string& reason) {
+    if (policy == ExportValidationPolicy::BlockAutoCreatedSemanticAnchors) {
+        const int autoCreatedAnchorCount = CountValidationIssuesByCode(issues, "auto_created_semantic_anchor");
+        if (autoCreatedAnchorCount > 0) {
+            reason = "auto-created semantic anchors still present: " + std::to_string(autoCreatedAnchorCount);
+            return true;
+        }
+    }
+
+    reason.clear();
+    return false;
 }
 
 std::string BuildValidationSummary(const std::vector<ValidationIssue>& issues) {
