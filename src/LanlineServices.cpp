@@ -116,6 +116,30 @@ std::string CurrentLanlineTimestamp() {
     return out.str();
 }
 
+void NormalizeStringInventory(std::vector<std::string>& values) {
+    values.erase(
+        std::remove_if(
+            values.begin(),
+            values.end(),
+            [](const std::string& value) { return value.empty(); }),
+        values.end());
+    std::sort(values.begin(), values.end());
+    values.erase(std::unique(values.begin(), values.end()), values.end());
+}
+
+std::vector<std::string> CollectPendingSupportOrderIds(const std::vector<SupportOrder>& orders) {
+    std::vector<std::string> ids;
+    ids.reserve(orders.size());
+    for (const auto& order : orders) {
+        if (order.orderId.empty() || order.state == SupportOrderState::Delivered) {
+            continue;
+        }
+        ids.push_back(order.orderId);
+    }
+    NormalizeStringInventory(ids);
+    return ids;
+}
+
 void AddChatMessage(ChatChannel& channel, const std::string& author, const std::string& body, const std::string& timeLabel) {
     channel.messages.push_back({author, body, timeLabel});
 }
@@ -222,12 +246,21 @@ bool PublishVoicePresence(const VoiceSettings& voice,
 void DrawLanlineServicesLockedScreen(const ServicesUnlockState& unlockState) {
     ImGui::Text("Lanline Services: offline");
     ImGui::Separator();
-    if (!unlockState.firstTowerActivated) {
+    if (!unlockState.towerSyncRecovered) {
         ImGui::TextWrapped("Relay access unavailable. Restore and synchronize the first tower to open Lanline Services.");
         ImGui::BulletText("Requirement: first tower restored");
         ImGui::BulletText("Requirement: tower sync completed");
     } else {
         ImGui::TextWrapped("Relay node detected, but services are still restricted while Shelter 17 stabilizes.");
+        if (!unlockState.relaySubstationActive) {
+            ImGui::BulletText("Requirement: relay substation operational");
+        }
+        if (!unlockState.serviceBayActive) {
+            ImGui::BulletText("Requirement: service bay operational");
+        }
+        if (!unlockState.waterReclaimerActive) {
+            ImGui::BulletText("Requirement: water reclaimer operational");
+        }
     }
     ImGui::BulletText("Unlock tier: %s", ToLabel(unlockState.tier));
 }
@@ -552,21 +585,34 @@ ServicesUnlockState BuildServicesUnlockState(const SessionProfile& profile, cons
         ? worldState
         : FindWorldFieldState(profile, profile.selectedWorld);
     ServicesUnlockState state{};
-    state.firstTowerActivated = resolvedWorldState != nullptr && resolvedWorldState->towerSyncRecovered;
-    state.localRelayAvailable = state.firstTowerActivated;
-    state.backboneStable = resolvedWorldState != nullptr && IsStableRecoveryBackbone(profile, *resolvedWorldState);
-    state.intercityPortalsUnlocked = resolvedWorldState != nullptr && resolvedWorldState->feyRingIntercityUnlocked;
-    state.interserverPortalsUnlocked = state.backboneStable &&
+    state.towerSyncRecovered = resolvedWorldState != nullptr && resolvedWorldState->towerSyncRecovered;
+    state.firstTowerActivated = state.towerSyncRecovered;
+    state.localRelayAvailable = resolvedWorldState != nullptr &&
+        (resolvedWorldState->localRelayAvailable || state.towerSyncRecovered);
+    state.relaySubstationActive = resolvedWorldState != nullptr &&
+        IsRelaySubstationOperational(*resolvedWorldState);
+    state.serviceBayActive = resolvedWorldState != nullptr &&
+        IsServiceBayOperational(*resolvedWorldState);
+    state.waterReclaimerActive = resolvedWorldState != nullptr &&
+        IsWaterReclaimerOperational(*resolvedWorldState);
+    state.backboneStable = resolvedWorldState != nullptr &&
+        IsStableRecoveryBackbone(profile, *resolvedWorldState);
+    state.feyRingIntercityUnlocked = state.backboneStable &&
+        resolvedWorldState != nullptr &&
+        resolvedWorldState->feyRingIntercityUnlocked;
+    state.feyRingInterserverUnlocked = state.backboneStable &&
         resolvedWorldState != nullptr &&
         resolvedWorldState->feyRingInterserverUnlocked &&
         IsOrbitalUplinkOperational(profile, *resolvedWorldState) &&
         IsTradeNetworkOperational(profile, *resolvedWorldState);
+    state.intercityPortalsUnlocked = state.feyRingIntercityUnlocked;
+    state.interserverPortalsUnlocked = state.feyRingInterserverUnlocked;
 
-    if (!state.firstTowerActivated) {
+    if (!state.towerSyncRecovered) {
         state.tier = ServicesUnlockTier::Locked;
     } else if (!state.backboneStable) {
         state.tier = ServicesUnlockTier::TowerLinked;
-    } else if (!state.interserverPortalsUnlocked) {
+    } else if (!state.feyRingInterserverUnlocked) {
         state.tier = ServicesUnlockTier::BackboneStable;
     } else {
         state.tier = ServicesUnlockTier::RelayExpanded;
@@ -628,16 +674,34 @@ LanlineServicesState MakeLanlineServicesStateFromSave(const LanlineServicesSave&
     state.voice = save.voice;
     state.supportOrders = save.supportOrders;
     state.ownedCosmetics = save.ownedCosmetics;
+    NormalizeStringInventory(state.ownedCosmetics);
     return state;
 }
 
 LanlineServicesSave BuildLanlineServicesSave(const LanlineServicesState& state) {
     LanlineServicesSave save;
-    save.relayCredits = state.relayCredits;
+    save.relayCredits = std::max(0, state.relayCredits);
     save.voice = state.voice;
     save.supportOrders = state.supportOrders;
     save.ownedCosmetics = state.ownedCosmetics;
+    NormalizeStringInventory(save.ownedCosmetics);
     return save;
+}
+
+void ApplyLanlineServicesProfileSnapshot(LanlineServicesState& state, const LanlineServicesProfile& profile) {
+    state.relayCredits = std::max(0, profile.relayCredits);
+    if (!profile.ownedCosmetics.empty()) {
+        state.ownedCosmetics = profile.ownedCosmetics;
+        NormalizeStringInventory(state.ownedCosmetics);
+    }
+}
+
+void SyncLanlineServicesProfileSnapshot(LanlineServicesProfile& profile, const LanlineServicesState& state) {
+    profile.relayCredits = std::max(0, state.relayCredits);
+    profile.ownedCosmetics = state.ownedCosmetics;
+    NormalizeStringInventory(profile.ownedCosmetics);
+    profile.pendingSupportOrders = CollectPendingSupportOrderIds(state.supportOrders);
+    profile.cosmeticsShopSeen = profile.cosmeticsShopSeen || !profile.ownedCosmetics.empty();
 }
 
 ServiceHubMode ResolveLanlineServicesMode(const ServicesUnlockState& unlockState, const LanlineSessionState* sessionState) {
@@ -830,6 +894,8 @@ bool LoadLanlineServicesSave(const std::filesystem::path& path, LanlineServicesS
             outSave.ownedCosmetics.push_back(value);
         }
     }
+    outSave.relayCredits = std::max(0, outSave.relayCredits);
+    NormalizeStringInventory(outSave.ownedCosmetics);
     return true;
 }
 
@@ -857,7 +923,14 @@ void DrawLanlineServicesPanel(LanlineServicesState& state,
 
     ImGui::Text("Lanline Services Online");
     ImGui::BulletText("Unlock tier: %s", ToLabel(unlockState.tier));
+    ImGui::BulletText("Tower sync recovered: %s", unlockState.towerSyncRecovered ? "yes" : "no");
+    ImGui::BulletText("Local relay available: %s", unlockState.localRelayAvailable ? "yes" : "no");
+    ImGui::BulletText("Relay substation: %s", unlockState.relaySubstationActive ? "online" : "offline");
+    ImGui::BulletText("Service bay: %s", unlockState.serviceBayActive ? "online" : "offline");
+    ImGui::BulletText("Water reclaimer: %s", unlockState.waterReclaimerActive ? "online" : "offline");
     ImGui::BulletText("Backbone stable: %s", unlockState.backboneStable ? "yes" : "no");
+    ImGui::BulletText("Fey inter-city: %s", unlockState.feyRingIntercityUnlocked ? "unlocked" : "locked");
+    ImGui::BulletText("Fey inter-server: %s", unlockState.feyRingInterserverUnlocked ? "unlocked" : "locked");
     ImGui::Separator();
 
     if (ImGui::BeginTabBar("LanlineServicesTabs")) {

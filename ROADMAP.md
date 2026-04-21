@@ -88,6 +88,9 @@
 - `2026-04-21`
 - `build_verify_ninja_fresh`
 - после shared `undo/redo` stack и viewport authoring hardening снова успешно собраны `BunkerSmokeChecks`, `BunkerEditor`, `BunkerGame`, `BunkerLauncher`
+- `2026-04-21`
+- `build_verify_ninja_fresh`
+- после `prefab/library` strengthening, import-assistant hardening, `BWL5` export tightening и `Lanline Services` profile/runtime sync снова успешно собраны `BunkerSmokeChecks`, `BunkerEditor`, `BunkerGame`, `BunkerLauncher`, а `BunkerSmokeChecks.exe` прошёл
 - `2026-04-13`
 - `build_verify_ninja`
 - после добавления раннего `Pip-Pad AR / Echo Trace` authored-behavior снова успешно собраны `BunkerGame` и `BunkerEditor`
@@ -566,3 +569,5 @@
 - editor authoring surface hardened further: `MapObject/world/prefab` теперь хранят `editorLayer` c legacy `BWL3` infer, `BunkerEditor` получил layer manager (`show/hide`, `lock/unlock`, `filter`, `select first`) и unified inspector-секции с `display name/layer` editing и specialized runtime notes, а smoke-check покрывает layer roundtrip и backward-compatible layer inference
 - editor undo discipline is now shared instead of ad-hoc: `WorldEditorUndoStack` хранит add/remove/update/world-metadata/batch-edit дельты, коалесцирует повторные edits, `BunkerEditor` показывает dirty-state и next undo/redo actions, а smoke-check покрывает add/update/metadata/remove/batch roundtrip
 - world preview moved closer to a real authoring viewport: `BunkerEditor` теперь поддерживает grid-step snap, bounds gizmos для `width/depth`, drag player spawn, selected-object `XREF/link` overlay и interaction/service radius overlays поверх уже существующего selection/focus/semantic preview flow
+- editor prefab/import/export package moved out of “early stub” territory: shared prefab records теперь держат stable metadata (`id / target / source / completion`), authored world хранит `prefabSourceId` в `BWL5`, import assistant собирает typed prefab drafts и безопасно отправляет их в library/current draft, а export report стал prefab-aware и показывает format/layer/prefab integrity summary
+- `Lanline Services` glue tightened beyond UI-only panel: unlock-state теперь явно показывает `tower / relay / service bay / water reclaimer / Fey` progression, launcher/runtime sync-ят service snapshot обратно в `SessionProfile`, а smoke-check покрывает unlock resolution и services save/profile roundtrip

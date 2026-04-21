@@ -307,63 +307,111 @@
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
-  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /FoCMakeFiles\\BunkerSmokeChecks.dir\\tests\\SmokeChecks.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\tests\\SmokeChecks.cpp",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\tests\\SmokeChecks.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\tests\\SmokeChecks.cpp",
   "file": "D:/Projects/Game_Project/tests/SmokeChecks.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/tests/SmokeChecks.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
-  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\PrefabLibrary.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\PrefabLibrary.cpp",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\PrefabLibrary.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\PrefabLibrary.cpp",
   "file": "D:/Projects/Game_Project/src/PrefabLibrary.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/PrefabLibrary.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
-  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\GameplayDescriptorRegistry.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\GameplayDescriptorRegistry.cpp",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\GameplayDescriptorRegistry.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\GameplayDescriptorRegistry.cpp",
   "file": "D:/Projects/Game_Project/src/GameplayDescriptorRegistry.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/GameplayDescriptorRegistry.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
-  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\LaunchSession.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\LaunchSession.cpp",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\LanlineServices.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\LanlineServices.cpp",
+  "file": "D:/Projects/Game_Project/src/LanlineServices.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/LanlineServices.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\LanlineSession.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\LanlineSession.cpp",
+  "file": "D:/Projects/Game_Project/src/LanlineSession.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/LanlineSession.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\LaunchSession.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\LaunchSession.cpp",
   "file": "D:/Projects/Game_Project/src/LaunchSession.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/LaunchSession.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
-  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\SessionProfiles.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\SessionProfiles.cpp",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\SessionProfiles.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\SessionProfiles.cpp",
   "file": "D:/Projects/Game_Project/src/SessionProfiles.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/SessionProfiles.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
-  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\World.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\World.cpp",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\World.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\World.cpp",
   "file": "D:/Projects/Game_Project/src/World.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/World.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
-  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\WorldEditorUndo.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\WorldEditorUndo.cpp",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\WorldEditorUndo.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\WorldEditorUndo.cpp",
   "file": "D:/Projects/Game_Project/src/WorldEditorUndo.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/WorldEditorUndo.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
-  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\WorldExport.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\WorldExport.cpp",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\WorldExport.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\WorldExport.cpp",
   "file": "D:/Projects/Game_Project/src/WorldExport.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/WorldExport.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
-  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\WorldSemanticAuthoring.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\WorldSemanticAuthoring.cpp",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\WorldSemanticAuthoring.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\WorldSemanticAuthoring.cpp",
   "file": "D:/Projects/Game_Project/src/WorldSemanticAuthoring.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/WorldSemanticAuthoring.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
-  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\WorldValidation.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\WorldValidation.cpp",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\WorldValidation.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\WorldValidation.cpp",
   "file": "D:/Projects/Game_Project/src/WorldValidation.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/WorldValidation.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\external\\imgui\\imgui.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\external\\imgui\\imgui.cpp",
+  "file": "D:/Projects/Game_Project/external/imgui/imgui.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/external/imgui/imgui.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\external\\imgui\\imgui_draw.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\external\\imgui\\imgui_draw.cpp",
+  "file": "D:/Projects/Game_Project/external/imgui/imgui_draw.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/external/imgui/imgui_draw.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\external\\imgui\\imgui_tables.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\external\\imgui\\imgui_tables.cpp",
+  "file": "D:/Projects/Game_Project/external/imgui/imgui_tables.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/external/imgui/imgui_tables.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\external\\imgui\\imgui_widgets.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\external\\imgui\\imgui_widgets.cpp",
+  "file": "D:/Projects/Game_Project/external/imgui/imgui_widgets.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/external/imgui/imgui_widgets.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\external\\imgui\\backends\\imgui_impl_glfw.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\external\\imgui\\backends\\imgui_impl_glfw.cpp",
+  "file": "D:/Projects/Game_Project/external/imgui/backends/imgui_impl_glfw.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/external/imgui/backends/imgui_impl_glfw.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\external\\imgui\\backends\\imgui_impl_opengl3.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\external\\imgui\\backends\\imgui_impl_opengl3.cpp",
+  "file": "D:/Projects/Game_Project/external/imgui/backends/imgui_impl_opengl3.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/external/imgui/backends/imgui_impl_opengl3.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",

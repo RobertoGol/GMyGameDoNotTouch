@@ -787,6 +787,7 @@ int main() {
     if (bunker::LoadLanlineServicesSave(bunker::DefaultLanlineServicesSavePath(), lanlineSave)) {
         lanlineServices = bunker::MakeLanlineServicesStateFromSave(lanlineSave, static_cast<std::int64_t>(std::time(nullptr)));
     }
+    bunker::ApplyLanlineServicesProfileSnapshot(lanlineServices, sessionProfile.lanlineServices);
     std::snprintf(launcherState.login, sizeof(launcherState.login), "%s", sessionProfile.account.username.c_str());
     const char* characters[] = {"Scout", "Mechanic", "Commander"};
     const char* sessionModes[] = {"Solo", "LAN Host", "LAN Client"};
@@ -1112,6 +1113,7 @@ int main() {
         const auto* previewWorldState = bunker::FindWorldFieldState(previewProfile, previewProfile.selectedWorld);
         const auto servicesUnlock = bunker::BuildServicesUnlockState(previewProfile, previewWorldState);
         bunker::DrawLanlineServicesPanel(lanlineServices, servicesUnlock, static_cast<std::int64_t>(std::time(nullptr)));
+        bunker::SyncLanlineServicesProfileSnapshot(sessionProfile.lanlineServices, lanlineServices);
         bunker::SaveLanlineServicesSave(
             bunker::BuildLanlineServicesSave(lanlineServices),
             bunker::DefaultLanlineServicesSavePath());

@@ -650,11 +650,11 @@ build BunkerEditor.exe: CXX_EXECUTABLE_LINKER__BunkerEditor_Debug CMakeFiles\Bun
 #############################################
 # Order-only phony target for BunkerSmokeChecks
 
-build cmake_object_order_depends_target_BunkerSmokeChecks: phony || .
+build cmake_object_order_depends_target_BunkerSmokeChecks: phony || cmake_object_order_depends_target_glfw
 
 build CMakeFiles\BunkerSmokeChecks.dir\tests\SmokeChecks.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\tests\SmokeChecks.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
   CONFIG = Debug
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
   INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\tests
@@ -664,7 +664,7 @@ build CMakeFiles\BunkerSmokeChecks.dir\tests\SmokeChecks.cpp.obj: CXX_COMPILER__
 
 build CMakeFiles\BunkerSmokeChecks.dir\src\PrefabLibrary.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\PrefabLibrary.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
   CONFIG = Debug
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
   INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
@@ -674,7 +674,27 @@ build CMakeFiles\BunkerSmokeChecks.dir\src\PrefabLibrary.cpp.obj: CXX_COMPILER__
 
 build CMakeFiles\BunkerSmokeChecks.dir\src\GameplayDescriptorRegistry.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\GameplayDescriptorRegistry.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
   CONFIG = Debug
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\src\LanlineServices.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\LanlineServices.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\src\LanlineSession.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\LanlineSession.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
   INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
@@ -684,7 +704,7 @@ build CMakeFiles\BunkerSmokeChecks.dir\src\GameplayDescriptorRegistry.cpp.obj: C
 
 build CMakeFiles\BunkerSmokeChecks.dir\src\LaunchSession.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\LaunchSession.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
   CONFIG = Debug
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
   INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
@@ -694,7 +714,7 @@ build CMakeFiles\BunkerSmokeChecks.dir\src\LaunchSession.cpp.obj: CXX_COMPILER__
 
 build CMakeFiles\BunkerSmokeChecks.dir\src\SessionProfiles.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\SessionProfiles.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
   CONFIG = Debug
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
   INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
@@ -704,7 +724,7 @@ build CMakeFiles\BunkerSmokeChecks.dir\src\SessionProfiles.cpp.obj: CXX_COMPILER
 
 build CMakeFiles\BunkerSmokeChecks.dir\src\World.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\World.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
   CONFIG = Debug
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
   INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
@@ -714,7 +734,7 @@ build CMakeFiles\BunkerSmokeChecks.dir\src\World.cpp.obj: CXX_COMPILER__BunkerSm
 
 build CMakeFiles\BunkerSmokeChecks.dir\src\WorldEditorUndo.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\WorldEditorUndo.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
   CONFIG = Debug
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
   INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
@@ -724,7 +744,7 @@ build CMakeFiles\BunkerSmokeChecks.dir\src\WorldEditorUndo.cpp.obj: CXX_COMPILER
 
 build CMakeFiles\BunkerSmokeChecks.dir\src\WorldExport.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\WorldExport.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
   CONFIG = Debug
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
   INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
@@ -734,7 +754,7 @@ build CMakeFiles\BunkerSmokeChecks.dir\src\WorldExport.cpp.obj: CXX_COMPILER__Bu
 
 build CMakeFiles\BunkerSmokeChecks.dir\src\WorldSemanticAuthoring.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\WorldSemanticAuthoring.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
   CONFIG = Debug
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
   INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
@@ -744,10 +764,70 @@ build CMakeFiles\BunkerSmokeChecks.dir\src\WorldSemanticAuthoring.cpp.obj: CXX_C
 
 build CMakeFiles\BunkerSmokeChecks.dir\src\WorldValidation.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\src\WorldValidation.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
   CONFIG = Debug
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
   INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
   OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
   OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\external\imgui\imgui.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\external\imgui
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\external\imgui\imgui_draw.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui_draw.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\external\imgui
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\external\imgui\imgui_tables.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui_tables.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\external\imgui
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\external\imgui\imgui_widgets.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\external\imgui\imgui_widgets.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\external\imgui
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\external\imgui\backends\imgui_impl_glfw.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\external\imgui\backends\imgui_impl_glfw.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\external\imgui\backends
+  TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
+  TARGET_PDB = BunkerSmokeChecks.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+
+build CMakeFiles\BunkerSmokeChecks.dir\external\imgui\backends\imgui_impl_opengl3.cpp.obj: CXX_COMPILER__BunkerSmokeChecks_unscanned_Debug D$:\Projects\Game_Project\external\imgui\backends\imgui_impl_opengl3.cpp || cmake_object_order_depends_target_BunkerSmokeChecks
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive-
+  INCLUDES = -ID:\Projects\Game_Project\include -ID:\Projects\Game_Project\external -ID:\Projects\Game_Project\external\glfw\include -ID:\Projects\Game_Project\external\imgui -ID:\Projects\Game_Project\external\imgui\backends
+  OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
+  OBJECT_FILE_DIR = CMakeFiles\BunkerSmokeChecks.dir\external\imgui\backends
   TARGET_COMPILE_PDB = CMakeFiles\BunkerSmokeChecks.dir\
   TARGET_PDB = BunkerSmokeChecks.pdb
   TARGET_SUPPORT_DIR = CMakeFiles\BunkerSmokeChecks.dir
@@ -760,11 +840,11 @@ build CMakeFiles\BunkerSmokeChecks.dir\src\WorldValidation.cpp.obj: CXX_COMPILER
 #############################################
 # Link the executable BunkerSmokeChecks.exe
 
-build BunkerSmokeChecks.exe: CXX_EXECUTABLE_LINKER__BunkerSmokeChecks_Debug CMakeFiles\BunkerSmokeChecks.dir\tests\SmokeChecks.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\PrefabLibrary.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\GameplayDescriptorRegistry.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\LaunchSession.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\SessionProfiles.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\World.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\WorldEditorUndo.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\WorldExport.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\WorldSemanticAuthoring.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\WorldValidation.cpp.obj
+build BunkerSmokeChecks.exe: CXX_EXECUTABLE_LINKER__BunkerSmokeChecks_Debug CMakeFiles\BunkerSmokeChecks.dir\tests\SmokeChecks.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\PrefabLibrary.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\GameplayDescriptorRegistry.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\LanlineServices.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\LanlineSession.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\LaunchSession.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\SessionProfiles.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\World.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\WorldEditorUndo.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\WorldExport.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\WorldSemanticAuthoring.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\src\WorldValidation.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\external\imgui\imgui.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\external\imgui\imgui_draw.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\external\imgui\imgui_tables.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\external\imgui\imgui_widgets.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\external\imgui\backends\imgui_impl_glfw.cpp.obj CMakeFiles\BunkerSmokeChecks.dir\external\imgui\backends\imgui_impl_opengl3.cpp.obj | external\glfw\src\glfw3.lib || external\glfw\src\glfw3.lib
   CONFIG = Debug
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -MDd
   LINK_FLAGS = /machine:x64 /debug /INCREMENTAL /subsystem:console
-  LINK_LIBRARIES = kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib
+  LINK_LIBRARIES = external\glfw\src\glfw3.lib  opengl32.lib  kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib
   OBJECT_DIR = CMakeFiles\BunkerSmokeChecks.dir
   POST_BUILD = cd .
   PRE_LINK = cd .

@@ -137,6 +137,10 @@ const char* WorldObjectReferenceFieldLabel(WorldObjectReferenceField field) {
     }
 }
 
+const char* CurrentWorldBinaryFormatLabel() {
+    return "BWL5";
+}
+
 std::string NormalizeEditorLayerName(std::string_view layerName) {
     std::string trimmed = TrimLayerCopy(layerName);
     if (trimmed.empty()) {
@@ -212,10 +216,11 @@ bool World::Load(const std::string& path) {
     char header[4]{};
     file.read(header, 4);
     const std::string format(header, 4);
-    const bool hasExtendedObjectData = (format == "BWL2" || format == "BWL3" || format == "BWL4");
-    const bool hasSemanticAuthoringState = (format == "BWL3" || format == "BWL4");
-    const bool hasEditorLayerData = (format == "BWL4");
-    if (format != "BWLD" && format != "BWL2" && format != "BWL3" && format != "BWL4") {
+    const bool hasExtendedObjectData = (format == "BWL2" || format == "BWL3" || format == "BWL4" || format == "BWL5");
+    const bool hasSemanticAuthoringState = (format == "BWL3" || format == "BWL4" || format == "BWL5");
+    const bool hasEditorLayerData = (format == "BWL4" || format == "BWL5");
+    const bool hasPrefabSourceData = (format == "BWL5");
+    if (format != "BWLD" && format != "BWL2" && format != "BWL3" && format != "BWL4" && format != "BWL5") {
         return false;
     }
 
@@ -249,6 +254,9 @@ bool World::Load(const std::string& path) {
                 return false;
             }
             if (hasEditorLayerData && !ReadString(file, object.editorLayer)) {
+                return false;
+            }
+            if (hasPrefabSourceData && !ReadString(file, object.prefabSourceId)) {
                 return false;
             }
         }
@@ -299,7 +307,7 @@ bool World::Save(const std::string& path) const {
         return false;
     }
 
-    file.write("BWL4", 4);
+    file.write(CurrentWorldBinaryFormatLabel(), 4);
     WriteString(file, metadata.name);
     WriteString(file, metadata.biome);
     WriteString(file, metadata.objective);
@@ -319,6 +327,7 @@ bool World::Save(const std::string& path) const {
         WriteString(file, object.linkTarget);
         const std::string normalizedLayer = NormalizeEditorLayerName(object.editorLayer);
         WriteString(file, normalizedLayer.empty() ? DefaultEditorLayerName(object) : normalizedLayer);
+        WriteString(file, object.prefabSourceId);
         file.write(reinterpret_cast<const char*>(&interaction), sizeof(interaction));
         file.write(reinterpret_cast<const char*>(&category), sizeof(category));
         file.write(reinterpret_cast<const char*>(&object.x), sizeof(object.x));

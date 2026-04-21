@@ -49,6 +49,7 @@ struct MapObject {
     std::array<std::string, 4> manualLootIds{};
     std::string scriptTag;
     std::string linkTarget;
+    std::string prefabSourceId;
     bool semanticAutoCreated = false;
     bool semanticLayoutPinned = false;
     std::string editorLayer;

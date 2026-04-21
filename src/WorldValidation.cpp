@@ -1,5 +1,6 @@
 #include "../include/WorldValidation.hpp"
 
+#include <cmath>
 #include <unordered_set>
 
 #include "../include/GameplayDescriptorRegistry.hpp"
@@ -68,6 +69,47 @@ bool LooksLikeRegistryReference(const std::string& value) {
 std::vector<ValidationIssue> ValidateWorldForRuntime(const World& world) {
     std::vector<ValidationIssue> issues;
     std::unordered_set<std::string> registryIds;
+
+    if (world.metadata.name.empty()) {
+        issues.push_back({
+            ValidationSeverity::Error,
+            "missing_world_name",
+            "",
+            "World metadata name is empty."
+        });
+    }
+    if (world.metadata.biome.empty()) {
+        issues.push_back({
+            ValidationSeverity::Warning,
+            "missing_world_biome",
+            "",
+            "World metadata biome is empty."
+        });
+    }
+    if (world.metadata.objective.empty()) {
+        issues.push_back({
+            ValidationSeverity::Warning,
+            "missing_world_objective",
+            "",
+            "World metadata objective is empty."
+        });
+    }
+    if (!std::isfinite(world.metadata.playerSpawnX) || !std::isfinite(world.metadata.playerSpawnY)) {
+        issues.push_back({
+            ValidationSeverity::Error,
+            "invalid_player_spawn",
+            "",
+            "World player spawn contains non-finite coordinates."
+        });
+    }
+    if (world.objects.empty()) {
+        issues.push_back({
+            ValidationSeverity::Error,
+            "empty_world_object_table",
+            "",
+            "World contains no authored objects."
+        });
+    }
 
     for (const auto& obj : world.objects) {
         if (obj.registryId.empty()) {

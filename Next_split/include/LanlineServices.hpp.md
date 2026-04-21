@@ -1,26 +1,13 @@
 # include/LanlineServices.hpp
 
-Основные задачи из `Next.md`:
+Уже закрыто:
 
-- ввести или дотянуть save-модель:
-  - `LanlineServicesSave`
-  - `MakeLanlineServicesStateFromSave(...)`
-  - `BuildLanlineServicesSave(...)`
-  - `DefaultLanlineServicesSavePath()`
-  - `SaveLanlineServicesSave(...)`
-  - `LoadLanlineServicesSave(...)`
-- расширить `SupportOrder`:
-  - `orderId`
-  - `itemId`
-  - `itemLabel`
-  - `destinationNode`
-  - `state`
-  - `createdAtUnix`
-  - `etaUnix`
-  - `paymentCurrency`
-- сохранить жесткую границу: никаких weapon unlocks, готовых танков и `pay-to-win` через support
-- держать dual-currency модель:
-  - `InGame`
-  - `SymbolicSupport`
+- формальный save/load bridge для `Lanline Services`: `LanlineServicesSave`, `MakeLanlineServicesStateFromSave(...)`, `BuildLanlineServicesSave(...)`, `DefaultLanlineServicesSavePath()`, `Save...`, `Load...`
+- `SupportOrder` расширен до стабильного persistence-контракта: `orderId`, `itemId`, `itemLabel`, `destinationNode`, `state`, `paymentCurrency`, `createdAtUnix`, `etaUnix`
+- dual-currency и анти-`pay-to-win` границы закреплены в shared catalog rules
+- unlock-state теперь держит explicit `tower / relay / service / water / fey` flags поверх tier, а launcher/runtime умеют синхронизировать service snapshot обратно в `SessionProfile`
 
-Смысл этого файла в старом `Next.md`: сделать `Lanline Services` не просто UI-панелью, а формальным контрактом для launcher/runtime/persistence.
+Следующее отсюда:
+
+- довести service orders от UI/persistence до более явного runtime effect layer
+- расширять launcher/runtime summaries без превращения `Lanline Services` в интернет-браузер или полноценный online backend

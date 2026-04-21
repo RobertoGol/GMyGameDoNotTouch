@@ -1,32 +1,13 @@
 # src/LanlineServices.cpp
 
-Из `Next.md` по этому файлу:
+Уже закрыто:
 
-## Unlock logic
+- `ServicesUnlockState` строится не из абстрактного “магического интернета”, а из `WorldFieldState` + operational checks recovery/backbone
+- shared save/load bridge реально работает и покрыт smoke roundtrip
+- launcher/runtime sync-ят `Lanline Services` state с `SessionProfile`, чтобы credits/cosmetics/pending orders не расходились по разным сохранениям
+- support catalog остаётся dual-currency и anti-pay-to-win
 
-- увод unlock-логики от абстрактного `regional grid` в сторону `WorldFieldState`
-- строить `ServicesUnlockState` от первой вышки и сервисного backbone:
-  - `towerSyncRecovered`
-  - `relaySubstationActive`
-  - `serviceBayActive`
-  - `waterReclaimerActive`
-  - `feyRingIntercityUnlocked`
-  - `feyRingInterserverUnlocked`
+Следующее:
 
-## Save/load bridge
-
-- `MakeLanlineServicesStateFromSave(...)`
-- `BuildLanlineServicesSave(...)`
-- реальный serialize/deserialize в файл состояния
-
-## UI and catalog
-
-- разводить support-поток по понятным вкладкам
-- не продавать оружие, готовые танки и прямые боевые преимущества
-- держать адекватный default catalog
-
-Связанные места:
-
-- `include/LanlineServices.hpp`
-- `Launcher/src/Launcher_Main.cpp`
-- `src/GameRuntime.cpp`
+- привязать support-order delivery к более явным runtime/logistics эффектам
+- дожать service/fey summaries в launcher/runtime поверх уже существующего persistence/glue

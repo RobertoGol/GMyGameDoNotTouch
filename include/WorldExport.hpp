@@ -166,7 +166,10 @@ ValidationBaselineDelta CompareValidationToSnapshot(const std::vector<Validation
 ValidationBaselineDelta CompareValidationToBaseline(const std::vector<ValidationIssue>& issues, const std::filesystem::path& worldPath);
 std::string BuildValidationSnapshotDeltaReport(const ValidationBaselineDelta& delta, std::string_view label);
 std::string BuildValidationBaselineDeltaReport(const ValidationBaselineDelta& delta);
-std::string BuildWorldValidationReport(const std::vector<ValidationIssue>& issues, const WorldExportResult& result);
+std::string BuildWorldValidationReport(
+    const World& world,
+    const std::vector<ValidationIssue>& issues,
+    const WorldExportResult& result);
 WorldExportResult ExportWorldWithValidation(const World& world,
     const std::filesystem::path& path,
     ExportValidationPolicy policy = ExportValidationPolicy::AllowWarnings);

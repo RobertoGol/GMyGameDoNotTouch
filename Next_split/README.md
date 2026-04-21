@@ -30,8 +30,8 @@
 
 Это не новый источник истины по проекту, а разбор содержимого старого `Next.md`, чтобы им было проще пользоваться и быстрее дочищать хвосты.
 
-Текущий активный пакет после последнего editor-hardening прохода:
+Текущий активный пакет:
 
-- `Next_split/Editor/src/Editor_Main.cpp.md` for `prefab/library` + `import assistant`
-- затем `Next_split/include/LanlineServices.hpp.md` / `Next_split/src/LanlineServices.cpp.md`
-- затем launcher/runtime хвосты по соответствующим split-файлам
+- `Next_split/include/LanlineServices.hpp.md` / `Next_split/src/LanlineServices.cpp.md`
+- затем `Next_split/src/GameRuntime.cpp.md` / `Next_split/Launcher/src/Launcher_Main.cpp.md`
+- editor split-файл теперь держим только для follow-up UX, а не как главный активный блок

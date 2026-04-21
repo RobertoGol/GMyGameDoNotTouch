@@ -94,6 +94,8 @@ add_executable(BunkerSmokeChecks
     tests/SmokeChecks.cpp
     src/PrefabLibrary.cpp
     src/GameplayDescriptorRegistry.cpp
+    src/LanlineServices.cpp
+    src/LanlineSession.cpp
     src/LaunchSession.cpp
     src/SessionProfiles.cpp
     src/World.cpp
@@ -101,8 +103,9 @@ add_executable(BunkerSmokeChecks
     src/WorldExport.cpp
     src/WorldSemanticAuthoring.cpp
     src/WorldValidation.cpp
+    ${IMGUI_SRC}
 )
-target_include_directories(BunkerSmokeChecks PRIVATE ${COMMON_INCLUDE_DIRS})
+configure_bunker_target(BunkerSmokeChecks)
 add_test(NAME BunkerSmokeChecks COMMAND BunkerSmokeChecks)
 
 message(STATUS "Configured targets: BunkerGame, BunkerLauncher, BunkerEditor")

@@ -18,6 +18,7 @@
 
 #include "../../include/AppPaths.hpp"
 #include "../../include/GameplayDescriptorRegistry.hpp"
+#include "../../include/PrefabLibrary.hpp"
 #include "../../include/RegistryId.hpp"
 #include "../../include/SessionProfiles.hpp"
 #include "../../include/World.hpp"
@@ -32,6 +33,9 @@ struct ImportedConcept {
     std::string sourceLabel;
     std::string targetType;
     std::string completionMode;
+    std::string prefabId;
+    std::string prefabLabel;
+    bool addedToLibrary = false;
 };
 
 #if 0
@@ -1101,6 +1105,8 @@ int main() {
     int targetTypeIndex = 0;
     int completionIndex = 1;
     bool showImportAssistant = true;
+    bool importToPrefabLibrary = true;
+    bool seedDraftFromImport = true;
     bool previewAsPlayer = true;
     bool snapToGrid = true;
     float snapStep = 1.0f;
@@ -1143,11 +1149,11 @@ int main() {
     editor_support::LoadPrefabLibrary(savedPrefabs);
 
     const char* targetTypes[] = {
-        "Placeable Object",
-        "Usable Item",
-        "Vehicle Module",
-        "Location Blockout",
-        "Terminal/Interactive",
+        "Prop",
+        "Item",
+        "Structure",
+        "Environment",
+        "Scene Module",
     };
 
     const char* completionModes[] = {
@@ -1316,6 +1322,108 @@ int main() {
         const float step = resolvedSnapStep();
         return std::max(step, std::round(value / step) * step);
     };
+    auto makeFriendlyConceptLabel = [&](std::string_view sourceLabel) {
+        std::string label = std::filesystem::path(std::string(sourceLabel)).stem().string();
+        if (label.empty()) {
+            label = std::string(sourceLabel);
+        }
+        if (label.empty()) {
+            label = "Imported Concept";
+        }
+        for (char& ch : label) {
+            if (ch == '_' || ch == '-') {
+                ch = ' ';
+            }
+        }
+        return label;
+    };
+    auto makeUniquePrefabId = [&](std::string_view preferredLabel, std::string_view preferredId = std::string_view{}) {
+        std::string baseId = bunker::NormalizePrefabRecordId(
+            preferredId.empty() ? preferredLabel : preferredId);
+        if (baseId.empty()) {
+            baseId = "prefab_captured_prefab";
+        }
+        std::string uniqueId = baseId;
+        for (int suffix = 2;
+             bunker::FindPrefabRecordIndexById(savedPrefabs, uniqueId) >= 0;
+             ++suffix) {
+            uniqueId = baseId + "_" + std::to_string(suffix);
+        }
+        return uniqueId;
+    };
+    auto syncDraftFromPrefab = [&](const SavedPrefab& prefab) {
+        CopyStringToBuffer(prefab.object.registryId, registryInput, IM_ARRAYSIZE(registryInput));
+        CopyStringToBuffer(prefab.object.displayName, objectNameInput, IM_ARRAYSIZE(objectNameInput));
+        CopyStringToBuffer(prefab.object.editorLayer, draftLayerInput, IM_ARRAYSIZE(draftLayerInput));
+        useDraftInteractionOverride = true;
+        useDraftCategoryOverride = true;
+        draftInteractionOverride = prefab.object.interaction;
+        draftCategoryOverride = prefab.object.category;
+    };
+    auto buildImportedPrefabDraft = [&](std::string_view sourceLabel, int targetIndex, int completionModeIndex) {
+        SavedPrefab prefab;
+        prefab.label = makeFriendlyConceptLabel(sourceLabel);
+        prefab.id = makeUniquePrefabId(prefab.label);
+        prefab.targetType = targetTypes[targetIndex];
+        prefab.sourceLabel = std::string(sourceLabel);
+        prefab.completionMode = completionModes[completionModeIndex];
+
+        bunker::MapObject object;
+        object.registryId = "[%prefab_seed_" + prefab.id.substr(std::min<std::size_t>(7, prefab.id.size())) + "]";
+        object.displayName = prefab.label;
+        object.health = 100.0f;
+        object.discovered = true;
+
+        switch (targetIndex) {
+        case 0:  // Prop
+            object.interaction = bunker::InteractionType::Static;
+            object.category = bunker::ObjectCategory::Structure;
+            object.width = 1.4f;
+            object.depth = 1.2f;
+            object.height = 1.4f;
+            object.blocksMovement = false;
+            break;
+        case 1:  // Item
+            object.interaction = bunker::InteractionType::Container;
+            object.category = bunker::ObjectCategory::Container;
+            object.width = 0.9f;
+            object.depth = 0.9f;
+            object.height = 0.9f;
+            object.blocksMovement = false;
+            break;
+        case 2:  // Structure
+            object.interaction = bunker::InteractionType::Static;
+            object.category = bunker::ObjectCategory::Structure;
+            object.width = 3.2f;
+            object.depth = 3.2f;
+            object.height = 3.4f;
+            object.blocksMovement = true;
+            break;
+        case 3:  // Environment
+            object.interaction = bunker::InteractionType::Static;
+            object.category = bunker::ObjectCategory::Landmark;
+            object.width = 5.0f;
+            object.depth = 4.0f;
+            object.height = 3.6f;
+            object.blocksMovement = true;
+            break;
+        case 4:  // Scene Module
+        default:
+            object.interaction = bunker::InteractionType::Transition;
+            object.category = bunker::ObjectCategory::Landmark;
+            object.width = 6.0f;
+            object.depth = 4.5f;
+            object.height = 3.8f;
+            object.blocksMovement = false;
+            object.linkTarget = "next_zone";
+            break;
+        }
+
+        object.editorLayer = bunker::DefaultEditorLayerName(object);
+        prefab.object = object;
+        bunker::NormalizePrefabRecord(prefab);
+        return prefab;
+    };
     auto focusObjectInEditor = [&](int objectIndex, float zoom = 1.4f) {
         if (objectIndex < 0 || objectIndex >= static_cast<int>(editorWorld.objects.size())) {
             return false;
@@ -1401,6 +1509,7 @@ int main() {
                     beforeObject.manualLootIds != afterObject.manualLootIds ||
                     beforeObject.scriptTag != afterObject.scriptTag ||
                     beforeObject.linkTarget != afterObject.linkTarget ||
+                    beforeObject.prefabSourceId != afterObject.prefabSourceId ||
                     beforeObject.semanticAutoCreated != afterObject.semanticAutoCreated ||
                     beforeObject.semanticLayoutPinned != afterObject.semanticLayoutPinned ||
                     beforeObject.editorLayer != afterObject.editorLayer) {
@@ -1730,6 +1839,7 @@ int main() {
                 if (placed.editorLayer.empty()) {
                     placed.editorLayer = bunker::DefaultEditorLayerName(placed);
                 }
+                placed.prefabSourceId = savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)].id;
                 editorWorld.AddObject(placed);
                 undoStack.PushObjectAdded(
                     "Place prefab: " + savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)].label,
@@ -2344,6 +2454,50 @@ int main() {
                 }
                 ImGui::EndChild();
             }
+            ImGui::Separator();
+            ImGui::TextDisabled("Prefab / Library");
+            if (selectedObject.prefabSourceId.empty()) {
+                ImGui::TextDisabled("Selected object is not linked to any prefab source.");
+            } else {
+                const int selectedPrefabSourceIndex = bunker::FindPrefabRecordIndexById(savedPrefabs, selectedObject.prefabSourceId);
+                const auto prefabUsageIndices = bunker::CollectPrefabUsageObjectIndices(editorWorld, selectedObject.prefabSourceId);
+                if (selectedPrefabSourceIndex >= 0) {
+                    const auto& sourcePrefab = savedPrefabs[static_cast<std::size_t>(selectedPrefabSourceIndex)];
+                    ImGui::TextWrapped("Prefab source: %s", sourcePrefab.label.c_str());
+                    ImGui::TextDisabled("Prefab ID: %s", sourcePrefab.id.c_str());
+                    ImGui::TextDisabled("Target: %s", sourcePrefab.targetType.c_str());
+                    if (!sourcePrefab.sourceLabel.empty()) {
+                        ImGui::TextDisabled("Source: %s", sourcePrefab.sourceLabel.c_str());
+                    }
+                    ImGui::BulletText("Objects in workspace from this prefab: %d", static_cast<int>(prefabUsageIndices.size()));
+                    if (ImGui::Button("Focus Source Prefab", ImVec2(160.0f, 0.0f))) {
+                        selectedPrefabIndex = selectedPrefabSourceIndex;
+                        CopyStringToBuffer(sourcePrefab.label, prefabLabelInput, IM_ARRAYSIZE(prefabLabelInput));
+                        statusText = "Focused source prefab for selected object.";
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Update Prefab From Selected", ImVec2(180.0f, 0.0f))) {
+                        SavedPrefab updatedPrefab = sourcePrefab;
+                        updatedPrefab.label = (prefabLabelInput[0] != '\0') ? prefabLabelInput : sourcePrefab.label;
+                        updatedPrefab.object = selectedObject;
+                        updatedPrefab.object.prefabSourceId.clear();
+                        updatedPrefab.sourceLabel = editorWorld.metadata.name + " :: " + selectedObject.registryId;
+                        updatedPrefab.completionMode = "Captured from authored world";
+                        bunker::NormalizePrefabRecord(updatedPrefab);
+                        savedPrefabs[static_cast<std::size_t>(selectedPrefabSourceIndex)] = updatedPrefab;
+                        statusText = "Updated source prefab from selected world object.";
+                    }
+                } else {
+                    ImGui::TextColored(
+                        ImVec4(0.92f, 0.65f, 0.24f, 1.0f),
+                        "Prefab source is missing from library: %s",
+                        selectedObject.prefabSourceId.c_str());
+                    if (ImGui::Button("Clear Missing Prefab Link", ImVec2(180.0f, 0.0f))) {
+                        selectedObject.prefabSourceId.clear();
+                        statusText = "Cleared broken prefab source link from selected object.";
+                    }
+                }
+            }
             const auto semanticDependencyTags = RequiredSemanticDependencyTagsForScript(selectedObject.scriptTag);
             if (!semanticDependencyTags.empty()) {
                 const int semanticRootIndex = selectedObjectIndex;
@@ -2817,10 +2971,30 @@ int main() {
             if (ImGui::Button("Capture Selected As Prefab", ImVec2(-1.0f, 28.0f))) {
                 SavedPrefab prefab;
                 prefab.label = (prefabLabelInput[0] != '\0') ? prefabLabelInput : selectedObject.displayName;
+                prefab.id = selectedObject.prefabSourceId.empty()
+                    ? makeUniquePrefabId(prefab.label)
+                    : bunker::NormalizePrefabRecordId(selectedObject.prefabSourceId);
+                if (prefab.id.empty()) {
+                    prefab.id = makeUniquePrefabId(prefab.label);
+                }
+                prefab.targetType = bunker::DefaultPrefabTargetType(selectedObject);
+                prefab.sourceLabel = editorWorld.metadata.name + " :: " + selectedObject.registryId;
+                prefab.completionMode = "Captured from authored world";
                 prefab.object = selectedObject;
-                savedPrefabs.push_back(prefab);
-                selectedPrefabIndex = static_cast<int>(savedPrefabs.size()) - 1;
-                statusText = "Captured selected object into prefab library.";
+                prefab.object.prefabSourceId.clear();
+                bunker::NormalizePrefabRecord(prefab);
+                const int existingPrefabIndex = bunker::FindPrefabRecordIndexById(savedPrefabs, prefab.id);
+                if (existingPrefabIndex >= 0) {
+                    savedPrefabs[static_cast<std::size_t>(existingPrefabIndex)] = prefab;
+                    selectedPrefabIndex = existingPrefabIndex;
+                    statusText = "Updated prefab from selected object.";
+                } else {
+                    savedPrefabs.push_back(prefab);
+                    selectedPrefabIndex = static_cast<int>(savedPrefabs.size()) - 1;
+                    statusText = "Captured selected object into prefab library.";
+                }
+                selectedObject.prefabSourceId = prefab.id;
+                CopyStringToBuffer(prefab.label, prefabLabelInput, IM_ARRAYSIZE(prefabLabelInput));
             }
             if (ImGui::Button("Delete Selected Object", ImVec2(-1.0f, 32.0f))) {
                 if (selectedIncomingReferences.empty()) {
@@ -2910,6 +3084,13 @@ int main() {
         }
         ImGui::Separator();
         ImGui::Text("Prefab Backlog");
+        const auto brokenPrefabReferenceIndices = bunker::CollectBrokenPrefabReferenceObjectIndices(editorWorld, savedPrefabs);
+        if (!brokenPrefabReferenceIndices.empty()) {
+            ImGui::TextColored(
+                ImVec4(0.92f, 0.65f, 0.24f, 1.0f),
+                "Broken prefab references in workspace: %d",
+                static_cast<int>(brokenPrefabReferenceIndices.size()));
+        }
         if (savedPrefabs.empty()) {
             ImGui::TextDisabled("No prefabs captured yet.");
         } else {
@@ -2917,7 +3098,9 @@ int main() {
             for (int index = 0; index < static_cast<int>(savedPrefabs.size()); ++index) {
                 const auto& prefab = savedPrefabs[static_cast<std::size_t>(index)];
                 const bool selected = (selectedPrefabIndex == index);
-                if (ImGui::Selectable((prefab.label + "##prefab_" + std::to_string(index)).c_str(), selected)) {
+                const int usageCount = bunker::CountPrefabUsageInWorld(editorWorld, prefab.id);
+                std::string prefabListLabel = prefab.label + " [" + prefab.targetType + "] x" + std::to_string(usageCount);
+                if (ImGui::Selectable((prefabListLabel + "##prefab_" + std::to_string(index)).c_str(), selected)) {
                     selectedPrefabIndex = index;
                     CopyStringToBuffer(prefab.label, prefabLabelInput, IM_ARRAYSIZE(prefabLabelInput));
                 }
@@ -2925,15 +3108,58 @@ int main() {
             ImGui::EndChild();
             if (selectedPrefabIndex >= 0 && selectedPrefabIndex < static_cast<int>(savedPrefabs.size())) {
                 const auto& prefab = savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)];
+                const auto prefabUsageIndices = bunker::CollectPrefabUsageObjectIndices(editorWorld, prefab.id);
                 ImGui::TextWrapped("Prefab: %s", prefab.label.c_str());
+                ImGui::TextDisabled("Prefab ID: %s", prefab.id.c_str());
+                ImGui::TextDisabled("Target: %s", prefab.targetType.c_str());
+                if (!prefab.sourceLabel.empty()) {
+                    ImGui::TextWrapped("Source: %s", prefab.sourceLabel.c_str());
+                }
+                ImGui::TextDisabled("Completion: %s", prefab.completionMode.c_str());
                 ImGui::TextWrapped("Seed Object: %s", prefab.object.displayName.c_str());
                 ImGui::TextDisabled("Interaction: %s | Category: %s", ToLabel(prefab.object.interaction), ToLabel(prefab.object.category));
+                ImGui::BulletText("World usages: %d", static_cast<int>(prefabUsageIndices.size()));
+                if (!prefabUsageIndices.empty()) {
+                    if (ImGui::Button("Focus First Usage", ImVec2(160.0f, 0.0f))) {
+                        focusObjectInEditor(prefabUsageIndices.front(), 1.5f);
+                        statusText = "Focused first usage of selected prefab.";
+                    }
+                }
+                if (ImGui::Button("Apply Prefab To Draft", ImVec2(-1.0f, 28.0f))) {
+                    syncDraftFromPrefab(prefab);
+                    statusText = "Copied selected prefab seed into draft fields.";
+                }
                 if (ImGui::Button("Remove Selected Prefab", ImVec2(-1.0f, 28.0f))) {
+                    const int usageCount = static_cast<int>(prefabUsageIndices.size());
+                    const std::string removedPrefabId = prefab.id;
                     savedPrefabs.erase(savedPrefabs.begin() + selectedPrefabIndex);
                     selectedPrefabIndex = -1;
-                    statusText = "Removed prefab from library.";
+                    statusText = usageCount > 0
+                        ? "Removed prefab from library; existing world usages now have broken prefab references: " + removedPrefabId
+                        : "Removed prefab from library.";
                 }
             }
+        }
+        if (!brokenPrefabReferenceIndices.empty()) {
+            ImGui::BeginChild("BrokenPrefabReferences", ImVec2(0.0f, 82.0f), true);
+            for (int brokenIndex = 0; brokenIndex < static_cast<int>(brokenPrefabReferenceIndices.size()); ++brokenIndex) {
+                const int objectIndex = brokenPrefabReferenceIndices[static_cast<std::size_t>(brokenIndex)];
+                if (objectIndex < 0 || objectIndex >= static_cast<int>(editorWorld.objects.size())) {
+                    continue;
+                }
+                const auto& object = editorWorld.objects[static_cast<std::size_t>(objectIndex)];
+                ImGui::TextColored(
+                    ImVec4(0.92f, 0.65f, 0.24f, 1.0f),
+                    "%s :: %s",
+                    object.displayName.c_str(),
+                    object.prefabSourceId.c_str());
+                ImGui::SameLine();
+                if (ImGui::SmallButton(("Focus Broken Prefab Ref##" + std::to_string(brokenIndex)).c_str())) {
+                    focusObjectInEditor(objectIndex, 1.5f);
+                    statusText = "Focused object with broken prefab reference.";
+                }
+            }
+            ImGui::EndChild();
         }
         ImGui::Separator();
         ImGui::Text("Imported concept backlog");
@@ -2954,6 +3180,22 @@ int main() {
                 ImGui::TextWrapped("Concept: %s", imported.sourceLabel.c_str());
                 ImGui::TextWrapped("Target: %s", imported.targetType.c_str());
                 ImGui::TextWrapped("Completion: %s", imported.completionMode.c_str());
+                if (imported.addedToLibrary) {
+                    ImGui::TextDisabled("Prefab draft: %s (%s)", imported.prefabLabel.c_str(), imported.prefabId.c_str());
+                    if (ImGui::Button("Focus Generated Prefab", ImVec2(-1.0f, 28.0f))) {
+                        const int prefabIndex = bunker::FindPrefabRecordIndexById(savedPrefabs, imported.prefabId);
+                        if (prefabIndex >= 0) {
+                            selectedPrefabIndex = prefabIndex;
+                            CopyStringToBuffer(
+                                savedPrefabs[static_cast<std::size_t>(prefabIndex)].label,
+                                prefabLabelInput,
+                                IM_ARRAYSIZE(prefabLabelInput));
+                            statusText = "Focused prefab draft generated from imported concept.";
+                        } else {
+                            statusText = "Generated prefab draft is no longer present in the library.";
+                        }
+                    }
+                }
                 if (ImGui::Button("Remove Selected Concept", ImVec2(-1.0f, 28.0f))) {
                     importedConcepts.erase(importedConcepts.begin() + selectedImportedConceptIndex);
                     selectedImportedConceptIndex = -1;
@@ -3781,7 +4023,12 @@ int main() {
                 std::ofstream manifest(bunker::EditorConceptManifestPath());
                 if (manifest.is_open()) {
                     for (const auto& imported : importedConcepts) {
-                        manifest << imported.sourceLabel << " | " << imported.targetType << " | " << imported.completionMode << '\n';
+                        manifest << imported.sourceLabel
+                                 << " | " << imported.targetType
+                                 << " | " << imported.completionMode
+                                 << " | prefab=" << (imported.prefabId.empty() ? std::string("none") : imported.prefabId)
+                                 << " | library=" << (imported.addedToLibrary ? "yes" : "no")
+                                 << '\n';
                     }
                     statusText = "Wrote concept manifest to " + bunker::EditorConceptManifestPath().string();
                 } else {
@@ -3798,21 +4045,61 @@ int main() {
             ImGui::SetNextWindowPos(ImVec2(1088.0f, 454.0f), ImGuiCond_Always);
             ImGui::SetNextWindowSize(ImVec2(316.0f, 430.0f), ImGuiCond_Always);
             ImGui::Begin("Import Assistant", &showImportAssistant, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
-            ImGui::TextWrapped("Drop or describe a concept image here. The assistant turns it into a placeable object, usable item, module, or location blockout.");
+            ImGui::TextWrapped("Drop or describe a concept reference here. The assistant converts it into a prefab draft and optionally seeds the current object draft, without generating a finished world.");
             ImGui::InputText("Source", conceptInput, IM_ARRAYSIZE(conceptInput));
             ImGui::Combo("Target", &targetTypeIndex, targetTypes, IM_ARRAYSIZE(targetTypes));
             ImGui::Combo("Completion", &completionIndex, completionModes, IM_ARRAYSIZE(completionModes));
+            ImGui::Checkbox("Add prefab draft to library", &importToPrefabLibrary);
+            ImGui::Checkbox("Seed current draft fields", &seedDraftFromImport);
             ImGui::Separator();
             ImGui::TextWrapped("Completion rules:");
             ImGui::BulletText("Mirror unseen side when symmetry is likely");
             ImGui::BulletText("Use logical completion when structure is asymmetric");
             ImGui::BulletText("Keep partial shell when concept should stay open");
+            SavedPrefab previewPrefabDraft = buildImportedPrefabDraft(conceptInput, targetTypeIndex, completionIndex);
+            ImGui::Separator();
+            ImGui::TextDisabled("Draft preview");
+            ImGui::TextWrapped("%s", previewPrefabDraft.label.c_str());
+            ImGui::TextDisabled(
+                "%s | %s | layer %s",
+                ToLabel(previewPrefabDraft.object.interaction),
+                ToLabel(previewPrefabDraft.object.category),
+                previewPrefabDraft.object.editorLayer.c_str());
+            ImGui::TextDisabled(
+                "Size %.1f x %.1f x %.1f",
+                previewPrefabDraft.object.width,
+                previewPrefabDraft.object.depth,
+                previewPrefabDraft.object.height);
             if (ImGui::Button("Convert concept to draft asset", ImVec2(-1.0f, 36.0f))) {
                 if (IsBlank(conceptInput)) {
                     statusText = "Import assistant needs a source label or concept note before conversion.";
                 } else {
-                    importedConcepts.push_back({conceptInput, targetTypes[targetTypeIndex], completionModes[completionIndex]});
-                    statusText = std::string("Prepared concept draft: ") + conceptInput;
+                    SavedPrefab prefabDraft = buildImportedPrefabDraft(conceptInput, targetTypeIndex, completionIndex);
+                    if (importToPrefabLibrary) {
+                        const int existingPrefabIndex = bunker::FindPrefabRecordIndexById(savedPrefabs, prefabDraft.id);
+                        if (existingPrefabIndex >= 0) {
+                            savedPrefabs[static_cast<std::size_t>(existingPrefabIndex)] = prefabDraft;
+                            selectedPrefabIndex = existingPrefabIndex;
+                        } else {
+                            savedPrefabs.push_back(prefabDraft);
+                            selectedPrefabIndex = static_cast<int>(savedPrefabs.size()) - 1;
+                        }
+                        CopyStringToBuffer(prefabDraft.label, prefabLabelInput, IM_ARRAYSIZE(prefabLabelInput));
+                    }
+                    if (seedDraftFromImport) {
+                        syncDraftFromPrefab(prefabDraft);
+                        CopyStringToBuffer(prefabDraft.label, objectNameInput, IM_ARRAYSIZE(objectNameInput));
+                        statusText = "Prepared import concept as prefab draft and seeded current object draft.";
+                    } else {
+                        statusText = "Prepared import concept as prefab draft.";
+                    }
+                    importedConcepts.push_back({
+                        conceptInput,
+                        targetTypes[targetTypeIndex],
+                        completionModes[completionIndex],
+                        prefabDraft.id,
+                        prefabDraft.label,
+                        importToPrefabLibrary});
                     conceptInput[0] = '\0';
                 }
             }
@@ -3851,6 +4138,7 @@ int main() {
                 frameBeginObject.manualLootIds != frameEndObject.manualLootIds ||
                 frameBeginObject.scriptTag != frameEndObject.scriptTag ||
                 frameBeginObject.linkTarget != frameEndObject.linkTarget ||
+                frameBeginObject.prefabSourceId != frameEndObject.prefabSourceId ||
                 frameBeginObject.semanticAutoCreated != frameEndObject.semanticAutoCreated ||
                 frameBeginObject.semanticLayoutPinned != frameEndObject.semanticLayoutPinned ||
                 frameBeginObject.editorLayer != frameEndObject.editorLayer) {

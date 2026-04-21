@@ -411,14 +411,15 @@ Gizmo / Raycast / Snap / Viewport overlays
 Этап 5
 Prefab / Library
 Object Window / Palette
-Статус: следующий активный пакет
+Статус: usable `v1` закрыт в текущем коде; дальше только palette UX и future prefab overrides
 Этап 6
 Import Assistant
-Статус: следующий после prefab/library
+Статус: usable draft flow закрыт в текущем коде
 Этап 7
 Export discipline
 World format tightening
 Override-ready structure
+Статус: shared export discipline и `BWL5` handoff закрыты; override-ready structure оставлена на будущее
 Этап 8
 Full semantic glue with runtime
 9. Definition of Done для Editor v1+
@@ -434,7 +435,7 @@ Full semantic glue with runtime
 viewport позволяет реально authorить мир;
 prefab/library usable;
 import assistant usable;
-export в BWLD/BWL2 стабилен;
+export в текущем `BWL`-семействе стабилен;
 service/fey/industrial semantics authorятся и читаются runtime.
 10. Короткая формула
 

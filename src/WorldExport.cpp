@@ -9,6 +9,7 @@
 #include <sstream>
 
 #include "../include/AtomicPersistence.hpp"
+#include "../include/PrefabLibrary.hpp"
 
 namespace bunker {
 
@@ -916,11 +917,26 @@ std::string BuildValidationBaselineDeltaReport(const ValidationBaselineDelta& de
     return BuildValidationSnapshotDeltaReport(delta, "shipping baseline");
 }
 
-std::string BuildWorldValidationReport(const std::vector<ValidationIssue>& issues, const WorldExportResult& result) {
+std::string BuildWorldValidationReport(
+    const World& world,
+    const std::vector<ValidationIssue>& issues,
+    const WorldExportResult& result) {
     std::ostringstream report;
+    std::vector<PrefabRecord> prefabs;
+    const bool prefabLibraryLoaded = LoadPrefabLibrary(prefabs);
+    const auto brokenPrefabReferenceIndices = CollectBrokenPrefabReferenceObjectIndices(world, prefabs);
+    const auto layerNames = world.CollectEditorLayerNames();
+    int semanticObjectCount = 0;
+    for (const auto& object : world.objects) {
+        if (!object.scriptTag.empty()) {
+            ++semanticObjectCount;
+        }
+    }
+
     report << "World Validation Report\n";
     report << "Generated: " << result.generatedAt << '\n';
     report << "Target: " << result.worldPath.string() << '\n';
+    report << "Format: " << CurrentWorldBinaryFormatLabel() << '\n';
     report << "Policy: " << ExportValidationPolicyLabel(result.policy) << '\n';
     report << "Decision: " << WorldExportDecisionLabel(result) << '\n';
     report << "Summary: " << BuildValidationSummary(issues) << '\n';
@@ -931,7 +947,32 @@ std::string BuildWorldValidationReport(const std::vector<ValidationIssue>& issue
     report << "Validation snapshot: " << result.validationSnapshotPath.string() << '\n';
     report << "Shipping baseline: " << result.baselineSnapshotPath.string() << '\n';
     report << "Shipping baseline updated: " << (result.baselineUpdated ? "yes" : "no") << '\n';
+    report << "Objects: " << world.objects.size() << '\n';
+    report << "Semantic objects: " << semanticObjectCount << '\n';
+    report << "Layers: " << layerNames.size() << '\n';
+    report << "Prefab-derived objects: " << CountPrefabDerivedObjects(world) << '\n';
+    report << "Broken prefab references: " << brokenPrefabReferenceIndices.size() << '\n';
+    report << "Prefab library entries: " << (prefabLibraryLoaded ? prefabs.size() : 0) << '\n';
+    report << "Prefab library loaded: " << (prefabLibraryLoaded ? "yes" : "no") << '\n';
     report << "Message: " << result.message << '\n';
+
+    if (!layerNames.empty()) {
+        report << "Layer names:\n";
+        for (const auto& layerName : layerNames) {
+            report << "- " << layerName << '\n';
+        }
+    }
+
+    if (!brokenPrefabReferenceIndices.empty()) {
+        report << "Broken prefab reference objects:\n";
+        for (const int objectIndex : brokenPrefabReferenceIndices) {
+            if (objectIndex < 0 || objectIndex >= static_cast<int>(world.objects.size())) {
+                continue;
+            }
+            const auto& object = world.objects[static_cast<std::size_t>(objectIndex)];
+            report << "- " << object.registryId << " :: prefabSourceId=" << object.prefabSourceId << '\n';
+        }
+    }
 
     if (issues.empty()) {
         report << "Issues: none\n";
@@ -1028,7 +1069,7 @@ WorldExportResult ExportWorldWithValidation(const World& world,
     {
         std::ofstream reportFile(result.validationReportPath);
         if (reportFile.is_open()) {
-            reportFile << BuildWorldValidationReport(issues, result);
+            reportFile << BuildWorldValidationReport(world, issues, result);
         }
     }
     AppendExportAuditEntry(result);

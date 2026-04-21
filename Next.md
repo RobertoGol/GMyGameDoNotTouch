@@ -6,10 +6,9 @@
 Старый длинный текст ниже оставлен как архив контекста, чтобы ничего не терялось.
 ### Следующий рабочий пакет
 
-- `prefab/library strengthening`
-- `import assistant hardening`
-- `export discipline / world-format tightening`
-- после editor-hardening возвращаться к `Launcher / Lanline Services / runtime` через `Next_split/*`
+- `Launcher / Lanline Services / runtime return`
+- `Lanline Services` / profile / runtime glue по `Next_split/include/LanlineServices.hpp.md`, `Next_split/src/LanlineServices.cpp.md`, `Next_split/src/GameRuntime.cpp.md`, `Next_split/Launcher/src/Launcher_Main.cpp.md`
+- затем `start vertical slice polish` и более крупные product layers из `ROADMAP.md`
 
 ### Закрыто в этом проходе
 
@@ -36,6 +35,10 @@
 - shared `WorldEditorUndoStack` теперь ведет add/remove/update/world-metadata/batch-edit историю, коалесцирует повторные edits и покрыт smoke-check на add/update/metadata/remove/batch redo-flow
 - `BunkerEditor` теперь держит живой `undo/redo` поверх authoring session: dirty-state синхронизирован с `load/export`, а быстрые semantic/layout/edit actions не остаются одноразовыми без отката
 - world preview дожат до рабочего authoring viewport: есть grid-step snap, bounds gizmos для `width/depth`, drag player spawn, selected-object `XREF/link` overlay и interaction/service radius overlays поверх уже существующего selection/focus/semantic-chain flow
+- `prefab/library` дожат до production-useful `v1`: shared `PrefabRecord` теперь хранит stable `id / targetType / sourceLabel / completionMode`, authored world держит `prefabSourceId` в `BWL5`, editor показывает usage/broken-ref visibility, умеет `Focus Source / Focus First Usage / Update Prefab From Selected / Apply Prefab To Draft`, а smoke-check фиксирует prefab metadata, usage tracking и export-report summary
+- `import assistant` больше не просто backlog-список: есть typed classification `Prop / Item / Structure / Environment / Scene Module`, safe prefab-draft generation, прямое add/update в library, seed current draft fields и richer concept manifest вместо голой текстовой заметки
+- export discipline tightened без переписывания history-path: `WorldValidation` теперь ловит missing world metadata / empty object table / invalid spawn, validation report пишет `BWL5`, layers, prefab-derived counts, broken prefab refs и library-load status, а smoke-check фиксирует prefab-aware export report
+- shared `Lanline Services` contract теперь прозрачно связывает launcher/runtime/profile: unlock-state хранит explicit `tower / relay / service / water / fey` flags поверх tier, launcher/runtime overlay-ят service state поверх `SessionProfile`, а smoke-check покрывает unlock resolution, services save roundtrip и profile snapshot sync
 
 ### Правило на следующие проходы
 

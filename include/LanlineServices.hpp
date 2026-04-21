@@ -26,31 +26,37 @@ enum class ServicesUnlockTier {
 
 struct ServicesUnlockState {
     ServicesUnlockTier tier = ServicesUnlockTier::Locked;
+    bool towerSyncRecovered = false;
     bool firstTowerActivated = false;
     bool localRelayAvailable = false;
+    bool relaySubstationActive = false;
+    bool serviceBayActive = false;
+    bool waterReclaimerActive = false;
     bool backboneStable = false;
+    bool feyRingIntercityUnlocked = false;
+    bool feyRingInterserverUnlocked = false;
     bool intercityPortalsUnlocked = false;
     bool interserverPortalsUnlocked = false;
 };
 
 inline bool IsLanlineServicesUnlocked(const ServicesUnlockState& state) {
-    return state.firstTowerActivated && state.tier != ServicesUnlockTier::Locked;
+    return state.towerSyncRecovered && state.tier != ServicesUnlockTier::Locked;
 }
 
 inline bool IsTankServiceUnlocked(const ServicesUnlockState& state) {
-    return state.tier >= ServicesUnlockTier::BackboneStable;
+    return state.serviceBayActive || state.tier >= ServicesUnlockTier::BackboneStable;
 }
 
 inline bool IsMedicalSupportUnlocked(const ServicesUnlockState& state) {
-    return state.tier >= ServicesUnlockTier::TowerLinked;
+    return state.localRelayAvailable || state.tier >= ServicesUnlockTier::TowerLinked;
 }
 
 inline bool IsIntercityPortalScheduleUnlocked(const ServicesUnlockState& state) {
-    return state.tier >= ServicesUnlockTier::BackboneStable;
+    return state.feyRingIntercityUnlocked || state.intercityPortalsUnlocked;
 }
 
 inline bool IsInterserverPortalScheduleUnlocked(const ServicesUnlockState& state) {
-    return state.tier >= ServicesUnlockTier::RelayExpanded;
+    return state.feyRingInterserverUnlocked || state.interserverPortalsUnlocked;
 }
 
 enum class SupportCategory {
@@ -191,6 +197,8 @@ std::vector<FeyGateCycle> MakeDefaultFeyGateCycles(std::int64_t nowUnix);
 LanlineServicesState MakeDefaultLanlineServicesState(std::int64_t nowUnix);
 LanlineServicesState MakeLanlineServicesStateFromSave(const LanlineServicesSave& save, std::int64_t nowUnix);
 LanlineServicesSave BuildLanlineServicesSave(const LanlineServicesState& state);
+void ApplyLanlineServicesProfileSnapshot(LanlineServicesState& state, const LanlineServicesProfile& profile);
+void SyncLanlineServicesProfileSnapshot(LanlineServicesProfile& profile, const LanlineServicesState& state);
 ServiceHubMode ResolveLanlineServicesMode(const ServicesUnlockState& unlockState, const LanlineSessionState* sessionState);
 void SyncLanlineServicesPresence(LanlineServicesState& state,
     const LanlineSessionState* sessionState,

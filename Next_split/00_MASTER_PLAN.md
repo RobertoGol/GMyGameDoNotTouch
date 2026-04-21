@@ -20,10 +20,15 @@
 
 ## Следующий рабочий пакет
 
-1. `prefab/library strengthening`
-2. `import assistant hardening`
-3. `export discipline / world-format tightening`
-4. затем возврат к `Launcher / Lanline Services / runtime` хвостам по `Next_split/*`
+1. `Launcher / Lanline Services / runtime` consistency
+2. `Lanline Services` + `SessionProfile` + runtime/launcher glue по `Next_split/*`
+3. затем `start vertical slice polish`
+
+## Только что закрыто
+
+- `prefab/library strengthening`
+- `import assistant hardening`
+- `export discipline / world-format tightening`
 
 ## Правила
 

@@ -33,6 +33,7 @@ struct WorldObjectReference {
 };
 
 const char* WorldObjectReferenceFieldLabel(WorldObjectReferenceField field);
+const char* CurrentWorldBinaryFormatLabel();
 std::string NormalizeEditorLayerName(std::string_view layerName);
 std::string DefaultEditorLayerName(const MapObject& object);
 

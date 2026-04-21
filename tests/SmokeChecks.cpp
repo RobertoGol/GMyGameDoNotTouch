@@ -1,6 +1,7 @@
 #include "../include/AppPaths.hpp"
 #include "../include/AtomicPersistence.hpp"
 #include "../include/GameplayDescriptorRegistry.hpp"
+#include "../include/LanlineServices.hpp"
 #include "../include/LaunchSession.hpp"
 #include "../include/PrefabLibrary.hpp"
 #include "../include/SessionProfiles.hpp"
@@ -59,6 +60,7 @@ bool RunWorldRoundtrip() {
     savedWorld.EnsureStarterInfrastructure();
     if (auto* archiveTerminal = savedWorld.FindObjectByRegistryId("[%archive_0001]")) {
         archiveTerminal->editorLayer = "Archive";
+        archiveTerminal->prefabSourceId = "prefab_archive_sync";
     }
 
     const auto saveStatus = bunker::SaveWorldAtomically(savedWorld, bunker::DefaultWorldPath());
@@ -84,7 +86,10 @@ bool RunWorldRoundtrip() {
         Check(loadedWorld.HasLinkTarget("inner_spur_service"), "service bay link target missing after roundtrip") &&
         Check(loadedWorld.HasLinkTarget("inner_spur_water"), "water reclaimer link target missing after roundtrip") &&
         Check(loadedWorld.CountObjectsInEditorLayer("Service") >= 1, "world roundtrip should preserve inferred service layers") &&
-        Check(loadedWorld.CountObjectsInEditorLayer("Archive") == 1, "world roundtrip should preserve custom editor layer assignment");
+        Check(loadedWorld.CountObjectsInEditorLayer("Archive") == 1, "world roundtrip should preserve custom editor layer assignment") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%archive_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%archive_0001]")->prefabSourceId == "prefab_archive_sync",
+            "world roundtrip should preserve prefab source linkage");
 }
 
 bool RunProfileRoundtrip() {
@@ -109,6 +114,120 @@ bool RunProfileRoundtrip() {
         Check(loadedProfile.selectedWorld == savedProfile.selectedWorld, "profile selected world mismatch") &&
         Check(loadedProfile.fieldCheckpointWorld == savedProfile.selectedWorld, "profile migration/normalize checkpoint mismatch") &&
         Check(loadedProfile.lanlineServices.relayCredits == savedProfile.lanlineServices.relayCredits, "profile relay credits mismatch");
+}
+
+bool RunLanlineServicesRoundtripSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.selectedWorld = "lanline_smoke_world.bwld";
+    profile.fieldCheckpointKnown = true;
+    profile.fieldCheckpointWorld = profile.selectedWorld;
+    profile.story.outerRoadCleared = true;
+    profile.character.collectedTapes.push_back({"tower_pylon_alpha", "Pylon Alpha", true, false, true});
+    profile.character.collectedTapes.push_back({"tower_pylon_beta", "Pylon Beta", true, false, true});
+    bunker::WorldFieldState* worldState = bunker::FindWorldFieldState(profile, profile.selectedWorld, true);
+    if (!Check(worldState != nullptr, "lanline services smoke failed to create world field state")) {
+        return false;
+    }
+
+    worldState->towerSyncRecovered = true;
+    worldState->localRelayAvailable = true;
+    worldState->regionalGridOnline = true;
+    worldState->caravanRouteActive = true;
+    worldState->industrialSurveyActive = true;
+    worldState->industrialGateUnlocked = true;
+    worldState->industrialOutpostActive = true;
+    worldState->tradeNetworkActive = true;
+    worldState->railFreightActive = true;
+    worldState->railFortressActive = true;
+    worldState->recoveryFabricatorActive = true;
+    worldState->assemblyCellActive = true;
+    worldState->foundryLineActive = true;
+    worldState->reactorYardActive = true;
+    worldState->capacitorBankActive = true;
+    worldState->relaySubstationActive = true;
+    worldState->serviceBayActive = true;
+    worldState->waterReclaimerActive = true;
+    worldState->orbitalUplinkActive = true;
+    worldState->feyRingIntercityUnlocked = true;
+    worldState->feyRingInterserverUnlocked = true;
+
+    const auto unlockState = bunker::BuildServicesUnlockState(profile, worldState);
+    if (!Check(unlockState.towerSyncRecovered, "lanline services smoke expected tower sync recovery flag")) {
+        return false;
+    }
+    if (!Check(unlockState.relaySubstationActive, "lanline services smoke expected relay substation unlock flag")) {
+        return false;
+    }
+    if (!Check(unlockState.serviceBayActive, "lanline services smoke expected service bay unlock flag")) {
+        return false;
+    }
+    if (!Check(unlockState.waterReclaimerActive, "lanline services smoke expected water reclaimer unlock flag")) {
+        return false;
+    }
+    if (!Check(unlockState.backboneStable, "lanline services smoke expected stable backbone")) {
+        return false;
+    }
+    if (!Check(unlockState.feyRingIntercityUnlocked, "lanline services smoke expected inter-city Fey unlock")) {
+        return false;
+    }
+    if (!Check(unlockState.feyRingInterserverUnlocked, "lanline services smoke expected inter-server Fey unlock")) {
+        return false;
+    }
+    if (!Check(bunker::IsTankServiceUnlocked(unlockState), "lanline services smoke expected tank service unlock")) {
+        return false;
+    }
+    if (!Check(bunker::IsMedicalSupportUnlocked(unlockState), "lanline services smoke expected medical support unlock")) {
+        return false;
+    }
+
+    bunker::LanlineServicesState state = bunker::MakeDefaultLanlineServicesState(1000);
+    state.relayCredits = 777;
+    state.ownedCosmetics = {"skin_bt72_ashgray", "cosmetic_relay_badge"};
+    bunker::SupportOrder order;
+    order.orderId = "order_service_01";
+    order.itemId = "tank_engine_kit";
+    order.itemLabel = "BT-72 Engine Service Kit";
+    order.destinationNode = "Shelter 17";
+    order.state = bunker::SupportOrderState::Queued;
+    order.paymentCurrency = bunker::StoreCurrency::InGame;
+    order.priceCredits = 250;
+    order.createdAtUnix = 1000;
+    order.etaUnix = 1360;
+    state.supportOrders.push_back(order);
+
+    bunker::LanlineServicesProfile profileSnapshot{};
+    bunker::SyncLanlineServicesProfileSnapshot(profileSnapshot, state);
+    if (!Check(profileSnapshot.relayCredits == 777, "lanline services smoke expected profile relay credits sync")) {
+        return false;
+    }
+    if (!Check(profileSnapshot.ownedCosmetics.size() == 2, "lanline services smoke expected cosmetic snapshot sync")) {
+        return false;
+    }
+    if (!Check(profileSnapshot.pendingSupportOrders.size() == 1 &&
+            profileSnapshot.pendingSupportOrders[0] == "order_service_01",
+            "lanline services smoke expected pending support order sync")) {
+        return false;
+    }
+
+    const bunker::LanlineServicesSave save = bunker::BuildLanlineServicesSave(state);
+    if (!Check(bunker::SaveLanlineServicesSave(save, bunker::DefaultLanlineServicesSavePath()),
+            "lanline services smoke failed to save services state")) {
+        return false;
+    }
+
+    bunker::LanlineServicesSave loadedSave{};
+    if (!Check(bunker::LoadLanlineServicesSave(bunker::DefaultLanlineServicesSavePath(), loadedSave),
+            "lanline services smoke failed to load services state")) {
+        return false;
+    }
+
+    bunker::LanlineServicesState loadedState = bunker::MakeLanlineServicesStateFromSave(loadedSave, 1200);
+    bunker::ApplyLanlineServicesProfileSnapshot(loadedState, profileSnapshot);
+    return Check(loadedState.relayCredits == 777, "lanline services smoke expected relay credits after roundtrip") &&
+        Check(loadedState.ownedCosmetics.size() == 2, "lanline services smoke expected owned cosmetics after roundtrip") &&
+        Check(loadedState.supportOrders.size() == 1, "lanline services smoke expected one support order after roundtrip") &&
+        Check(loadedState.supportOrders[0].destinationNode == "Shelter 17",
+            "lanline services smoke expected destination node after roundtrip");
 }
 
 bool RunLaunchTicketFlow() {
@@ -595,7 +714,11 @@ bool RunPrefabLibrarySemanticStateSmoke() {
     std::vector<bunker::PrefabRecord> savedPrefabs;
 
     bunker::PrefabRecord authoredPrefab;
+    authoredPrefab.id = "prefab_authored_relay";
     authoredPrefab.label = "Authored Relay";
+    authoredPrefab.targetType = "Structure";
+    authoredPrefab.sourceLabel = "Smoke capture";
+    authoredPrefab.completionMode = "Captured";
     authoredPrefab.object.registryId = "[%relay_prefab_0001]";
     authoredPrefab.object.displayName = "Relay Prefab";
     authoredPrefab.object.interaction = bunker::InteractionType::Terminal;
@@ -608,7 +731,11 @@ bool RunPrefabLibrarySemanticStateSmoke() {
     savedPrefabs.push_back(authoredPrefab);
 
     bunker::PrefabRecord autoPrefab;
+    autoPrefab.id = "prefab_auto_water";
     autoPrefab.label = "Auto Water";
+    autoPrefab.targetType = "Environment";
+    autoPrefab.sourceLabel = "Concept import";
+    autoPrefab.completionMode = "Keep as partial shell";
     autoPrefab.object.registryId = "[%water_reclaimer_auto_0001]";
     autoPrefab.object.displayName = "Water Auto Prefab";
     autoPrefab.object.interaction = bunker::InteractionType::Terminal;
@@ -635,13 +762,90 @@ bool RunPrefabLibrarySemanticStateSmoke() {
     }
 
     return Check(loadedPrefabs[0].label == authoredPrefab.label, "prefab library should preserve authored prefab label") &&
+        Check(loadedPrefabs[0].id == authoredPrefab.id, "prefab library should preserve authored prefab id") &&
+        Check(loadedPrefabs[0].targetType == authoredPrefab.targetType, "prefab library should preserve authored prefab target type") &&
+        Check(loadedPrefabs[0].sourceLabel == authoredPrefab.sourceLabel, "prefab library should preserve authored prefab source label") &&
+        Check(loadedPrefabs[0].completionMode == authoredPrefab.completionMode, "prefab library should preserve authored prefab completion mode") &&
         Check(loadedPrefabs[0].object.editorLayer == authoredPrefab.object.editorLayer, "prefab library should preserve authored prefab layer") &&
         Check(loadedPrefabs[0].object.semanticLayoutPinned, "prefab library should preserve authored pinned semantic state") &&
         Check(!loadedPrefabs[0].object.semanticAutoCreated, "prefab library should preserve authored semantic origin") &&
         Check(loadedPrefabs[1].label == autoPrefab.label, "prefab library should preserve auto prefab label") &&
+        Check(loadedPrefabs[1].id == autoPrefab.id, "prefab library should preserve auto prefab id") &&
+        Check(loadedPrefabs[1].targetType == autoPrefab.targetType, "prefab library should preserve auto prefab target type") &&
+        Check(loadedPrefabs[1].sourceLabel == autoPrefab.sourceLabel, "prefab library should preserve auto prefab source label") &&
+        Check(loadedPrefabs[1].completionMode == autoPrefab.completionMode, "prefab library should preserve auto prefab completion mode") &&
         Check(loadedPrefabs[1].object.editorLayer == autoPrefab.object.editorLayer, "prefab library should preserve custom prefab layer") &&
         Check(loadedPrefabs[1].object.semanticAutoCreated, "prefab library should preserve auto semantic origin") &&
         Check(!loadedPrefabs[1].object.semanticLayoutPinned, "prefab library should preserve unpinned auto semantic state");
+}
+
+bool RunPrefabUsageAndExportReportSmoke() {
+    std::vector<bunker::PrefabRecord> prefabs;
+
+    bunker::PrefabRecord relayPrefab;
+    relayPrefab.id = "prefab_relay_service";
+    relayPrefab.label = "Relay Service";
+    relayPrefab.targetType = "Structure";
+    relayPrefab.sourceLabel = "Smoke prefab usage";
+    relayPrefab.completionMode = "Captured";
+    relayPrefab.object.registryId = "[%relay_prefab_usage_0001]";
+    relayPrefab.object.displayName = "Relay Service Seed";
+    relayPrefab.object.interaction = bunker::InteractionType::Terminal;
+    relayPrefab.object.category = bunker::ObjectCategory::Terminal;
+    relayPrefab.object.scriptTag = "relay_substation";
+    relayPrefab.object.linkTarget = "shelter17_backbone";
+    relayPrefab.object.editorLayer = "Service";
+    prefabs.push_back(relayPrefab);
+
+    if (!Check(bunker::SavePrefabLibrary(prefabs), "prefab usage smoke failed to save prefab library")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.metadata.name = "Prefab Usage Smoke";
+    world.metadata.biome = "Industrial Interior";
+    world.metadata.objective = "Verify prefab usage tracking and export report.";
+
+    bunker::MapObject relayObject;
+    relayObject.registryId = "[%relay_usage_0001]";
+    relayObject.displayName = "Relay Usage";
+    relayObject.interaction = bunker::InteractionType::Terminal;
+    relayObject.category = bunker::ObjectCategory::Terminal;
+    relayObject.prefabSourceId = relayPrefab.id;
+    relayObject.scriptTag = "relay_substation";
+    relayObject.linkTarget = "shelter17_backbone";
+    world.AddObject(relayObject);
+
+    bunker::MapObject brokenObject = relayObject;
+    brokenObject.registryId = "[%relay_usage_0002]";
+    brokenObject.displayName = "Broken Prefab Usage";
+    brokenObject.prefabSourceId = "prefab_missing_service";
+    world.AddObject(brokenObject);
+
+    const auto usageIndices = bunker::CollectPrefabUsageObjectIndices(world, relayPrefab.id);
+    const auto brokenIndices = bunker::CollectBrokenPrefabReferenceObjectIndices(world, prefabs);
+    if (!Check(usageIndices.size() == 1, "prefab usage smoke expected one valid prefab-derived object")) {
+        return false;
+    }
+    if (!Check(brokenIndices.size() == 1, "prefab usage smoke expected one broken prefab reference")) {
+        return false;
+    }
+    if (!Check(bunker::CountPrefabUsageInWorld(world, relayPrefab.id) == 1, "prefab usage smoke expected usage count of one")) {
+        return false;
+    }
+    if (!Check(bunker::CountPrefabDerivedObjects(world) == 2, "prefab usage smoke expected two prefab-derived objects")) {
+        return false;
+    }
+
+    const auto exportResult = bunker::ExportWorldWithValidation(world, bunker::DefaultWorldPath());
+    if (!Check(exportResult.ok, "prefab usage smoke expected export to succeed")) {
+        return false;
+    }
+
+    const std::string report = bunker::LoadTextArtifactPreview(exportResult.validationReportPath, 8000);
+    return Check(report.find("Format: BWL5") != std::string::npos, "prefab usage smoke expected export report to mention BWL5 format") &&
+        Check(report.find("Prefab-derived objects: 2") != std::string::npos, "prefab usage smoke expected prefab-derived object count in report") &&
+        Check(report.find("Broken prefab references: 1") != std::string::npos, "prefab usage smoke expected broken prefab reference count in report");
 }
 
 bool RunStrictSemanticExportPolicySmoke() {
@@ -1885,6 +2089,7 @@ int main() {
 
     const bool ok = RunWorldRoundtrip() &&
         RunProfileRoundtrip() &&
+        RunLanlineServicesRoundtripSmoke() &&
         RunLaunchTicketFlow() &&
         RunGameplayDescriptorValidationSmoke() &&
         RunSemanticDependencyValidationSmoke() &&
@@ -1894,6 +2099,7 @@ int main() {
         RunSemanticAuthoringStateRoundtripSmoke() &&
         RunSemanticAutoAnchorValidationSmoke() &&
         RunPrefabLibrarySemanticStateSmoke() &&
+        RunPrefabUsageAndExportReportSmoke() &&
         RunStrictSemanticExportPolicySmoke() &&
         RunValidatedWorldExportArtifactSmoke() &&
         RunWorldExportAuditTrailSmoke() &&
@@ -1902,6 +2108,7 @@ int main() {
         RunExportHistoryCheckpointSelectionSmoke() &&
         RunLegacySemanticAutoInferenceSmoke() &&
         RunLegacyWorldEditorLayerInferenceSmoke() &&
+        RunWorldEditorUndoSmoke() &&
         RunWorldReferenceGraphSmoke() &&
         RunSemanticAuthoringCascadeSmoke() &&
         RunStarterSemanticLinkTargetSmoke() &&

@@ -755,6 +755,7 @@ void DrawPipPadServicesTab(const World& world, const PlayerState& player, Sessio
         if (LoadLanlineServicesSave(DefaultLanlineServicesSavePath(), lanlineSave)) {
             lanlineServices = MakeLanlineServicesStateFromSave(lanlineSave, std::time(nullptr));
         }
+        ApplyLanlineServicesProfileSnapshot(lanlineServices, profile.lanlineServices);
         lanlineServicesLoaded = true;
     }
 
@@ -779,6 +780,7 @@ void DrawPipPadServicesTab(const World& world, const PlayerState& player, Sessio
         ImGui::TextWrapped("Portal action: %s", gameState.lastPortalAction.c_str());
     }
     DrawLanlineServicesPanel(lanlineServices, servicesUnlock, static_cast<std::int64_t>(std::time(nullptr)));
+    SyncLanlineServicesProfileSnapshot(profile.lanlineServices, lanlineServices);
     SaveLanlineServicesSave(BuildLanlineServicesSave(lanlineServices), DefaultLanlineServicesSavePath());
 }
 
