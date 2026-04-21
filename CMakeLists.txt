@@ -82,6 +82,7 @@ add_executable(BunkerEditor
     src/GameplayDescriptorRegistry.cpp
     src/SessionProfiles.cpp
     src/World.cpp
+    src/WorldEditorUndo.cpp
     src/WorldExport.cpp
     src/WorldSemanticAuthoring.cpp
     src/WorldValidation.cpp
@@ -96,6 +97,7 @@ add_executable(BunkerSmokeChecks
     src/LaunchSession.cpp
     src/SessionProfiles.cpp
     src/World.cpp
+    src/WorldEditorUndo.cpp
     src/WorldExport.cpp
     src/WorldSemanticAuthoring.cpp
     src/WorldValidation.cpp

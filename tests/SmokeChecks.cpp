@@ -5,6 +5,7 @@
 #include "../include/PrefabLibrary.hpp"
 #include "../include/SessionProfiles.hpp"
 #include "../include/World.hpp"
+#include "../include/WorldEditorUndo.hpp"
 #include "../include/WorldExport.hpp"
 #include "../include/WorldSemanticAuthoring.hpp"
 #include "../include/WorldValidation.hpp"
@@ -1469,6 +1470,148 @@ bool RunLegacyWorldEditorLayerInferenceSmoke() {
         Check(loadedWorld.CountObjectsInEditorLayer("Service") == 1, "legacy BWL3 object should count inside inferred Service layer") &&
         Check(std::find(collectedLayers.begin(), collectedLayers.end(), "Service") != collectedLayers.end(),
             "legacy BWL3 object should surface inferred Service layer in layer list");
+}
+
+bool RunWorldEditorUndoSmoke() {
+    bunker::World world;
+    world.metadata.name = "Undo Smoke";
+    world.metadata.objective = "Verify editor undo stack.";
+
+    bunker::MapObject rootObject;
+    rootObject.registryId = "[%root_0001]";
+    rootObject.displayName = "Root Anchor";
+    rootObject.interaction = bunker::InteractionType::Terminal;
+    rootObject.category = bunker::ObjectCategory::Terminal;
+    world.AddObject(rootObject);
+
+    bunker::WorldEditorUndoStack undoStack;
+    undoStack.MarkSaved();
+    if (!Check(!undoStack.IsDirty(), "undo smoke should start clean after mark-saved")) {
+        return false;
+    }
+
+    bunker::MapObject addedObject;
+    addedObject.registryId = "[%service_0001]";
+    addedObject.displayName = "Service Relay";
+    addedObject.interaction = bunker::InteractionType::Terminal;
+    addedObject.category = bunker::ObjectCategory::Terminal;
+    addedObject.scriptTag = "lanline_service_hub";
+    addedObject.linkTarget = "shelter17_services";
+    world.AddObject(addedObject);
+    undoStack.PushObjectAdded("Add service relay", world.objects.back(), 1, addedObject.registryId);
+
+    if (!Check(undoStack.CanUndo(), "undo smoke expected add-object action to be undoable")) {
+        return false;
+    }
+    const auto addUndo = undoStack.Undo(world);
+    if (!Check(addUndo.changed, "undo smoke expected add-object undo to change world")) {
+        return false;
+    }
+    if (!Check(!world.HasObject(addedObject.registryId), "undo smoke expected add-object undo to remove added object")) {
+        return false;
+    }
+    const auto addRedo = undoStack.Redo(world);
+    if (!Check(addRedo.changed, "undo smoke expected add-object redo to change world")) {
+        return false;
+    }
+    if (!Check(world.HasObject(addedObject.registryId), "undo smoke expected redo to restore added object")) {
+        return false;
+    }
+
+    const bunker::MapObject beforeFirstUpdate = world.objects[1];
+    world.objects[1].displayName = "Service Relay Updated";
+    undoStack.PushObjectUpdated("Edit service relay", beforeFirstUpdate, world.objects[1], 1);
+    const bunker::MapObject beforeSecondUpdate = world.objects[1];
+    world.objects[1].x = 14.0f;
+    undoStack.PushObjectUpdated("Edit service relay", beforeSecondUpdate, world.objects[1], 1);
+
+    if (!Check(undoStack.UndoCount() == 2, "undo smoke expected update coalescing to keep a single object-edit record")) {
+        return false;
+    }
+    const auto updateUndo = undoStack.Undo(world);
+    if (!Check(updateUndo.changed, "undo smoke expected object-edit undo to apply")) {
+        return false;
+    }
+    if (!Check(world.objects[1].displayName == beforeFirstUpdate.displayName &&
+            world.objects[1].x == beforeFirstUpdate.x,
+            "undo smoke expected coalesced object-edit undo to restore original object")) {
+        return false;
+    }
+    const auto updateRedo = undoStack.Redo(world);
+    if (!Check(updateRedo.changed, "undo smoke expected object-edit redo to apply")) {
+        return false;
+    }
+    if (!Check(world.objects[1].displayName == "Service Relay Updated" && world.objects[1].x == 14.0f,
+            "undo smoke expected coalesced object-edit redo to restore latest object state")) {
+        return false;
+    }
+
+    const bunker::WorldMetadata metadataBefore = world.metadata;
+    world.metadata.objective = "Updated objective";
+    undoStack.PushWorldMetadataUpdated("Update world objective", metadataBefore, world.metadata);
+    const bunker::WorldMetadata metadataMid = world.metadata;
+    world.metadata.playerSpawnX = 9.0f;
+    undoStack.PushWorldMetadataUpdated("Update world objective", metadataMid, world.metadata);
+
+    if (!Check(undoStack.UndoCount() == 3, "undo smoke expected metadata updates to coalesce into one record")) {
+        return false;
+    }
+    const auto metadataUndo = undoStack.Undo(world);
+    if (!Check(metadataUndo.changed, "undo smoke expected metadata undo to apply")) {
+        return false;
+    }
+    if (!Check(world.metadata.objective == metadataBefore.objective &&
+            world.metadata.playerSpawnX == metadataBefore.playerSpawnX,
+            "undo smoke expected metadata undo to restore original metadata")) {
+        return false;
+    }
+    const auto metadataRedo = undoStack.Redo(world);
+    if (!Check(metadataRedo.changed, "undo smoke expected metadata redo to apply")) {
+        return false;
+    }
+    if (!Check(world.metadata.objective == "Updated objective" && world.metadata.playerSpawnX == 9.0f,
+            "undo smoke expected metadata redo to restore latest metadata state")) {
+        return false;
+    }
+
+    const bunker::MapObject removedObject = world.objects[1];
+    world.RemoveObject(removedObject.registryId);
+    undoStack.PushObjectRemoved("Delete service relay", removedObject, 1, removedObject.registryId, rootObject.registryId);
+    const auto removeUndo = undoStack.Undo(world);
+    if (!Check(removeUndo.changed && world.HasObject(removedObject.registryId),
+            "undo smoke expected removed object to return after undo")) {
+        return false;
+    }
+    const auto removeRedo = undoStack.Redo(world);
+    if (!Check(removeRedo.changed && !world.HasObject(removedObject.registryId),
+            "undo smoke expected redo to remove object again")) {
+        return false;
+    }
+
+    const bunker::World beforeBatchWorld = world;
+    bunker::MapObject batchObject;
+    batchObject.registryId = "[%batch_0001]";
+    batchObject.displayName = "Batch Anchor";
+    batchObject.interaction = bunker::InteractionType::Transition;
+    batchObject.category = bunker::ObjectCategory::Landmark;
+    world.AddObject(batchObject);
+    world.metadata.biome = "Industrial Test";
+    undoStack.PushBatchWorldEdit("Batch semantic action", beforeBatchWorld, world, rootObject.registryId, batchObject.registryId);
+
+    const auto batchUndo = undoStack.Undo(world);
+    if (!Check(batchUndo.changed && !world.HasObject(batchObject.registryId) && world.metadata.biome == beforeBatchWorld.metadata.biome,
+            "undo smoke expected batch undo to restore pre-batch world")) {
+        return false;
+    }
+    const auto batchRedo = undoStack.Redo(world);
+    if (!Check(batchRedo.changed && world.HasObject(batchObject.registryId) && world.metadata.biome == "Industrial Test",
+            "undo smoke expected batch redo to restore post-batch world")) {
+        return false;
+    }
+
+    undoStack.MarkSaved();
+    return Check(!undoStack.IsDirty(), "undo smoke expected mark-saved to clear dirty state") &&
+        Check(undoStack.PeekUndo() != nullptr, "undo smoke expected undo stack to retain history after mark-saved");
 }
 
 bool RunWorldReferenceGraphSmoke() {

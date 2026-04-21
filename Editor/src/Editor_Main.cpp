@@ -6,6 +6,7 @@
 #include <cctype>
 #include <fstream>
 #include <iomanip>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,7 @@
 #include "../../include/RegistryId.hpp"
 #include "../../include/SessionProfiles.hpp"
 #include "../../include/World.hpp"
+#include "../../include/WorldEditorUndo.hpp"
 #include "../../include/WorldExport.hpp"
 #include "../../include/WorldValidation.hpp"
 #include "../../include/AtomicPersistence.hpp"
@@ -1124,6 +1126,7 @@ int main() {
     std::string pendingDeleteDisplayName;
     std::vector<EditorLayerViewState> editorLayerStates;
     std::string objectLayerFilter;
+    bunker::WorldEditorUndoStack undoStack;
     int validationSeverityFilter = 0;
     bool validationSelectedObjectOnly = false;
     char validationIssueSearchInput[128] = "";
@@ -1250,6 +1253,12 @@ int main() {
             ? std::string("authored/manual placement (pinned)")
             : std::string("authored/manual placement");
     };
+    auto currentSelectedRegistryId = [&]() -> std::string {
+        if (selectedObjectIndex < 0 || selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+            return {};
+        }
+        return editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)].registryId;
+    };
     auto syncEditorLayerStateTable = [&]() {
         SyncEditorLayerViewStates(editorWorld, editorLayerStates);
         if (!objectLayerFilter.empty() && FindEditorLayerViewState(editorLayerStates, objectLayerFilter) == nullptr) {
@@ -1301,6 +1310,86 @@ int main() {
             selectedLayerEdit, IM_ARRAYSIZE(selectedLayerEdit));
         RequestPreviewFocus(previewViewport, focusedObject.x, focusedObject.y, zoom);
         applySemanticOverlayForObject(objectIndex);
+        return true;
+    };
+    auto applyUndoOutcome = [&](const bunker::WorldEditorUndoOutcome& outcome) {
+        if (!outcome.statusText.empty()) {
+            statusText = outcome.statusText;
+        }
+        if (!outcome.changed) {
+            return false;
+        }
+
+        syncEditorLayerStateTable();
+        clearSemanticOverlay();
+        if (!outcome.focusRegistryId.empty()) {
+            const int focusIndex = FindObjectIndexByRegistryId(editorWorld, outcome.focusRegistryId);
+            if (focusIndex >= 0) {
+                focusObjectInEditor(focusIndex, 1.45f);
+                return true;
+            }
+        }
+
+        if (selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+            selectedObjectIndex = static_cast<int>(editorWorld.objects.size()) - 1;
+        }
+        if (selectedObjectIndex >= 0) {
+            focusObjectInEditor(selectedObjectIndex, 1.35f);
+        } else {
+            SyncSelectedObjectBindings(
+                editorWorld,
+                -1,
+                selectedDisplayNameEdit, IM_ARRAYSIZE(selectedDisplayNameEdit),
+                selectedRegistryEdit, IM_ARRAYSIZE(selectedRegistryEdit),
+                selectedScriptTagEdit, IM_ARRAYSIZE(selectedScriptTagEdit),
+                selectedLinkTargetEdit, IM_ARRAYSIZE(selectedLinkTargetEdit),
+                selectedLayerEdit, IM_ARRAYSIZE(selectedLayerEdit));
+        }
+        return true;
+    };
+    auto pushBatchUndoIfChanged = [&](std::string_view label,
+                                      const bunker::World& beforeWorld,
+                                      const std::string& beforeSelectionRegistryId) {
+        if (beforeWorld.metadata.name == editorWorld.metadata.name &&
+            beforeWorld.metadata.biome == editorWorld.metadata.biome &&
+            beforeWorld.metadata.objective == editorWorld.metadata.objective &&
+            beforeWorld.metadata.playerSpawnX == editorWorld.metadata.playerSpawnX &&
+            beforeWorld.metadata.playerSpawnY == editorWorld.metadata.playerSpawnY &&
+            beforeWorld.objects.size() == editorWorld.objects.size()) {
+            bool anyObjectDiff = false;
+            for (std::size_t objectIndex = 0; objectIndex < beforeWorld.objects.size(); ++objectIndex) {
+                const auto& beforeObject = beforeWorld.objects[objectIndex];
+                const auto& afterObject = editorWorld.objects[objectIndex];
+                if (beforeObject.registryId != afterObject.registryId ||
+                    beforeObject.displayName != afterObject.displayName ||
+                    beforeObject.interaction != afterObject.interaction ||
+                    beforeObject.category != afterObject.category ||
+                    beforeObject.x != afterObject.x ||
+                    beforeObject.y != afterObject.y ||
+                    beforeObject.z != afterObject.z ||
+                    beforeObject.width != afterObject.width ||
+                    beforeObject.depth != afterObject.depth ||
+                    beforeObject.height != afterObject.height ||
+                    beforeObject.health != afterObject.health ||
+                    beforeObject.blocksMovement != afterObject.blocksMovement ||
+                    beforeObject.discovered != afterObject.discovered ||
+                    beforeObject.manualLoot != afterObject.manualLoot ||
+                    beforeObject.manualLootIds != afterObject.manualLootIds ||
+                    beforeObject.scriptTag != afterObject.scriptTag ||
+                    beforeObject.linkTarget != afterObject.linkTarget ||
+                    beforeObject.semanticAutoCreated != afterObject.semanticAutoCreated ||
+                    beforeObject.semanticLayoutPinned != afterObject.semanticLayoutPinned ||
+                    beforeObject.editorLayer != afterObject.editorLayer) {
+                    anyObjectDiff = true;
+                    break;
+                }
+            }
+            if (!anyObjectDiff) {
+                return false;
+            }
+        }
+
+        undoStack.PushBatchWorldEdit(label, beforeWorld, editorWorld, beforeSelectionRegistryId, currentSelectedRegistryId());
         return true;
     };
     auto deleteObjectByRegistryId = [&](const std::string& registryId) {
@@ -1356,10 +1445,14 @@ int main() {
             &exportResult);
         lastExportResult = exportResult;
         refreshExportArtifactPreview(path);
+        if (ok) {
+            undoStack.MarkSaved();
+        }
         return ok;
     };
     refreshDraftLayerForPreset();
     refreshWorkspaceExportArtifactPreview();
+    undoStack.MarkSaved();
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -1367,6 +1460,17 @@ int main() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+
+        const bunker::WorldMetadata frameStartMetadata = editorWorld.metadata;
+        const int frameStartSelectedObjectIndex = selectedObjectIndex;
+        const std::string frameStartSelectedRegistryId = currentSelectedRegistryId();
+        std::optional<bunker::MapObject> frameStartSelectedObject;
+        if (frameStartSelectedObjectIndex >= 0 &&
+            frameStartSelectedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
+            frameStartSelectedObject = editorWorld.objects[static_cast<std::size_t>(frameStartSelectedObjectIndex)];
+        }
+        bool selectedObjectUndoHandledThisFrame = false;
+        bool worldMetadataUndoHandledThisFrame = false;
 
         const auto validationIssues = bunker::ValidateWorldForRuntime(editorWorld);
         const std::string validationSummary = bunker::BuildValidationSummary(validationIssues);
@@ -1567,6 +1671,8 @@ int main() {
                     object.editorLayer = bunker::DefaultEditorLayerName(object);
                 }
                 editorWorld.AddObject(object);
+                undoStack.PushObjectAdded("Add object", editorWorld.objects.back(), static_cast<int>(editorWorld.objects.size()) - 1, object.registryId);
+                selectedObjectUndoHandledThisFrame = true;
                 syncEditorLayerStateTable();
                 focusObjectInEditor(static_cast<int>(editorWorld.objects.size()) - 1);
                 statusText = "Added object to editor world and focused selection: " + object.displayName;
@@ -1593,6 +1699,12 @@ int main() {
                     placed.editorLayer = bunker::DefaultEditorLayerName(placed);
                 }
                 editorWorld.AddObject(placed);
+                undoStack.PushObjectAdded(
+                    "Place prefab: " + savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)].label,
+                    editorWorld.objects.back(),
+                    static_cast<int>(editorWorld.objects.size()) - 1,
+                    placed.registryId);
+                selectedObjectUndoHandledThisFrame = true;
                 syncEditorLayerStateTable();
                 focusObjectInEditor(static_cast<int>(editorWorld.objects.size()) - 1);
                 CopyStringToBuffer(editorWorld.objects.back().displayName, objectNameInput, IM_ARRAYSIZE(objectNameInput));
@@ -1623,6 +1735,28 @@ int main() {
         ImGui::BulletText("Biome: %s", editorWorld.metadata.biome.c_str());
         ImGui::BulletText("Objects in workspace: %d", static_cast<int>(editorWorld.objects.size()));
         ImGui::BulletText("Preview mode: %s", previewAsPlayer ? "Player eye / tank checks enabled" : "Free editor camera");
+        ImGui::BulletText("Authoring changes: %s", undoStack.IsDirty() ? "pending undo history" : "synced to last export/load");
+        if (ImGui::Button("Undo", ImVec2(120.0f, 0.0f))) {
+            selectedObjectUndoHandledThisFrame = true;
+            worldMetadataUndoHandledThisFrame = true;
+            applyUndoOutcome(undoStack.Undo(editorWorld));
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Redo", ImVec2(120.0f, 0.0f))) {
+            selectedObjectUndoHandledThisFrame = true;
+            worldMetadataUndoHandledThisFrame = true;
+            applyUndoOutcome(undoStack.Redo(editorWorld));
+        }
+        if (const auto* undoRecord = undoStack.PeekUndo()) {
+            ImGui::TextDisabled("Undo next: %s", undoRecord->label.c_str());
+        } else {
+            ImGui::TextDisabled("Undo next: none");
+        }
+        if (const auto* redoRecord = undoStack.PeekRedo()) {
+            ImGui::TextDisabled("Redo next: %s", redoRecord->label.c_str());
+        } else {
+            ImGui::TextDisabled("Redo next: none");
+        }
         ImGui::Separator();
         ImGui::Text("World Metadata");
         if (ImGui::InputText("World Name", worldNameInput, IM_ARRAYSIZE(worldNameInput))) {
@@ -1775,8 +1909,14 @@ int main() {
         ImGui::Checkbox("Selected Object Only", &validationSelectedObjectOnly);
         ImGui::TextDisabled("Filtered issues: %d", static_cast<int>(filteredValidationIssueIndices.size()));
         if (ImGui::Button("Auto-Fix Safe Semantic Drift", ImVec2(220.0f, 28.0f))) {
+            const bunker::World beforeWorld = editorWorld;
+            const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
             const int fixCount = AutoFixSafeValidationIssues(editorWorld, statusText);
             if (fixCount > 0) {
+                selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                    "Auto-fix safe semantic drift",
+                    beforeWorld,
+                    beforeSelectionRegistryId);
                 focusObjectInEditor(selectedObjectIndex);
             }
         }
@@ -1803,6 +1943,8 @@ int main() {
             }
         }
         if (ImGui::Button("Create Missing Anchors Cascade", ImVec2(-1.0f, 28.0f))) {
+            const bunker::World beforeWorld = editorWorld;
+            const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
             int cascadeRootIndex = selectedObjectIndex;
             if (cascadeRootIndex < 0) {
                 for (const auto& issue : validationIssues) {
@@ -1817,6 +1959,10 @@ int main() {
             }
             const auto cascadeResult = CreateMissingDependencyAnchorsCascadeDetailed(editorWorld, statusText);
             if (cascadeResult.createdCount > 0) {
+                selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                    "Create missing anchors cascade",
+                    beforeWorld,
+                    beforeSelectionRegistryId);
                 maybeAutoLayoutSemanticChain(cascadeRootIndex);
                 focusObjectInEditor(cascadeResult.lastCreatedObjectIndex, 1.6f);
                 if (cascadeRootIndex >= 0) {
@@ -1825,8 +1971,14 @@ int main() {
             }
         }
         if (ImGui::Button("Adopt All Auto Semantic Anchors", ImVec2(-1.0f, 28.0f))) {
+            const bunker::World beforeWorld = editorWorld;
+            const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
             const int adoptedAnchors = AdoptAllAutoCreatedSemanticAnchors(editorWorld, statusText);
             if (adoptedAnchors > 0 && selectedObjectIndex >= 0) {
+                selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                    "Adopt all auto semantic anchors",
+                    beforeWorld,
+                    beforeSelectionRegistryId);
                 focusObjectInEditor(selectedObjectIndex);
             }
         }
@@ -1863,8 +2015,14 @@ int main() {
                     if (CanAutoFixValidationIssue(issue)) {
                         ImGui::SameLine();
                         if (ImGui::SmallButton(("Fix##issue_" + std::to_string(issueIndex)).c_str())) {
+                            const bunker::World beforeWorld = editorWorld;
+                            const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                             const int issueObjectIndex = FindObjectIndexByRegistryId(editorWorld, issue.objectId);
                             if (AutoFixValidationIssue(editorWorld, issue, statusText)) {
+                                selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                                    "Fix validation issue: " + issue.code,
+                                    beforeWorld,
+                                    beforeSelectionRegistryId);
                                 focusObjectInEditor(issueObjectIndex);
                                 applySemanticOverlayForObject(issueObjectIndex);
                             }
@@ -1873,9 +2031,15 @@ int main() {
                     if (CanCreateMissingDependencyAnchor(issue)) {
                         ImGui::SameLine();
                         if (ImGui::SmallButton(("Create Anchor##issue_" + std::to_string(issueIndex)).c_str())) {
+                            const bunker::World beforeWorld = editorWorld;
+                            const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                             const int issueObjectIndex = FindObjectIndexByRegistryId(editorWorld, issue.objectId);
                             int createdObjectIndex = -1;
                             if (CreateMissingDependencyAnchorForIssue(editorWorld, issue, createdObjectIndex, statusText)) {
+                                selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                                    "Create missing anchor: " + issue.relatedValue,
+                                    beforeWorld,
+                                    beforeSelectionRegistryId);
                                 maybeAutoLayoutSemanticChain(issueObjectIndex);
                                 focusObjectInEditor(createdObjectIndex, 1.6f);
                                 applySemanticOverlayForObject(issueObjectIndex);
@@ -1885,9 +2049,15 @@ int main() {
                     if (issue.code == "auto_created_semantic_anchor") {
                         ImGui::SameLine();
                         if (ImGui::SmallButton(("Adopt##issue_" + std::to_string(issueIndex)).c_str())) {
+                            const bunker::World beforeWorld = editorWorld;
+                            const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                             const int issueObjectIndex = FindObjectIndexByRegistryId(editorWorld, issue.objectId);
                             if (issueObjectIndex >= 0 &&
                                 AdoptSemanticAnchorAsAuthored(editorWorld.objects[static_cast<std::size_t>(issueObjectIndex)], true)) {
+                                selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                                    "Adopt auto semantic anchor",
+                                    beforeWorld,
+                                    beforeSelectionRegistryId);
                                 statusText = "Adopted auto-created semantic anchor as authored.";
                                 focusObjectInEditor(issueObjectIndex);
                                 applySemanticOverlayForObject(issueObjectIndex);
@@ -1984,7 +2154,13 @@ int main() {
             if (ImGui::Button(
                     IsPinnedSemanticAnchor(selectedObject) ? "Unpin Semantic Placement" : "Pin Semantic Placement",
                     ImVec2(220.0f, 28.0f))) {
+                const bunker::World beforeWorld = editorWorld;
+                const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                 if (PinSemanticAnchorPlacement(selectedObject, !IsPinnedSemanticAnchor(selectedObject))) {
+                    selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                        IsPinnedSemanticAnchor(selectedObject) ? "Pin semantic placement" : "Unpin semantic placement",
+                        beforeWorld,
+                        beforeSelectionRegistryId);
                     statusText = IsPinnedSemanticAnchor(selectedObject)
                         ? "Pinned semantic placement for selected anchor."
                         : "Removed semantic placement pin from selected anchor.";
@@ -1997,7 +2173,13 @@ int main() {
             if (IsAutoGeneratedSemanticAnchor(selectedObject)) {
                 ImGui::SameLine();
                 if (ImGui::Button("Adopt As Authored", ImVec2(170.0f, 28.0f))) {
+                    const bunker::World beforeWorld = editorWorld;
+                    const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                     if (AdoptSemanticAnchorAsAuthored(selectedObject, true)) {
+                        selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                            "Adopt selected semantic anchor",
+                            beforeWorld,
+                            beforeSelectionRegistryId);
                         statusText = "Adopted selected semantic anchor as authored and pinned it.";
                     } else {
                         statusText = "Selected semantic anchor is already authored.";
@@ -2023,9 +2205,15 @@ int main() {
                 if (CanCreateMissingDependencyAnchor(issue)) {
                     ImGui::SameLine();
                     if (ImGui::SmallButton(("Create Anchor Near Selected##selected_issue_" + std::to_string(issueIndex)).c_str())) {
+                        const bunker::World beforeWorld = editorWorld;
+                        const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                         const int semanticRootIndex = selectedObjectIndex;
                         int createdObjectIndex = -1;
                         if (CreateMissingDependencyAnchorForIssue(editorWorld, issue, createdObjectIndex, statusText)) {
+                            selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                                "Create selected dependency anchor: " + issue.relatedValue,
+                                beforeWorld,
+                                beforeSelectionRegistryId);
                             maybeAutoLayoutSemanticChain(semanticRootIndex);
                             focusObjectInEditor(createdObjectIndex, 1.6f);
                             applySemanticOverlayForObject(semanticRootIndex);
@@ -2035,7 +2223,13 @@ int main() {
                 if (issue.code == "auto_created_semantic_anchor") {
                     ImGui::SameLine();
                     if (ImGui::SmallButton(("Adopt Selected##selected_issue_" + std::to_string(issueIndex)).c_str())) {
+                        const bunker::World beforeWorld = editorWorld;
+                        const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                         if (AdoptSemanticAnchorAsAuthored(selectedObject, true)) {
+                            selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                                "Adopt selected auto semantic anchor",
+                                beforeWorld,
+                                beforeSelectionRegistryId);
                             statusText = "Adopted selected auto-created semantic anchor as authored.";
                         } else {
                             statusText = "Selected semantic anchor is already authored.";
@@ -2127,8 +2321,14 @@ int main() {
                     ? "Layout mode: preserve authored anchors, reflow auto-created chain"
                     : "Layout mode: reflow the entire semantic chain");
                 if (ImGui::Button("Adopt Semantic Chain As Authored", ImVec2(-1.0f, 28.0f))) {
+                    const bunker::World beforeWorld = editorWorld;
+                    const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                     const int adoptedAnchors = AdoptSemanticDependencyChainAsAuthored(editorWorld, semanticRootIndex, false, statusText);
                     if (adoptedAnchors > 0) {
+                        selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                            "Adopt semantic chain as authored",
+                            beforeWorld,
+                            beforeSelectionRegistryId);
                         focusObjectInEditor(semanticRootIndex, 1.5f);
                         applySemanticOverlayForObject(semanticRootIndex);
                     }
@@ -2144,11 +2344,17 @@ int main() {
                     statusText = "Cleared semantic preview overlay.";
                 }
                 if (ImGui::Button("Auto-Layout Semantic Chain", ImVec2(-1.0f, 28.0f))) {
+                    const bunker::World beforeWorld = editorWorld;
+                    const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                     AutoLayoutSemanticDependencyChain(
                         editorWorld,
                         semanticRootIndex,
                         statusText,
                         preserveManualSemanticAnchors);
+                    selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                        "Auto-layout semantic chain",
+                        beforeWorld,
+                        beforeSelectionRegistryId);
                     focusObjectInEditor(semanticRootIndex, 1.5f);
                     applySemanticOverlayForObject(semanticRootIndex);
                 }
@@ -2175,7 +2381,13 @@ int main() {
                         }
                         ImGui::SameLine();
                         if (ImGui::SmallButton(((IsPinnedSemanticAnchor(dependencyObject) ? "Unpin" : "Pin") + std::string("##") + dependencyTag).c_str())) {
+                            const bunker::World beforeWorld = editorWorld;
+                            const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                             if (PinSemanticAnchorPlacement(dependencyObject, !IsPinnedSemanticAnchor(dependencyObject))) {
+                                selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                                    IsPinnedSemanticAnchor(dependencyObject) ? "Pin dependency anchor" : "Unpin dependency anchor",
+                                    beforeWorld,
+                                    beforeSelectionRegistryId);
                                 statusText = IsPinnedSemanticAnchor(dependencyObject)
                                     ? "Pinned dependency anchor semantic placement."
                                     : "Removed semantic placement pin from dependency anchor.";
@@ -2187,7 +2399,13 @@ int main() {
                         if (IsAutoGeneratedSemanticAnchor(dependencyObject)) {
                             ImGui::SameLine();
                             if (ImGui::SmallButton((std::string("Adopt##") + dependencyTag).c_str())) {
+                                const bunker::World beforeWorld = editorWorld;
+                                const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                                 if (AdoptSemanticAnchorAsAuthored(dependencyObject, true)) {
+                                    selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                                        "Adopt dependency anchor: " + dependencyTag,
+                                        beforeWorld,
+                                        beforeSelectionRegistryId);
                                     statusText = "Adopted dependency anchor as authored and pinned it.";
                                 } else {
                                     statusText = "Dependency anchor is already authored.";
@@ -2206,8 +2424,14 @@ int main() {
                             }
                             ImGui::SameLine();
                             if (ImGui::SmallButton(("Create Dependency##" + dependencyTag).c_str())) {
+                                const bunker::World beforeWorld = editorWorld;
+                                const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                                 int createdObjectIndex = -1;
                                 if (CreateMissingDependencyAnchorForIssue(editorWorld, issue, createdObjectIndex, statusText)) {
+                                    selectedObjectUndoHandledThisFrame = pushBatchUndoIfChanged(
+                                        "Create dependency anchor: " + dependencyTag,
+                                        beforeWorld,
+                                        beforeSelectionRegistryId);
                                     maybeAutoLayoutSemanticChain(semanticRootIndex);
                                     focusObjectInEditor(createdObjectIndex, 1.6f);
                                     ShowPreviewSemanticDependencies(editorWorld, semanticRootIndex, previewViewport);
@@ -2547,6 +2771,12 @@ int main() {
                     duplicate.y = std::round(duplicate.y);
                 }
                 editorWorld.AddObject(duplicate);
+                undoStack.PushObjectAdded(
+                    "Duplicate object",
+                    editorWorld.objects.back(),
+                    static_cast<int>(editorWorld.objects.size()) - 1,
+                    duplicate.registryId);
+                selectedObjectUndoHandledThisFrame = true;
                 syncEditorLayerStateTable();
                 focusObjectInEditor(static_cast<int>(editorWorld.objects.size()) - 1);
                 statusText = "Duplicated selected object with a new Registry ID.";
@@ -2561,8 +2791,18 @@ int main() {
             }
             if (ImGui::Button("Delete Selected Object", ImVec2(-1.0f, 32.0f))) {
                 if (selectedIncomingReferences.empty()) {
+                    const bunker::MapObject removedObject = selectedObject;
+                    const int removedObjectIndex = selectedObjectIndex;
+                    const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                     statusText = "Deleted object: " + selectedObject.displayName;
                     deleteObjectByRegistryId(selectedObject.registryId);
+                    undoStack.PushObjectRemoved(
+                        "Delete object",
+                        removedObject,
+                        removedObjectIndex,
+                        beforeSelectionRegistryId,
+                        currentSelectedRegistryId());
+                    selectedObjectUndoHandledThisFrame = true;
                 } else {
                     pendingDeleteRegistryId = selectedObject.registryId;
                     pendingDeleteDisplayName = selectedObject.displayName;
@@ -2612,7 +2852,22 @@ int main() {
             }
             ImGui::SameLine();
             if (ImGui::Button("Delete Anyway", ImVec2(140.0f, 0.0f))) {
+                const int removedObjectIndex = FindObjectIndexByRegistryId(editorWorld, pendingDeleteRegistryId);
+                const bunker::MapObject* removedObjectPtr = editorWorld.FindObjectByRegistryId(pendingDeleteRegistryId);
+                const std::optional<bunker::MapObject> removedObject = (removedObjectPtr != nullptr)
+                    ? std::optional<bunker::MapObject>(*removedObjectPtr)
+                    : std::nullopt;
+                const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
                 deleteObjectByRegistryId(pendingDeleteRegistryId);
+                if (removedObject.has_value()) {
+                    undoStack.PushObjectRemoved(
+                        "Delete referenced object",
+                        *removedObject,
+                        removedObjectIndex,
+                        beforeSelectionRegistryId,
+                        currentSelectedRegistryId());
+                    selectedObjectUndoHandledThisFrame = true;
+                }
                 statusText = "Deleted referenced object: " + pendingDeleteDisplayName;
                 pendingDeleteRegistryId.clear();
                 pendingDeleteDisplayName.clear();
@@ -3482,6 +3737,49 @@ int main() {
                 }
             }
             ImGui::End();
+        }
+
+        if (!worldMetadataUndoHandledThisFrame &&
+            (frameStartMetadata.name != editorWorld.metadata.name ||
+             frameStartMetadata.biome != editorWorld.metadata.biome ||
+             frameStartMetadata.objective != editorWorld.metadata.objective ||
+             frameStartMetadata.playerSpawnX != editorWorld.metadata.playerSpawnX ||
+             frameStartMetadata.playerSpawnY != editorWorld.metadata.playerSpawnY)) {
+            undoStack.PushWorldMetadataUpdated("Update world metadata", frameStartMetadata, editorWorld.metadata);
+        }
+
+        if (!selectedObjectUndoHandledThisFrame &&
+            frameStartSelectedObject.has_value() &&
+            frameStartSelectedObjectIndex >= 0 &&
+            frameStartSelectedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
+            const auto& frameEndObject = editorWorld.objects[static_cast<std::size_t>(frameStartSelectedObjectIndex)];
+            const auto& frameBeginObject = *frameStartSelectedObject;
+            if (frameBeginObject.registryId != frameEndObject.registryId ||
+                frameBeginObject.displayName != frameEndObject.displayName ||
+                frameBeginObject.interaction != frameEndObject.interaction ||
+                frameBeginObject.category != frameEndObject.category ||
+                frameBeginObject.x != frameEndObject.x ||
+                frameBeginObject.y != frameEndObject.y ||
+                frameBeginObject.z != frameEndObject.z ||
+                frameBeginObject.width != frameEndObject.width ||
+                frameBeginObject.depth != frameEndObject.depth ||
+                frameBeginObject.height != frameEndObject.height ||
+                frameBeginObject.health != frameEndObject.health ||
+                frameBeginObject.blocksMovement != frameEndObject.blocksMovement ||
+                frameBeginObject.discovered != frameEndObject.discovered ||
+                frameBeginObject.manualLoot != frameEndObject.manualLoot ||
+                frameBeginObject.manualLootIds != frameEndObject.manualLootIds ||
+                frameBeginObject.scriptTag != frameEndObject.scriptTag ||
+                frameBeginObject.linkTarget != frameEndObject.linkTarget ||
+                frameBeginObject.semanticAutoCreated != frameEndObject.semanticAutoCreated ||
+                frameBeginObject.semanticLayoutPinned != frameEndObject.semanticLayoutPinned ||
+                frameBeginObject.editorLayer != frameEndObject.editorLayer) {
+                undoStack.PushObjectUpdated(
+                    "Edit object: " + frameEndObject.displayName,
+                    frameBeginObject,
+                    frameEndObject,
+                    frameStartSelectedObjectIndex);
+            }
         }
 
         ImGui::Render();
