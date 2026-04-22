@@ -1291,14 +1291,13 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
             return true;
         }
         std::string repairEvent;
-        if (ConsumeTankServiceKit(profile, "track_patch", TankModuleSlotType::Turret, &repairEvent) ||
-            ConsumeTankServiceKit(profile, "servo_patch", TankModuleSlotType::Turret, &repairEvent) ||
-            ConsumeTankServiceKit(profile, "engine_seal", TankModuleSlotType::PowerCore, &repairEvent) ||
-            ConsumeTankServiceKit(profile, "lens_pack", TankModuleSlotType::Sensor, &repairEvent)) {
+        if (TryConsumeBestTankServiceKit(profile, &repairEvent)) {
             gameState.lastSupportAction = "BT-72 serviced through authored tank service anchor.";
             gameState.lastEvent = gameState.lastSupportAction + " " + repairEvent;
         } else {
-            gameState.lastEvent = "Tank service anchor ready. Bring a compatible service kit from Lanline support or field salvage.";
+            gameState.lastEvent = repairEvent.empty()
+                ? "Tank service anchor ready. Bring a compatible service kit from Lanline support or field salvage."
+                : "Tank service anchor ready. " + repairEvent;
         }
         return true;
     }

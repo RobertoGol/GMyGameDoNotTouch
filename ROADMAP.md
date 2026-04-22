@@ -10,6 +10,9 @@
 
 Последняя подтвержденная сборка:
 
+- `2026-04-22`
+- `build_verify_ninja_fresh`
+- после дожатия authored `tank_service` до реального BT-72 service-kit payoff снова подтверждены `BunkerGame`, `BunkerLauncher`, `BunkerEditor`, `BunkerSmokeChecks`, а `BunkerSmokeChecks.exe` прошёл
 - `2026-04-12`
 - `build_stage1_msvc`
 - успешно собраны `BunkerGame`, `BunkerLauncher`, `BunkerEditor`

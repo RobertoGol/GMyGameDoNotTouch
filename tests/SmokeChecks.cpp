@@ -2,6 +2,7 @@
 #include "../include/AtomicPersistence.hpp"
 #include "../include/BuildAnnouncement.hpp"
 #include "../include/GameplayDescriptorRegistry.hpp"
+#include "../include/HangarSystem.hpp"
 #include "../include/LanlineServices.hpp"
 #include "../include/LaunchSession.hpp"
 #include "../include/PrefabLibrary.hpp"
@@ -295,6 +296,122 @@ bool RunLanlineServicesRoundtripSmoke() {
                     return item.itemId == "engine_seal" && item.count >= 1;
                 }),
             "lanline services smoke expected engine service kit delivery to grant engine_seal inventory");
+}
+
+bool RunTankServiceKitSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.character.inventory.push_back({"track_patch", 1, 0.2f});
+    profile.character.inventory.push_back({"servo_patch", 1, 0.2f});
+    profile.character.inventory.push_back({"engine_seal", 1, 0.2f});
+    profile.character.inventory.push_back({"lens_pack", 1, 0.2f});
+    profile.partnerTank.damage.hull = 52.0f;
+    profile.partnerTank.damage.bucket = 48.0f;
+    profile.partnerTank.damage.turret = 41.0f;
+    profile.partnerTank.damage.sensors = 36.0f;
+    profile.partnerTank.damage.cockpit = 74.0f;
+    profile.partnerTank.damage.powerCore = 43.0f;
+    profile.partnerTank.energyReserve = 58.0f;
+    profile.partnerTank.inRepair = true;
+
+    const auto countItem = [&](std::string_view itemId) {
+        const auto it = std::find_if(
+            profile.character.inventory.begin(),
+            profile.character.inventory.end(),
+            [&](const bunker::InventoryEntry& entry) { return entry.itemId == itemId; });
+        return it == profile.character.inventory.end() ? 0 : it->count;
+    };
+
+    std::string eventText;
+    if (!Check(bunker::TryConsumeBestTankServiceKit(profile, &eventText),
+            "tank service smoke expected engine kit to apply first")) {
+        return false;
+    }
+    if (!Check(countItem("engine_seal") == 0, "tank service smoke expected engine seal to be consumed")) {
+        return false;
+    }
+    if (!Check(profile.partnerTank.damage.powerCore == 75.0f && profile.partnerTank.energyReserve == 76.0f,
+            "tank service smoke expected engine kit to restore power core and reserve charge")) {
+        return false;
+    }
+    if (!Check(eventText.find("Engine service kit applied") != std::string::npos,
+            "tank service smoke expected engine kit event text")) {
+        return false;
+    }
+
+    eventText.clear();
+    if (!Check(bunker::TryConsumeBestTankServiceKit(profile, &eventText),
+            "tank service smoke expected suspension kit to apply second")) {
+        return false;
+    }
+    if (!Check(countItem("track_patch") == 0, "tank service smoke expected track patch to be consumed")) {
+        return false;
+    }
+    if (!Check(profile.partnerTank.damage.hull == 74.0f && profile.partnerTank.damage.bucket == 76.0f,
+            "tank service smoke expected suspension kit to restore hull carriage and bucket rig")) {
+        return false;
+    }
+    if (!Check(eventText.find("Suspension repair kit applied") != std::string::npos,
+            "tank service smoke expected suspension kit event text")) {
+        return false;
+    }
+
+    eventText.clear();
+    if (!Check(bunker::TryConsumeBestTankServiceKit(profile, &eventText),
+            "tank service smoke expected sensor kit to apply third")) {
+        return false;
+    }
+    if (!Check(countItem("lens_pack") == 0, "tank service smoke expected lens pack to be consumed")) {
+        return false;
+    }
+    if (!Check(profile.partnerTank.damage.sensors == 70.0f && profile.partnerTank.damage.cockpit == 84.0f,
+            "tank service smoke expected sensor kit to restore optics and cockpit feed")) {
+        return false;
+    }
+    if (!Check(eventText.find("Sensor recovery kit applied") != std::string::npos,
+            "tank service smoke expected sensor kit event text")) {
+        return false;
+    }
+
+    eventText.clear();
+    if (!Check(bunker::TryConsumeBestTankServiceKit(profile, &eventText),
+            "tank service smoke expected turret kit to apply fourth")) {
+        return false;
+    }
+    if (!Check(countItem("servo_patch") == 0, "tank service smoke expected servo patch to be consumed")) {
+        return false;
+    }
+    if (!Check(profile.partnerTank.damage.turret == 73.0f,
+            "tank service smoke expected turret kit to restore turret integrity")) {
+        return false;
+    }
+    if (!Check(eventText.find("Turret service kit applied") != std::string::npos,
+            "tank service smoke expected turret kit event text")) {
+        return false;
+    }
+    if (!Check(!profile.partnerTank.inRepair,
+            "tank service smoke expected successful service to clear in-repair flag")) {
+        return false;
+    }
+
+    eventText.clear();
+    if (!Check(!bunker::TryConsumeBestTankServiceKit(profile, &eventText),
+            "tank service smoke expected missing kit fallback after all kits are consumed")) {
+        return false;
+    }
+    if (!Check(eventText.find("Compatible tank service kit not found.") != std::string::npos,
+            "tank service smoke expected missing kit message")) {
+        return false;
+    }
+
+    bunker::SessionProfile idleProfile = bunker::MakeDefaultSessionProfile();
+    idleProfile.character.inventory.push_back({"track_patch", 1, 0.2f});
+    std::string idleEvent;
+    return Check(!bunker::TryConsumeBestTankServiceKit(idleProfile, &idleEvent),
+            "tank service smoke expected idle tank not to consume a valid kit") &&
+        Check(idleProfile.character.inventory.back().count == 1,
+            "tank service smoke expected idle tank to keep the suspension kit") &&
+        Check(idleEvent.find("no damaged subsystem") != std::string::npos,
+            "tank service smoke expected explicit no-damage guidance");
 }
 
 bool RunLaunchTicketFlow() {
@@ -2158,6 +2275,7 @@ int main() {
         RunProfileRoundtrip() &&
         RunLauncherAnnouncementSmoke() &&
         RunLanlineServicesRoundtripSmoke() &&
+        RunTankServiceKitSmoke() &&
         RunLaunchTicketFlow() &&
         RunGameplayDescriptorValidationSmoke() &&
         RunSemanticDependencyValidationSmoke() &&

@@ -1,13 +1,11 @@
 # include/HangarSystem.hpp
 
-Из `Next.md` сюда вынесен один конкретный gameplay hook:
+Уже закрыто:
 
-- `ConsumeTankServiceKit(...)`
+- `ConsumeTankServiceKit(...)` больше не является плоским generic repair-hook: `track / servo / engine / lens` kits теперь дают разные BT-72 effects и разные result texts
+- shared `TryConsumeBestTankServiceKit(...)` выбирает лучший доступный kit под текущее состояние танка, так что authored `tank_service` не тратит неподходящий набор
+- smoke-check покрывает engine/suspension/sensor/turret service flow, missing-kit fallback и no-damage guidance
 
-Ожидаемое поведение:
+Следующее отсюда:
 
-- списать нужный service item из инвентаря
-- применить ремонт к нужной подсистеме танка
-- вернуть понятный текст результата
-
-Смысл этого шага: связать `Lanline Services` и `tank_service` не только через UI, но через реальный gameplay effect.
+- держать service kit catalog и BT-72 subsystem effects синхронно, если будут добавляться новые типы сервисных наборов
