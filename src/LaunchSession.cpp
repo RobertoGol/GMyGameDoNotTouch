@@ -31,6 +31,9 @@ bool IssueLaunchTicket(const LaunchTicketInfo& ticketInfo) {
     out << "selected_world=" << ticketInfo.selectedWorld << '\n';
     out << "lanline_session_id=" << ticketInfo.lanlineSessionId << '\n';
     out << "host_endpoint=" << ticketInfo.hostEndpoint << '\n';
+    out << "bt72_seat_role=" << ticketInfo.bt72SeatRole << '\n';
+    out << "bt72_second_seat_policy=" << ticketInfo.bt72SecondSeatPolicy << '\n';
+    out << "bt72_trusted_gunner=" << ticketInfo.bt72TrustedGunnerHandle << '\n';
     return static_cast<bool>(out);
 }
 
@@ -65,6 +68,12 @@ bool ConsumeLaunchTicket(LaunchTicketInfo& ticketInfo, std::string& failureReaso
             ticketInfo.lanlineSessionId = value;
         } else if (key == "host_endpoint") {
             ticketInfo.hostEndpoint = value;
+        } else if (key == "bt72_seat_role") {
+            ticketInfo.bt72SeatRole = value;
+        } else if (key == "bt72_second_seat_policy") {
+            ticketInfo.bt72SecondSeatPolicy = value;
+        } else if (key == "bt72_trusted_gunner") {
+            ticketInfo.bt72TrustedGunnerHandle = value;
         }
     }
     in.close();

@@ -7,7 +7,7 @@ namespace bunker {
 namespace {
 
 constexpr char kSessionProfileFormat[] = "BPF1";
-constexpr int kCurrentSessionProfileVersion = 4;
+constexpr int kCurrentSessionProfileVersion = 5;
 
 bool HasInventoryEntry(const SessionProfile& profile, const std::string& itemId) {
     return std::any_of(
@@ -21,6 +21,9 @@ void NormalizeFirstPlayableRouteProgress(SessionProfile& profile) {
     route.prePipPadClueCount = std::clamp(route.prePipPadClueCount, 0, 2);
     route.introSeen = route.introSeen || profile.story.awakenedFromCryo;
     route.emergencyMeleeRecovered = route.emergencyMeleeRecovered || HasInventoryEntry(profile, "#%it_emergency_baton");
+    route.accessCardRecovered = route.accessCardRecovered ||
+        HasInventoryEntry(profile, "bunker_access_card") ||
+        profile.story.pipPadRecovered;
     route.earlyVerminEncounterResolved = route.earlyVerminEncounterResolved ||
         profile.character.awakening.footKills > 0 ||
         profile.story.tankLinked;
@@ -45,6 +48,15 @@ void NormalizeFirstPlayableRouteProgress(SessionProfile& profile) {
     route.debriefSummaryViewed = route.debriefSummaryViewed ||
         profile.story.returnedToBase ||
         HasCollectedTapeId(profile, "debrief_shelter17");
+    profile.partnerTank.secondSeatUnlocked = profile.partnerTank.secondSeatUnlocked || route.bt72Restored || profile.story.tankLinked;
+    profile.partnerTank.secondSeatPolicy = NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy);
+    if (!profile.partnerTank.secondSeatUnlocked) {
+        profile.partnerTank.secondSeatPolicy = "pilot_only";
+        profile.partnerTank.assignedGunnerHandle.clear();
+    } else if (profile.partnerTank.secondSeatPolicy == "pilot_only" &&
+        profile.partnerTank.assignedGunnerHandle == profile.character.displayName) {
+        profile.partnerTank.assignedGunnerHandle.clear();
+    }
     profile.story.bucketRecovered = profile.story.bucketRecovered || route.clearanceModuleInstalled;
     profile.story.relayRecovered = profile.story.relayRecovered || route.firstRecoveryNodeActivated;
     profile.story.returnedToBase = profile.story.returnedToBase || route.debriefSummaryViewed;
@@ -60,6 +72,7 @@ void MigrateSessionProfile(SessionProfile& profile, int loadedVersion) {
         auto& route = profile.firstPlayableRoute;
         route.introSeen = profile.story.awakenedFromCryo;
         route.emergencyMeleeRecovered = profile.story.awakenedFromCryo;
+        route.accessCardRecovered = profile.story.pipPadRecovered;
         route.earlyVerminEncounterResolved = profile.story.archiveRecovered || profile.story.tankLinked;
         route.prePipPadClueCount = profile.story.pipPadRecovered ? 2 : (profile.story.awakenedFromCryo ? 1 : 0);
         route.bt72HullInspected = profile.story.archiveRecovered || profile.story.tankLinked;
@@ -75,6 +88,16 @@ void MigrateSessionProfile(SessionProfile& profile, int loadedVersion) {
             profile.character.awakening.fieldServiceUses > 0;
         route.firstRecoveryNodeActivated = profile.story.relayRecovered;
         route.debriefSummaryViewed = profile.story.returnedToBase;
+    }
+    if (loadedVersion < 5) {
+        profile.partnerTank.secondSeatUnlocked = profile.story.tankLinked || profile.firstPlayableRoute.bt72Restored;
+        profile.partnerTank.secondSeatPolicy = "pilot_only";
+        profile.partnerTank.gunnerDrillSeen = false;
+        profile.partnerTank.trustedGunnerHandle.clear();
+        profile.partnerTank.assignedGunnerHandle.clear();
+        if (profile.story.pipPadRecovered) {
+            profile.firstPlayableRoute.accessCardRecovered = true;
+        }
     }
 }
 
@@ -164,6 +187,7 @@ void NormalizeSessionProfile(SessionProfile& profile) {
         profile.character.passiveSkills.push_back({"skill_muscle_memory", "Muscle Memory", false, false});
     }
     if (profile.partnerTank.callSign.empty()) profile.partnerTank.callSign = "BT-72";
+    profile.partnerTank.secondSeatPolicy = NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy);
     if (profile.ownedVehicles.empty()) profile.ownedVehicles.push_back({"[#tr2001]", "Dust Runner Bike", VehicleType::Motorcycle, true, false, 92.0f, 74.0f, {"cargo_rack_light"}});
     if (profile.fieldCheckpointKnown && profile.fieldCheckpointWorld.empty()) {
         profile.fieldCheckpointWorld = profile.selectedWorld;
@@ -228,6 +252,11 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
     out << "partner_tank_y=" << profile.partnerTank.worldY << '\n';
     out << "partner_tank_sync_ram=" << profile.partnerTank.syncRamActions << '\n';
     out << "partner_tank_sync_shot=" << profile.partnerTank.syncShotActions << '\n';
+    out << "partner_tank_second_seat=" << (profile.partnerTank.secondSeatUnlocked ? 1 : 0) << '\n';
+    out << "partner_tank_second_seat_policy=" << profile.partnerTank.secondSeatPolicy << '\n';
+    out << "partner_tank_trusted_gunner=" << profile.partnerTank.trustedGunnerHandle << '\n';
+    out << "partner_tank_assigned_gunner=" << profile.partnerTank.assignedGunnerHandle << '\n';
+    out << "partner_tank_gunner_drill=" << (profile.partnerTank.gunnerDrillSeen ? 1 : 0) << '\n';
     out << "tank_hull=" << profile.partnerTank.damage.hull << '\n';
     out << "tank_turret=" << profile.partnerTank.damage.turret << '\n';
     out << "tank_bucket=" << profile.partnerTank.damage.bucket << '\n';
@@ -245,6 +274,7 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
     out << "story_return=" << (profile.story.returnedToBase ? 1 : 0) << '\n';
     out << "route_intro_seen=" << (profile.firstPlayableRoute.introSeen ? 1 : 0) << '\n';
     out << "route_emergency_melee=" << (profile.firstPlayableRoute.emergencyMeleeRecovered ? 1 : 0) << '\n';
+    out << "route_access_card=" << (profile.firstPlayableRoute.accessCardRecovered ? 1 : 0) << '\n';
     out << "route_early_vermin=" << (profile.firstPlayableRoute.earlyVerminEncounterResolved ? 1 : 0) << '\n';
     out << "route_pre_pippad_clues=" << profile.firstPlayableRoute.prePipPadClueCount << '\n';
     out << "route_bt72_hull=" << (profile.firstPlayableRoute.bt72HullInspected ? 1 : 0) << '\n';
@@ -411,6 +441,11 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         else if (key == "partner_tank_y") outProfile.partnerTank.worldY = std::stof(value);
         else if (key == "partner_tank_sync_ram") outProfile.partnerTank.syncRamActions = std::stoi(value);
         else if (key == "partner_tank_sync_shot") outProfile.partnerTank.syncShotActions = std::stoi(value);
+        else if (key == "partner_tank_second_seat") outProfile.partnerTank.secondSeatUnlocked = (std::stoi(value) != 0);
+        else if (key == "partner_tank_second_seat_policy") outProfile.partnerTank.secondSeatPolicy = value;
+        else if (key == "partner_tank_trusted_gunner") outProfile.partnerTank.trustedGunnerHandle = value;
+        else if (key == "partner_tank_assigned_gunner") outProfile.partnerTank.assignedGunnerHandle = value;
+        else if (key == "partner_tank_gunner_drill") outProfile.partnerTank.gunnerDrillSeen = (std::stoi(value) != 0);
         else if (key == "tank_hull") outProfile.partnerTank.damage.hull = std::stof(value);
         else if (key == "tank_turret") outProfile.partnerTank.damage.turret = std::stof(value);
         else if (key == "tank_bucket") outProfile.partnerTank.damage.bucket = std::stof(value);
@@ -428,6 +463,7 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         else if (key == "story_return") outProfile.story.returnedToBase = (std::stoi(value) != 0);
         else if (key == "route_intro_seen") outProfile.firstPlayableRoute.introSeen = (std::stoi(value) != 0);
         else if (key == "route_emergency_melee") outProfile.firstPlayableRoute.emergencyMeleeRecovered = (std::stoi(value) != 0);
+        else if (key == "route_access_card") outProfile.firstPlayableRoute.accessCardRecovered = (std::stoi(value) != 0);
         else if (key == "route_early_vermin") outProfile.firstPlayableRoute.earlyVerminEncounterResolved = (std::stoi(value) != 0);
         else if (key == "route_pre_pippad_clues") outProfile.firstPlayableRoute.prePipPadClueCount = std::stoi(value);
         else if (key == "route_bt72_hull") outProfile.firstPlayableRoute.bt72HullInspected = (std::stoi(value) != 0);

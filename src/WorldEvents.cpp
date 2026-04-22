@@ -22,7 +22,9 @@ void ProcessScriptedWorldEvents(const World& world, const PlayerState& player, c
     if (profile.story.awakenedFromCryo && !profile.story.pipPadRecovered && !gameState.zoneEventCryoLocker &&
         IsNear(player, -9.0f, -6.0f, 2.5f)) {
         gameState.zoneEventCryoLocker = true;
-        gameState.lastEvent = "LOCKER BAY: 'Emergency recovery locker detected. Pip-Pad signature nearby. Paper service notes mention a missing BT-72 berth key.'";
+        gameState.lastEvent = profile.firstPlayableRoute.accessCardRecovered
+            ? "LOCKER BAY: 'Emergency recovery locker detected. Card interlock accepts the bunker access card. Pip-Pad signature nearby.'"
+            : "LOCKER BAY: 'Emergency recovery locker detected. Mechanical interlock wants a bunker access card from the core service racks.'";
         return;
     }
 
@@ -42,7 +44,7 @@ void ProcessScriptedWorldEvents(const World& world, const PlayerState& player, c
 
     if (profile.story.exitedBunker && !gameState.zoneEventExterior) {
         gameState.zoneEventExterior = true;
-        gameState.lastEvent = "OUTER ROUTE: 'Radiation low. Debris high. Clear the route, survive first contact in BT-72, then push a service stop before the relay node.'";
+        gameState.lastEvent = "SURFACE APPROACH: 'Lift route reached. Radiation low, debris high, skyline active ahead. Clear the route, survive first contact in BT-72, then push a service stop before the relay node.'";
         return;
     }
 

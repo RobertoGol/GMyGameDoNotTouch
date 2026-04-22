@@ -20,6 +20,7 @@ struct GameState {
     bool usePressed = false;
     bool contextualPressed = false;
     bool bucketPressed = false;
+    bool seatSwapPressed = false;
     bool uiPressed = false;
     bool savePressed = false;
     bool healPressed = false;
@@ -74,11 +75,11 @@ struct GameState {
     bool tankServiceNearby = false;
     bool medicalSupportNearby = false;
     WeatherAnomaly weather = WeatherAnomaly::Clear;
-    std::string lastEvent = "Cryostasis breached. Reorient, recover the Pip-Pad, and trace the BT-72 berth.";
+    std::string lastEvent = "Cryostasis breached. Reorient, secure an access card, recover the Pip-Pad, and trace the BT-72 berth.";
     std::string lastSupportAction = "No support activity.";
     std::string lastPortalAction = "No portal updates.";
     std::vector<std::string> radioMessages = {
-        "SYSTEM: 'Cryo wing unstable. Sweep the bunker, recover the Pip-Pad, and follow the paper trail.'",
+        "SYSTEM: 'Cryo wing unstable. Sweep the shared cryo tier, recover an access card, and follow the paper trail to the Pip-Pad.'",
         "ARCHIVE: 'One reactor core is missing. One body is missing. Garage service traces remain incomplete.'",
         "BT-72: 'Hull detected. Restore the chassis before any cockpit link attempt.'",
         "HQ: 'The outer bulkhead is blocked. Install a clearance module before forcing that route.'",
@@ -93,6 +94,7 @@ float CurrentInventoryWeight(const SessionProfile& profile);
 int EffectiveStatValue(const SessionProfile& profile, const GameState& gameState, char statCode);
 bool TryConsumeFieldRation(SessionProfile& profile, GameState& gameState);
 void AdvanceViewMode(PlayerState& player);
+void TryToggleBt72CrewSeat(PlayerState& player, SessionProfile& profile, GameState& gameState);
 void ApplyStaticEraser(World& world, const StaticEraser& staticEraser);
 bool ShouldUseStarterStoryFlow(const World& world);
 void SyncStoryFlagsFromWorld(SessionProfile& profile, const StaticEraser& staticEraser);

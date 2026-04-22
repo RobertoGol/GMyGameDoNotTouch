@@ -26,6 +26,7 @@ struct PlayerState {
     float velocityY = 0.0f;
     float recoilOffset = 0.0f;
     bool insideTank = false;
+    bool bt72GunnerSeat = false;
     bool bucketRaised = false;
     bool uiVisible = true;
     ViewMode viewMode = ViewMode::ThirdPerson;

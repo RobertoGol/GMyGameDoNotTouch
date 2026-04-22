@@ -106,6 +106,9 @@ std::string CurrentStoryCheckpointLabel(const SessionProfile& profile) {
         return "Intro // Cryo Wake";
     }
     if (!profile.story.pipPadRecovered) {
+        if (!route.accessCardRecovered) {
+            return "Bunker Passage";
+        }
         return route.prePipPadClueCount >= 2 ? "Pip-Pad Recovery" : "Bunker Passage";
     }
     if (!profile.story.archiveRecovered) {
@@ -147,6 +150,9 @@ std::string CurrentStoryObjectivePreview(const SessionProfile& profile) {
         return "Wake from the cryo capsule and stabilize your first bunker route.";
     }
     if (!profile.story.pipPadRecovered) {
+        if (!route.accessCardRecovered) {
+            return "Recover a bunker access card and trace the paper trail to the missing Pip-Pad.";
+        }
         if (route.prePipPadClueCount < 2) {
             return "Sweep the bunker passage, gather the paper trail, and recover the missing Pip-Pad.";
         }
@@ -209,6 +215,9 @@ std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEra
         return "Wake from the cryo capsule and stabilize the bunker route.";
     }
     if (!profile.story.pipPadRecovered) {
+        if (!route.accessCardRecovered) {
+            return "Recover a bunker access card and unlock the route toward the missing Pip-Pad.";
+        }
         if (route.prePipPadClueCount < 2) {
             return "Sweep the bunker passage, gather the paper trail, and recover the missing Pip-Pad.";
         }
@@ -300,6 +309,7 @@ std::vector<StoryRouteEntry> BuildStarterRoute(const SessionProfile& profile, co
     return {
         {"Wake from cryostasis.", profile.story.awakenedFromCryo},
         {"Recover the first emergency melee tool.", profile.firstPlayableRoute.emergencyMeleeRecovered},
+        {"Recover a bunker access card before the Pip-Pad locker.", profile.firstPlayableRoute.accessCardRecovered},
         {"Gather bunker paper clues before the Pip-Pad pickup.", profile.firstPlayableRoute.prePipPadClueCount >= 2},
         {"Recover the missing Pip-Pad.", profile.story.pipPadRecovered},
         {"Clear the first vermin encounter in the archive corridor.", ArchiveCorridorCleared(profile, staticEraser)},

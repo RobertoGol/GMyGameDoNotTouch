@@ -78,10 +78,21 @@ const char* CurrentUtilityModuleLabel(const SessionProfile& profile) {
     return "Bucket Rig Mk.I";
 }
 
+std::string CurrentBt72SeatAssignment(const PlayerState& player) {
+    if (!player.insideTank) {
+        return "on_foot";
+    }
+    return player.bt72GunnerSeat ? "gunner" : "pilot";
+}
+
 void ToggleTankUtilityModule(SessionProfile& profile, PlayerState& player, GameState& gameState) {
     auto* module = FindTankModule(profile, TankModuleSlotType::Bucket);
     if (module == nullptr) {
         gameState.lastEvent = "No utility hardpoint found on BT-72.";
+        return;
+    }
+    if (player.bt72GunnerSeat) {
+        gameState.lastEvent = "Return to pilot controls before retuning BT-72 utility hardpoints.";
         return;
     }
     if (!profile.firstPlayableRoute.clearanceModuleInstalled && !profile.story.bucketRecovered) {
@@ -578,6 +589,10 @@ bool TryRunFieldWorkbench(PlayerState& player,
     GameState& gameState) {
     if (!player.insideTank) {
         gameState.lastEvent = "Field service requires an active BT-72 cockpit link.";
+        return false;
+    }
+    if (player.bt72GunnerSeat) {
+        gameState.lastEvent = "Field service requires BT-72 pilot controls, not the gunner station.";
         return false;
     }
     if (gameState.fieldWorkbenchCooldown > 0.0f) {
@@ -1640,6 +1655,34 @@ void AdvanceViewMode(PlayerState& player) {
     }
 }
 
+void TryToggleBt72CrewSeat(PlayerState& player, SessionProfile& profile, GameState& gameState) {
+    if (!player.insideTank) {
+        gameState.lastEvent = "Enter BT-72 before shifting crew stations.";
+        return;
+    }
+    if (!Bt72SecondSeatUnlocked(profile)) {
+        gameState.lastEvent = "BT-72 second seat is still sealed until the first sync link is stabilized.";
+        return;
+    }
+    if (!profile.story.tankLinked) {
+        gameState.lastEvent = "BT-72 crew routing is unavailable until the cockpit link is established.";
+        return;
+    }
+
+    player.bt72GunnerSeat = !player.bt72GunnerSeat;
+    if (player.bt72GunnerSeat) {
+        profile.partnerTank.gunnerDrillSeen = true;
+        profile.partnerTank.assignedGunnerHandle = profile.character.displayName;
+        player.bucketRaised = false;
+        gameState.lastEvent = "Crew station shifted to the BT-72 gunner seat. Driver assist holds the hull at crawl speed.";
+    } else {
+        if (profile.partnerTank.assignedGunnerHandle == profile.character.displayName) {
+            profile.partnerTank.assignedGunnerHandle.clear();
+        }
+        gameState.lastEvent = "Crew station shifted back to BT-72 pilot controls.";
+    }
+}
+
 void ApplyStaticEraser(World& world, const StaticEraser& staticEraser) {
     world.objects.erase(
         std::remove_if(world.objects.begin(), world.objects.end(),
@@ -1652,6 +1695,10 @@ bool ShouldUseStarterStoryFlow(const World& world) {
 }
 
 void SyncStoryFlagsFromWorld(SessionProfile& profile, const StaticEraser& staticEraser) {
+    profile.firstPlayableRoute.accessCardRecovered =
+        profile.firstPlayableRoute.accessCardRecovered ||
+        HasInventoryItem(profile, "bunker_access_card") ||
+        profile.story.pipPadRecovered;
     profile.firstPlayableRoute.earlyVerminEncounterResolved =
         profile.firstPlayableRoute.earlyVerminEncounterResolved || staticEraser.IsErased("[%enemy_laska_0001]");
     profile.firstPlayableRoute.clearanceMaterialsRecovered =
@@ -1669,6 +1716,8 @@ void SyncStoryFlagsFromWorld(SessionProfile& profile, const StaticEraser& static
     profile.story.outerRoadCleared = profile.story.outerRoadCleared || staticEraser.IsErased("#%res_scrap_0001");
     profile.story.pipPadRecovered = profile.story.pipPadRecovered || HasInventoryItem(profile, "#%it_pippad");
     profile.story.tankLinked = profile.story.tankLinked || profile.partnerTank.deployed;
+    profile.partnerTank.secondSeatUnlocked = profile.partnerTank.secondSeatUnlocked || profile.story.tankLinked;
+    profile.partnerTank.secondSeatPolicy = NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy);
     profile.story.relayRecovered =
         profile.story.relayRecovered || profile.firstPlayableRoute.firstRecoveryNodeActivated || HasInventoryItem(profile, "relay_reconstruction_data");
 }
@@ -1686,12 +1735,14 @@ void UpdateWorldMetadata(World& world, const SessionProfile& profile, const Stat
 void UpdateWindowTitle(GLFWwindow* window, const PlayerState& player, const World& world, const SessionProfile& sessionProfile) {
     const auto* worldState = FindWorldFieldState(sessionProfile, sessionProfile.selectedWorld);
     char title[320];
+    const std::string seatAssignment = CurrentBt72SeatAssignment(player);
     std::snprintf(
         title,
         sizeof(title),
-        "BunkerGame | %s | %s | %s | %s | %s | %s",
+        "BunkerGame | %s | %s | %s | %s | %s | %s | %s",
         sessionProfile.character.displayName.c_str(),
         player.insideTank ? sessionProfile.partnerTank.callSign.c_str() : "On Foot",
+        Bt72SeatAssignmentLabel(seatAssignment),
         ToString(player.viewMode),
         world.metadata.name.c_str(),
         RecoveryStatusLabel(sessionProfile, worldState),
@@ -2745,20 +2796,36 @@ void HandleAttack(World& world,
     SessionProfile& profile,
     StaticEraser& staticEraser,
     GameState& gameState) {
-    const MapObject* hostile = FindNearestHostile(world, player.x, player.y, player.insideTank ? 2.6f : 1.8f);
+    const bool gunnerSeat = player.insideTank && player.bt72GunnerSeat;
+    const MapObject* hostile = FindNearestHostile(world, player.x, player.y, player.insideTank ? (gunnerSeat ? 6.6f : 2.6f) : 1.8f);
     if (hostile == nullptr) {
-        gameState.lastEvent = player.insideTank ? "No hostile target in ram range." : "No hostile target in melee range.";
+        gameState.lastEvent = player.insideTank
+            ? (gunnerSeat ? "No hostile target in gunner range." : "No hostile target in ram range.")
+            : "No hostile target in melee range.";
         return;
+    }
+
+    if (gunnerSeat) {
+        if (profile.partnerTank.ammoReserve < 3.0f || profile.partnerTank.energyReserve < 2.0f) {
+            gameState.lastEvent = "BT-72 gunner seat lacks ammo or power for a support burst.";
+            return;
+        }
+        profile.partnerTank.ammoReserve = std::max(0.0f, profile.partnerTank.ammoReserve - 3.0f);
+        profile.partnerTank.energyReserve = std::max(0.0f, profile.partnerTank.energyReserve - 2.0f);
+        player.recoilOffset = std::min(0.5f, player.recoilOffset + 0.12f);
+        gameState.tankThermalLoad = std::min(100.0f, gameState.tankThermalLoad + 4.0f);
     }
 
     if (auto* mutableObject = const_cast<MapObject*>(hostile); mutableObject != nullptr) {
         const bool hasEmergencyMeleeTool = HasEmergencyMeleeTool(profile);
-        const float damage = player.insideTank
+        const float damage = gunnerSeat
+            ? (24.0f + static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * 1.8f)
+            : (player.insideTank
             ? ((TankUsesRamShield(profile) ? 36.0f : 28.0f) + static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * 1.5f)
-            : ((hasEmergencyMeleeTool ? 20.0f : 14.0f) + static_cast<float>(EffectiveStatValue(profile, gameState, 'S')) * (hasEmergencyMeleeTool ? 1.05f : 0.9f));
+            : ((hasEmergencyMeleeTool ? 20.0f : 14.0f) + static_cast<float>(EffectiveStatValue(profile, gameState, 'S')) * (hasEmergencyMeleeTool ? 1.05f : 0.9f)));
         mutableObject->health -= damage;
         if (player.insideTank) {
-            RegisterTankSyncStyle(profile, true);
+            RegisterTankSyncStyle(profile, !gunnerSeat);
         }
         if (mutableObject->health <= 0.0f) {
             std::string progressionEvent;
@@ -2778,9 +2845,11 @@ void HandleAttack(World& world,
                 gameState.lastEvent += " " + routeEvent;
             }
         } else {
-            gameState.lastEvent = player.insideTank
+            gameState.lastEvent = gunnerSeat
+                ? "BT-72 gunner burst landed on hostile target."
+                : (player.insideTank
                 ? "Ram impact landed on hostile target."
-                : (hasEmergencyMeleeTool ? "Emergency baton strike landed." : "Strike landed on hostile target.");
+                : (hasEmergencyMeleeTool ? "Emergency baton strike landed." : "Strike landed on hostile target."));
         }
     }
 }
@@ -2790,23 +2859,29 @@ void HandleSpecialAttack(World& world,
     SessionProfile& profile,
     StaticEraser& staticEraser,
     GameState& gameState) {
-    const float radius = player.insideTank ? 9.0f : 6.5f;
+    const bool gunnerSeat = player.insideTank && player.bt72GunnerSeat;
+    const float radius = player.insideTank ? (gunnerSeat ? 10.5f : 9.0f) : 6.5f;
     const MapObject* hostile = FindNearestHostile(world, player.x, player.y, radius);
     if (hostile == nullptr) {
-        gameState.lastEvent = player.insideTank ? "No hostile target in cannon range." : "No hostile target in firing range.";
+        gameState.lastEvent = player.insideTank
+            ? (gunnerSeat ? "No hostile target in the BT-72 gunner arc." : "No hostile target in cannon range.")
+            : "No hostile target in firing range.";
         return;
     }
 
     if (player.insideTank) {
-        if (profile.partnerTank.ammoReserve < 8.0f || profile.partnerTank.energyReserve < 6.0f) {
-            gameState.lastEvent = "BT-72 lacks ammo or energy for a cannon strike.";
+        const float ammoCost = gunnerSeat ? 6.0f : 8.0f;
+        const float energyCost = gunnerSeat ? 4.0f : (TankHasStabilizerSync(profile) ? 5.0f : 6.0f);
+        if (profile.partnerTank.ammoReserve < ammoCost || profile.partnerTank.energyReserve < energyCost) {
+            gameState.lastEvent = gunnerSeat
+                ? "BT-72 gunner seat lacks ammo or power for a support cannon cycle."
+                : "BT-72 lacks ammo or energy for a cannon strike.";
             return;
         }
-        profile.partnerTank.ammoReserve = std::max(0.0f, profile.partnerTank.ammoReserve - 8.0f);
-        const float energyCost = TankHasStabilizerSync(profile) ? 5.0f : 6.0f;
+        profile.partnerTank.ammoReserve = std::max(0.0f, profile.partnerTank.ammoReserve - ammoCost);
         profile.partnerTank.energyReserve = std::max(0.0f, profile.partnerTank.energyReserve - energyCost);
-        float recoilPush = TankHasStabilizerSync(profile) ? 0.32f : 0.55f;
-        float recoilOffset = TankHasStabilizerSync(profile) ? 0.18f : 0.32f;
+        float recoilPush = gunnerSeat ? 0.08f : (TankHasStabilizerSync(profile) ? 0.32f : 0.55f);
+        float recoilOffset = gunnerSeat ? 0.16f : (TankHasStabilizerSync(profile) ? 0.18f : 0.32f);
         if (HasEquippedPassiveSkill(profile, "skill_muscle_memory")) {
             const float stabilityFactor = std::max(0.72f, 1.0f - static_cast<float>(EffectiveStatValue(profile, gameState, 'S')) * 0.018f);
             recoilPush *= stabilityFactor;
@@ -2815,7 +2890,7 @@ void HandleSpecialAttack(World& world,
         player.velocityX -= std::cos(player.facingRadians) * recoilPush;
         player.velocityY -= std::sin(player.facingRadians) * recoilPush;
         player.recoilOffset = std::min(0.75f, player.recoilOffset + recoilOffset);
-        gameState.tankThermalLoad = std::min(100.0f, gameState.tankThermalLoad + (TankHasStabilizerSync(profile) ? 10.0f : 14.0f));
+        gameState.tankThermalLoad = std::min(100.0f, gameState.tankThermalLoad + (gunnerSeat ? 8.0f : (TankHasStabilizerSync(profile) ? 10.0f : 14.0f)));
     } else {
         if (!ConsumeInventoryItem(profile, "#%it_ptrs_ammo", 1)) {
             gameState.lastEvent = "No PTRS ammo available for a ranged shot.";
@@ -2831,7 +2906,8 @@ void HandleSpecialAttack(World& world,
 
     if (auto* mutableObject = const_cast<MapObject*>(hostile); mutableObject != nullptr) {
         const float damage = player.insideTank
-            ? ((TankHasStabilizerSync(profile) ? 50.0f : 45.0f) + static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * 2.0f)
+            ? ((gunnerSeat ? 58.0f : (TankHasStabilizerSync(profile) ? 50.0f : 45.0f)) +
+                static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * (gunnerSeat ? 2.2f : 2.0f))
             : (24.0f + static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * 1.1f);
         mutableObject->health -= damage;
         if (player.insideTank) {
@@ -2855,7 +2931,9 @@ void HandleSpecialAttack(World& world,
                 gameState.lastEvent += " " + routeEvent;
             }
         } else {
-            gameState.lastEvent = player.insideTank ? "Cannon strike landed." : "Precision shot landed.";
+            gameState.lastEvent = player.insideTank
+                ? (gunnerSeat ? "BT-72 gunner cannon strike landed." : "Cannon strike landed.")
+                : "Precision shot landed.";
         }
     }
 }
@@ -2893,9 +2971,9 @@ void HandleInteraction(const MapObject* nearest,
         if (!HasEmergencyMeleeTool(profile)) {
             AddInventoryItem(profile, "#%it_emergency_baton", 1, 1.2f);
             profile.firstPlayableRoute.emergencyMeleeRecovered = true;
-            gameState.lastEvent = "Cryostasis terminated. Emergency baton and a stained service sketch recovered from the capsule tray.";
+            gameState.lastEvent = "Cryostasis terminated. Adjacent pods are split open, several berths stand empty, and an emergency baton plus stained service sketch were recovered from the capsule tray.";
         } else {
-            gameState.lastEvent = "Cryostasis terminated. Memory loss remains, but movement is stable.";
+            gameState.lastEvent = "Cryostasis terminated across the shared cryo tier. Memory loss remains, but movement is stable.";
         }
         return;
     }
@@ -2903,6 +2981,12 @@ void HandleInteraction(const MapObject* nearest,
     if (nearest->registryId == "[%core_0001]") {
         if (!profile.story.pipPadRecovered) {
             profile.firstPlayableRoute.prePipPadClueCount = std::max(profile.firstPlayableRoute.prePipPadClueCount, 2);
+            if (!profile.firstPlayableRoute.accessCardRecovered) {
+                profile.firstPlayableRoute.accessCardRecovered = true;
+                AddInventoryItem(profile, "bunker_access_card", 1, 0.1f);
+                gameState.lastEvent = "Core-rack clipboard still holds a bunker access card. The card opens the archive wing and the Pip-Pad locker, while the papers point to a missing BT-72 starter core.";
+                return;
+            }
             gameState.lastEvent = "Paper maintenance sheets mention a missing BT-72 starter core and a lockout that only a Pip-Pad can clear.";
             return;
         }
@@ -2941,6 +3025,10 @@ void HandleInteraction(const MapObject* nearest,
             gameState.lastEvent = "Pip-Pad locker already cleared.";
             return;
         }
+        if (!profile.firstPlayableRoute.accessCardRecovered) {
+            gameState.lastEvent = "The recovery locker is still under mechanical card-lock. Pull a bunker access card from the core service racks first.";
+            return;
+        }
 
         AddInventoryItem(profile, "#%it_pippad", 1, 0.8f);
         AddInventoryItem(profile, "cryo_medkit", 1, 0.5f);
@@ -2955,6 +3043,10 @@ void HandleInteraction(const MapObject* nearest,
     }
 
     if (nearest->registryId == "[%archive_0001]") {
+        if (!profile.firstPlayableRoute.accessCardRecovered) {
+            gameState.lastEvent = "Archive wing is still under a dead mechanical interlock. Recover a bunker access card first.";
+            return;
+        }
         if (profile.story.archiveRecovered) {
             gameState.lastEvent = "Archive already mirrored to Pip-Pad. Personnel records remain available in DATA.";
             return;
@@ -2993,6 +3085,7 @@ void HandleInteraction(const MapObject* nearest,
             ConsumeInventoryItem(profile, "repair_patch", 1);
             ConsumeInventoryItem(profile, "old_plate", 1);
             ApplyStarterBt72Restoration(profile);
+            profile.partnerTank.secondSeatUnlocked = true;
             player.bucketRaised = false;
             gameState.lastEvent = "BT-72 restored to partial field condition. Cockpit link and training HUD are now available.";
             return;
@@ -3004,8 +3097,10 @@ void HandleInteraction(const MapObject* nearest,
 
         const bool firstLink = !profile.story.tankLinked;
         player.insideTank = !player.insideTank;
+        player.bt72GunnerSeat = false;
         profile.partnerTank.deployed = player.insideTank;
         profile.story.tankLinked = profile.story.tankLinked || player.insideTank;
+        profile.partnerTank.secondSeatUnlocked = profile.partnerTank.secondSeatUnlocked || profile.story.tankLinked;
         player.viewMode = player.insideTank ? ViewMode::Cockpit : ViewMode::ThirdPerson;
         player.velocityX = 0.0f;
         player.velocityY = 0.0f;
@@ -3020,6 +3115,9 @@ void HandleInteraction(const MapObject* nearest,
                 profile.partnerTank.worldPositionKnown = true;
             }
         } else {
+            if (profile.partnerTank.assignedGunnerHandle == profile.character.displayName) {
+                profile.partnerTank.assignedGunnerHandle.clear();
+            }
             profile.partnerTank.worldX = player.x;
             profile.partnerTank.worldY = player.y;
             profile.partnerTank.worldPositionKnown = true;
@@ -3035,6 +3133,10 @@ void HandleInteraction(const MapObject* nearest,
     if (nearest->registryId == "#%it_bucket_0001") {
         if (!profile.story.tankLinked) {
             gameState.lastEvent = "Bucket-rack work is pointless without a live BT-72 link.";
+            return;
+        }
+        if (player.bt72GunnerSeat) {
+            gameState.lastEvent = "Return to BT-72 pilot controls before fitting the clearance rack.";
             return;
         }
         if (profile.firstPlayableRoute.clearanceModuleInstalled) {
@@ -3084,7 +3186,7 @@ void HandleInteraction(const MapObject* nearest,
             gameState.lastEvent = "The outer bulkhead cycles, but heavy debris beyond it still demands a BT-72 clearance module.";
         } else {
             profile.story.exitedBunker = true;
-            gameState.lastEvent = "Outer bulkhead cycled. BT-72 can now enter the first blocked recovery corridor.";
+            gameState.lastEvent = "Outer bulkhead cycled and the lift route unlocks to the surface approach. BT-72 can now enter the first blocked recovery corridor.";
         }
         return;
     }
@@ -3092,6 +3194,10 @@ void HandleInteraction(const MapObject* nearest,
     if (nearest->registryId == "#%res_scrap_0001") {
         if (!player.insideTank) {
             gameState.lastEvent = "Debris too dense for manual clearing. Link with BT-72 first.";
+            return;
+        }
+        if (player.bt72GunnerSeat) {
+            gameState.lastEvent = "Return to BT-72 pilot controls before attempting heavy clearance.";
             return;
         }
         if (!TankUsesBucketRig(profile)) {

@@ -12,6 +12,7 @@ struct LanlinePlayerEntry {
     std::string role;
     bool online = true;
     bool ready = false;
+    std::string seatAssignment = "on_foot";
 };
 
 struct LanlineRelayMessage {
@@ -40,6 +41,10 @@ struct LanlineSessionState {
     std::string activeActor = "Operator";
     std::string pendingPeer;
     std::string connectedPeer;
+    bool bt72SecondSeatUnlocked = false;
+    std::string bt72SecondSeatPolicy = "pilot_only";
+    std::string bt72TrustedGunnerHandle{};
+    std::string bt72AssignedGunnerHandle{};
     std::vector<LanlinePlayerEntry> players{};
     std::vector<LanlineRelayMessage> relayMessages{};
     std::vector<LanlineVoicePresence> voicePresence{};

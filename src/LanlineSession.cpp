@@ -128,8 +128,16 @@ bool SaveLanlineSessionState(const LanlineSessionState& state, const std::filesy
     out << "active_actor=" << state.activeActor << '\n';
     out << "pending_peer=" << state.pendingPeer << '\n';
     out << "connected_peer=" << state.connectedPeer << '\n';
+    out << "bt72_second_seat=" << (state.bt72SecondSeatUnlocked ? 1 : 0) << '\n';
+    out << "bt72_second_seat_policy=" << state.bt72SecondSeatPolicy << '\n';
+    out << "bt72_trusted_gunner=" << state.bt72TrustedGunnerHandle << '\n';
+    out << "bt72_assigned_gunner=" << state.bt72AssignedGunnerHandle << '\n';
     for (const auto& player : state.players) {
-        out << "player=" << player.displayName << "|" << player.role << "|" << (player.online ? 1 : 0) << "|" << (player.ready ? 1 : 0) << '\n';
+        out << "player=" << player.displayName << "|"
+            << player.role << "|"
+            << (player.online ? 1 : 0) << "|"
+            << (player.ready ? 1 : 0) << "|"
+            << player.seatAssignment << '\n';
     }
     for (const auto& relayMessage : state.relayMessages) {
         out << "relay_message="
@@ -190,16 +198,31 @@ bool LoadLanlineSessionState(const std::filesystem::path& path, LanlineSessionSt
             state.pendingPeer = value;
         } else if (key == "connected_peer") {
             state.connectedPeer = value;
+        } else if (key == "bt72_second_seat") {
+            state.bt72SecondSeatUnlocked = (value != "0");
+        } else if (key == "bt72_second_seat_policy") {
+            state.bt72SecondSeatPolicy = value;
+        } else if (key == "bt72_trusted_gunner") {
+            state.bt72TrustedGunnerHandle = value;
+        } else if (key == "bt72_assigned_gunner") {
+            state.bt72AssignedGunnerHandle = value;
         } else if (key == "player") {
             const auto first = value.find('|');
             const auto second = value.find('|', first == std::string::npos ? first : first + 1);
             const auto third = value.find('|', second == std::string::npos ? second : second + 1);
+            const auto fourth = value.find('|', third == std::string::npos ? third : third + 1);
             if (first != std::string::npos && second != std::string::npos) {
-                state.players.push_back({
-                    value.substr(0, first),
-                    value.substr(first + 1, second - first - 1),
-                    third == std::string::npos ? (value.substr(second + 1) != "0") : (value.substr(second + 1, third - second - 1) != "0"),
-                    third == std::string::npos ? false : (value.substr(third + 1) != "0")});
+                LanlinePlayerEntry player{};
+                player.displayName = value.substr(0, first);
+                player.role = value.substr(first + 1, second - first - 1);
+                player.online = third == std::string::npos
+                    ? (value.substr(second + 1) != "0")
+                    : (value.substr(second + 1, third - second - 1) != "0");
+                player.ready = third == std::string::npos
+                    ? false
+                    : (fourth == std::string::npos ? (value.substr(third + 1) != "0") : (value.substr(third + 1, fourth - third - 1) != "0"));
+                player.seatAssignment = fourth == std::string::npos ? "on_foot" : value.substr(fourth + 1);
+                state.players.push_back(std::move(player));
             }
         } else if (key == "relay_message") {
             const auto first = value.find('|');

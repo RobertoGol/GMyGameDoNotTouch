@@ -259,10 +259,70 @@ const char* CurrentUtilityModuleLabel(const SessionProfile& profile) {
     return "Bucket Rig Mk.I";
 }
 
+void CycleBt72SecondSeatPolicy(SessionProfile& profile, GameState& gameState) {
+    if (!Bt72SecondSeatUnlocked(profile)) {
+        gameState.lastEvent = "BT-72 second seat is still sealed until the first sync link is stabilized.";
+        return;
+    }
+
+    const std::string currentPolicy = NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy);
+    if (currentPolicy == "pilot_only") {
+        profile.partnerTank.secondSeatPolicy = "trusted_only";
+    } else if (currentPolicy == "trusted_only") {
+        profile.partnerTank.secondSeatPolicy = "open_crew";
+    } else {
+        profile.partnerTank.secondSeatPolicy = "pilot_only";
+        if (profile.partnerTank.assignedGunnerHandle != profile.character.displayName) {
+            profile.partnerTank.assignedGunnerHandle.clear();
+        }
+    }
+    gameState.lastEvent = std::string("BT-72 second-seat access updated: ") +
+        Bt72SecondSeatPolicyLabel(profile.partnerTank.secondSeatPolicy) + ".";
+}
+
+void TrustLanlinePeerAsBt72Gunner(SessionProfile& profile, const LanlineSessionState* sessionState, GameState& gameState) {
+    if (!Bt72SecondSeatUnlocked(profile)) {
+        gameState.lastEvent = "BT-72 second seat is still sealed until the first sync link is stabilized.";
+        return;
+    }
+    if (sessionState == nullptr) {
+        gameState.lastEvent = "No Lanline session state found. Launch through BunkerLauncher to seed a trusted gunner.";
+        return;
+    }
+
+    std::string trustedHandle = sessionState->connectedPeer;
+    if (trustedHandle.empty()) {
+        trustedHandle = sessionState->pendingPeer;
+    }
+    if (trustedHandle.empty()) {
+        for (const auto& playerEntry : sessionState->players) {
+            if ((playerEntry.role == "Client" || playerEntry.role == "Pending Client") &&
+                playerEntry.displayName != profile.character.displayName) {
+                trustedHandle = playerEntry.displayName;
+                break;
+            }
+        }
+    }
+    if (trustedHandle.empty()) {
+        gameState.lastEvent = "No Lanline peer is currently available to trust as BT-72 gunner.";
+        return;
+    }
+
+    profile.partnerTank.trustedGunnerHandle = trustedHandle;
+    if (NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy) == "pilot_only") {
+        profile.partnerTank.secondSeatPolicy = "trusted_only";
+    }
+    gameState.lastEvent = "BT-72 trusted gunner updated to " + trustedHandle + ".";
+}
+
 void ToggleTankUtilityModule(SessionProfile& profile, PlayerState& player, GameState& gameState) {
     auto* module = FindTankModule(profile, TankModuleSlotType::Bucket);
     if (module == nullptr) {
         gameState.lastEvent = "No utility hardpoint found on BT-72.";
+        return;
+    }
+    if (player.bt72GunnerSeat) {
+        gameState.lastEvent = "Return to pilot controls before retuning BT-72 utility hardpoints.";
         return;
     }
     if (!profile.firstPlayableRoute.clearanceModuleInstalled && !profile.story.bucketRecovered) {
@@ -303,6 +363,10 @@ bool TryRunFieldWorkbench(PlayerState& player,
     GameState& gameState) {
     if (!player.insideTank) {
         gameState.lastEvent = "Field service requires an active BT-72 cockpit link.";
+        return false;
+    }
+    if (player.bt72GunnerSeat) {
+        gameState.lastEvent = "Field service requires BT-72 pilot controls, not the gunner station.";
         return false;
     }
     if (gameState.fieldWorkbenchCooldown > 0.0f) {

@@ -5,6 +5,7 @@
 #include <ctime>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "AppPaths.hpp"
@@ -129,6 +130,7 @@ struct FirstPlayableRouteProgress {
     bool introSeen = false;
     bool emergencyMeleeRecovered = false;
     bool earlyVerminEncounterResolved = false;
+    bool accessCardRecovered = false;
     int prePipPadClueCount = 0;
     bool bt72HullInspected = false;
     bool bt72CoreRecovered = false;
@@ -239,6 +241,11 @@ struct PartnerTankProfile {
     float worldY = 0.0f;
     int syncRamActions = 0;
     int syncShotActions = 0;
+    bool secondSeatUnlocked = false;
+    bool gunnerDrillSeen = false;
+    std::string secondSeatPolicy = "pilot_only";
+    std::string trustedGunnerHandle{};
+    std::string assignedGunnerHandle{};
     TankDamageState damage{};
     TankLoadout loadout{};
 };
@@ -327,6 +334,48 @@ inline std::string ActiveTapeBonusLabel(const CharacterProfile& character, bool 
         return insideTank ? "Music bonus: +3% movement" : "Music bonus: +8% movement";
     }
     return "Archive tape active";
+}
+
+inline std::string NormalizeBt72SecondSeatPolicy(std::string_view policy) {
+    if (policy == "trusted_only" || policy == "trusted") {
+        return "trusted_only";
+    }
+    if (policy == "open_crew" || policy == "open") {
+        return "open_crew";
+    }
+    return "pilot_only";
+}
+
+inline std::string NormalizeBt72SeatAssignment(std::string_view seatAssignment) {
+    if (seatAssignment == "gunner" || seatAssignment == "support_gunner") {
+        return "gunner";
+    }
+    if (seatAssignment == "pilot" || seatAssignment == "driver") {
+        return "pilot";
+    }
+    return "on_foot";
+}
+
+inline const char* Bt72SecondSeatPolicyLabel(std::string_view policy) {
+    const std::string normalized = NormalizeBt72SecondSeatPolicy(policy);
+    if (normalized == "trusted_only") {
+        return "Trusted Gunner";
+    }
+    if (normalized == "open_crew") {
+        return "Open Crew";
+    }
+    return "Pilot Only";
+}
+
+inline const char* Bt72SeatAssignmentLabel(std::string_view seatAssignment) {
+    const std::string normalized = NormalizeBt72SeatAssignment(seatAssignment);
+    if (normalized == "gunner") {
+        return "BT-72 Gunner";
+    }
+    if (normalized == "pilot") {
+        return "BT-72 Pilot";
+    }
+    return "On Foot";
 }
 
 
@@ -467,6 +516,26 @@ inline bool HasCollectedTapeId(const SessionProfile& profile, const std::string&
         }
     }
     return false;
+}
+
+inline bool Bt72SecondSeatUnlocked(const SessionProfile& profile) {
+    return profile.partnerTank.secondSeatUnlocked || profile.story.tankLinked;
+}
+
+inline bool Bt72GunnerHandleAllowed(const SessionProfile& profile, std::string_view handle) {
+    if (!Bt72SecondSeatUnlocked(profile) || handle.empty()) {
+        return false;
+    }
+
+    const std::string normalizedPolicy = NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy);
+    if (normalizedPolicy == "open_crew") {
+        return true;
+    }
+    if (normalizedPolicy == "trusted_only") {
+        return !profile.partnerTank.trustedGunnerHandle.empty() &&
+            profile.partnerTank.trustedGunnerHandle == handle;
+    }
+    return handle == profile.character.displayName;
 }
 
 inline bool HasRegionalGridOnline(const SessionProfile& profile) {
