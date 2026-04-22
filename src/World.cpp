@@ -355,7 +355,7 @@ void World::GeneratePrototypeZone() {
     Clear();
     metadata.name = "Cryo Sector // Shelter 17";
     metadata.biome = "Bunker Interior";
-    metadata.objective = "Wake from cryostasis, recover the Pip-Pad, and restore the tank link.";
+    metadata.objective = "Wake from cryostasis, recover the Pip-Pad, restore BT-72, and force open the first recovery route.";
     metadata.playerSpawnX = -12.0f;
     metadata.playerSpawnY = -8.0f;
 

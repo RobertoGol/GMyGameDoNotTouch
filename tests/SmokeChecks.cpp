@@ -7,6 +7,7 @@
 #include "../include/LaunchSession.hpp"
 #include "../include/PrefabLibrary.hpp"
 #include "../include/SessionProfiles.hpp"
+#include "../include/StoryRoute.hpp"
 #include "../include/World.hpp"
 #include "../include/WorldEditorUndo.hpp"
 #include "../include/WorldExport.hpp"
@@ -104,6 +105,19 @@ bool RunProfileRoundtrip() {
     savedProfile.launcherAnnouncements.lastSeenBuildNumber = bunker::kCurrentBuildNumber;
     savedProfile.launcherAnnouncements.lastSeenAnnouncementId = bunker::CurrentBuildAnnouncement().announcementId;
     savedProfile.launcherAnnouncements.lastSeenVersionLabel = std::string(bunker::kCurrentVersionLabel);
+    savedProfile.story.awakenedFromCryo = true;
+    savedProfile.story.pipPadRecovered = true;
+    savedProfile.story.archiveRecovered = true;
+    savedProfile.firstPlayableRoute.introSeen = true;
+    savedProfile.firstPlayableRoute.emergencyMeleeRecovered = true;
+    savedProfile.firstPlayableRoute.earlyVerminEncounterResolved = true;
+    savedProfile.firstPlayableRoute.prePipPadClueCount = 2;
+    savedProfile.firstPlayableRoute.bt72HullInspected = true;
+    savedProfile.firstPlayableRoute.bt72CoreRecovered = true;
+    savedProfile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    savedProfile.firstPlayableRoute.bt72Restored = true;
+    savedProfile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    savedProfile.firstPlayableRoute.clearanceMaterialsRecovered = true;
 
     const auto saveStatus = bunker::SaveProfileAtomically(savedProfile, bunker::DefaultSessionProfilePath());
     if (!Check(saveStatus.ok, "profile save failed: " + saveStatus.message)) {
@@ -122,7 +136,80 @@ bool RunProfileRoundtrip() {
         Check(loadedProfile.launcherAnnouncements.lastSeenBuildNumber == savedProfile.launcherAnnouncements.lastSeenBuildNumber,
             "profile launcher last-seen build mismatch") &&
         Check(loadedProfile.launcherAnnouncements.lastSeenAnnouncementId == savedProfile.launcherAnnouncements.lastSeenAnnouncementId,
-            "profile launcher last-seen announcement mismatch");
+            "profile launcher last-seen announcement mismatch") &&
+        Check(loadedProfile.firstPlayableRoute.prePipPadClueCount == 2, "profile first route clue count mismatch") &&
+        Check(loadedProfile.firstPlayableRoute.bt72Restored, "profile first route restore flag mismatch") &&
+        Check(loadedProfile.firstPlayableRoute.clearanceMaterialsRecovered, "profile first route clearance material flag mismatch");
+}
+
+bool RunFirstPlayableRouteStorySmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    if (!Check(bunker::CurrentStoryCheckpointLabel(profile) == "Intro // Cryo Wake",
+            "first route smoke expected intro checkpoint label")) {
+        return false;
+    }
+    if (!Check(bunker::CurrentStoryObjectivePreview(profile).find("Wake from the cryo capsule") != std::string::npos,
+            "first route smoke expected intro objective preview")) {
+        return false;
+    }
+
+    profile.story.awakenedFromCryo = true;
+    profile.firstPlayableRoute.prePipPadClueCount = 2;
+    if (!Check(bunker::CurrentStoryCheckpointLabel(profile) == "Pip-Pad Recovery",
+            "first route smoke expected Pip-Pad checkpoint label")) {
+        return false;
+    }
+
+    profile.story.pipPadRecovered = true;
+    profile.firstPlayableRoute.earlyVerminEncounterResolved = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72HullInspected = true;
+    profile.firstPlayableRoute.bt72CoreRecovered = true;
+    profile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    profile.character.inventory.push_back({"power_cell", 1, 0.3f});
+    profile.character.inventory.push_back({"repair_patch", 1, 0.2f});
+    profile.character.inventory.push_back({"old_plate", 1, 0.5f});
+    const auto restoreRoute = bunker::BuildBt72RestorationRoute(profile);
+    if (!Check(restoreRoute.size() == 9, "first route smoke expected BT-72 restore checklist to have nine entries")) {
+        return false;
+    }
+    if (!Check(!restoreRoute[4].completed, "first route smoke expected BT-72 restore step to remain incomplete before restore")) {
+        return false;
+    }
+    if (!Check(bunker::CurrentStoryObjectivePreview(profile).find("Restore BT-72") != std::string::npos,
+            "first route smoke expected restore objective preview")) {
+        return false;
+    }
+
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.story.outerRoadCleared = true;
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+    profile.firstPlayableRoute.firstServicePerformed = true;
+    profile.firstPlayableRoute.firstRecoveryNodeActivated = true;
+    if (!Check(bunker::CurrentStoryCheckpointLabel(profile) == "Debrief",
+            "first route smoke expected debrief checkpoint label")) {
+        return false;
+    }
+    if (!Check(bunker::CurrentStoryObjectivePreview(profile).find("Return for debrief") != std::string::npos,
+            "first route smoke expected debrief objective preview")) {
+        return false;
+    }
+
+    profile.firstPlayableRoute.debriefSummaryViewed = true;
+    profile.story.returnedToBase = true;
+    auto* worldState = bunker::FindWorldFieldState(profile, profile.selectedWorld, true);
+    if (!Check(worldState != nullptr, "first route smoke expected world field state")) {
+        return false;
+    }
+    return Check(bunker::CurrentStoryCheckpointLabel(profile) == "Industrial Expansion",
+            "first route smoke expected industrial expansion checkpoint label") &&
+        Check(bunker::CurrentStoryObjectivePreview(profile).find("rail depot") != std::string::npos,
+            "first route smoke expected industrial follow-up objective preview");
 }
 
 bool RunLauncherAnnouncementSmoke() {
@@ -2273,6 +2360,7 @@ int main() {
 
     const bool ok = RunWorldRoundtrip() &&
         RunProfileRoundtrip() &&
+        RunFirstPlayableRouteStorySmoke() &&
         RunLauncherAnnouncementSmoke() &&
         RunLanlineServicesRoundtripSmoke() &&
         RunTankServiceKitSmoke() &&

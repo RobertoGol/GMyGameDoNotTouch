@@ -125,6 +125,24 @@ struct SkillAwakeningProgress {
     int fieldServiceUses = 0;
 };
 
+struct FirstPlayableRouteProgress {
+    bool introSeen = false;
+    bool emergencyMeleeRecovered = false;
+    bool earlyVerminEncounterResolved = false;
+    int prePipPadClueCount = 0;
+    bool bt72HullInspected = false;
+    bool bt72CoreRecovered = false;
+    bool bt72ServiceNotesRecovered = false;
+    bool bt72Restored = false;
+    bool clearanceBlueprintRecovered = false;
+    bool clearanceMaterialsRecovered = false;
+    bool clearanceModuleInstalled = false;
+    bool firstTankCombatResolved = false;
+    bool firstServicePerformed = false;
+    bool firstRecoveryNodeActivated = false;
+    bool debriefSummaryViewed = false;
+};
+
 struct StoryProgress {
     bool awakenedFromCryo = false;
     bool pipPadRecovered = false;
@@ -330,6 +348,7 @@ struct SessionProfile {
     std::string fieldCheckpointWorld{};
     std::string fieldCheckpointLabel{};
     int scavengerRunsCompleted = 0;
+    FirstPlayableRouteProgress firstPlayableRoute{};
     StoryProgress story{};
 };
 

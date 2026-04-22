@@ -23,6 +23,7 @@
 #include "../../include/LanlineLobbyLogic.hpp"
 #include "../../include/LanlineServices.hpp"
 #include "../../include/SessionFlow.hpp"
+#include "../../include/StoryRoute.hpp"
 
 namespace launcher_support {
 
@@ -507,10 +508,8 @@ void PrepareSelectedCharacter(bunker::SessionProfile& sessionProfile,
 }
 
 std::string BuildLauncherObjectivePreview(const bunker::SessionProfile& sessionProfile, const bunker::WorldFieldState* worldState) {
-    std::string preview = sessionProfile.story.exitedBunker
-        ? "Secure the recovery backbone and expand beyond Shelter 17."
-        : "Launch from cryo, recover the Pip-Pad, and restore the tank link.";
-    preview += sessionProfile.story.relayRecovered ? " | Relay recovered" : " | Relay missing";
+    std::string preview = bunker::CurrentStoryObjectivePreview(sessionProfile);
+    preview += " | " + bunker::CurrentStoryCheckpointLabel(sessionProfile);
     if (worldState != nullptr && worldState->industrialGateUnlocked) {
         preview += " | Industrial gate open";
     }
@@ -596,6 +595,11 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
     ImGui::BulletText("World: %s", selectedWorld.string().c_str());
     ImGui::BulletText("Level %d | XP %d", sessionProfile.character.level, sessionProfile.character.experience);
     ImGui::BulletText("Relay Credits: %d", sessionProfile.lanlineServices.relayCredits);
+    ImGui::BulletText("Route checkpoint: %s", bunker::CurrentStoryCheckpointLabel(sessionProfile).c_str());
+    ImGui::BulletText("BT-72 restore: %d / 3",
+        (sessionProfile.firstPlayableRoute.bt72HullInspected ? 1 : 0) +
+            (sessionProfile.firstPlayableRoute.bt72CoreRecovered ? 1 : 0) +
+            (sessionProfile.firstPlayableRoute.bt72ServiceNotesRecovered ? 1 : 0));
     const std::string objective = BuildLauncherObjectivePreview(sessionProfile, worldState);
     ImGui::TextWrapped("Objective: %s", objective.c_str());
 }

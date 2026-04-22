@@ -13,7 +13,10 @@ struct StoryRouteEntry {
     bool completed = false;
 };
 
+std::string CurrentStoryCheckpointLabel(const SessionProfile& profile);
+std::string CurrentStoryObjectivePreview(const SessionProfile& profile);
 std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEraser& staticEraser);
+std::vector<StoryRouteEntry> BuildBt72RestorationRoute(const SessionProfile& profile);
 std::vector<StoryRouteEntry> BuildStarterRoute(const SessionProfile& profile, const StaticEraser& staticEraser);
 bool HasLanlineServicesObjective(const SessionProfile& profile);
 bool HasFeyRingIntercityObjective(const SessionProfile& profile);

@@ -20,6 +20,7 @@
   - `lanlineServices`
   - launcher announcement read-state
   - `fieldCheckpointKnown`, `fieldCheckpointX`, `fieldCheckpointY`
+  - `FirstPlayableRouteProgress` для persisted первого маршрута: intro/clues/early vermin/BT-72 restore/clearance/service/recovery/debrief
 - helper-нормализация:
   - `NormalizeLanlineServicesProfile`
   - `NormalizeWorldFieldState`

@@ -66,6 +66,9 @@ float TowLogisticsBoost(const SessionProfile& profile) {
 }
 
 const char* CurrentUtilityModuleLabel(const SessionProfile& profile) {
+    if (!profile.firstPlayableRoute.clearanceModuleInstalled && !profile.story.bucketRecovered) {
+        return "Utility Hardpoint Unfitted";
+    }
     if (TankUsesRamShield(profile)) {
         return "Ram Shield Mk.I";
     }
@@ -79,6 +82,10 @@ void ToggleTankUtilityModule(SessionProfile& profile, PlayerState& player, GameS
     auto* module = FindTankModule(profile, TankModuleSlotType::Bucket);
     if (module == nullptr) {
         gameState.lastEvent = "No utility hardpoint found on BT-72.";
+        return;
+    }
+    if (!profile.firstPlayableRoute.clearanceModuleInstalled && !profile.story.bucketRecovered) {
+        gameState.lastEvent = "BT-72 utility hardpoint is still unfitted. Install the clearance module first.";
         return;
     }
 
@@ -608,6 +615,10 @@ bool TryRunFieldWorkbench(PlayerState& player,
     gameState.lastEvent = hasEngineer
         ? "Field service rack cycled. Scavenger-side engineer tuning improved the repair pass."
         : "Field service rack cycled. BT-72 patched and partially resupplied in the field.";
+    if (profile.firstPlayableRoute.firstTankCombatResolved && !profile.firstPlayableRoute.firstServicePerformed) {
+        profile.firstPlayableRoute.firstServicePerformed = true;
+        gameState.lastEvent += " First service halt logged for the route.";
+    }
     if (!recipeEvent.empty()) {
         gameState.lastEvent += " " + recipeEvent;
     }
@@ -632,6 +643,121 @@ void AddCollectedTapeIfMissing(SessionProfile& profile, const std::string& tapeI
     if (!HasCollectedTape(profile, tapeId)) {
         profile.character.collectedTapes.push_back({tapeId, title, false, false, false});
     }
+}
+
+bool HasEmergencyMeleeTool(const SessionProfile& profile) {
+    return InventoryCount(profile, "#%it_emergency_baton") > 0;
+}
+
+int CountBt72RestorationMilestones(const SessionProfile& profile) {
+    return (profile.firstPlayableRoute.bt72HullInspected ? 1 : 0) +
+        (profile.firstPlayableRoute.bt72CoreRecovered ? 1 : 0) +
+        (profile.firstPlayableRoute.bt72ServiceNotesRecovered ? 1 : 0);
+}
+
+bool HasBt72RestorationPrerequisites(const SessionProfile& profile) {
+    return CountBt72RestorationMilestones(profile) == 3;
+}
+
+bool HasBt72RestorationMaterials(const SessionProfile& profile) {
+    return InventoryCount(profile, "power_cell") >= 1 &&
+        InventoryCount(profile, "repair_patch") >= 1 &&
+        InventoryCount(profile, "old_plate") >= 1;
+}
+
+bool HasClearanceInstallMaterials(const SessionProfile& profile) {
+    return InventoryCount(profile, "scrap_steel") >= 1 &&
+        InventoryCount(profile, "hydraulic_seal") >= 1;
+}
+
+std::string JoinMissingRouteLabels(const std::vector<std::string>& labels) {
+    if (labels.empty()) {
+        return {};
+    }
+    std::string joined = labels.front();
+    for (std::size_t index = 1; index < labels.size(); ++index) {
+        joined += ", " + labels[index];
+    }
+    return joined;
+}
+
+std::string DescribeBt72RestorationNeeds(const SessionProfile& profile) {
+    std::vector<std::string> missing;
+    if (!profile.firstPlayableRoute.bt72HullInspected) {
+        missing.push_back("hull survey");
+    }
+    if (!profile.firstPlayableRoute.bt72CoreRecovered) {
+        missing.push_back("starter core");
+    }
+    if (!profile.firstPlayableRoute.bt72ServiceNotesRecovered) {
+        missing.push_back("service notes");
+    }
+    if (!missing.empty()) {
+        return "BT-72 restoration is missing: " + JoinMissingRouteLabels(missing) + ".";
+    }
+
+    if (InventoryCount(profile, "power_cell") < 1) {
+        missing.push_back("power_cell");
+    }
+    if (InventoryCount(profile, "repair_patch") < 1) {
+        missing.push_back("repair_patch");
+    }
+    if (InventoryCount(profile, "old_plate") < 1) {
+        missing.push_back("old_plate");
+    }
+    if (!missing.empty()) {
+        return "BT-72 restoration still needs: " + JoinMissingRouteLabels(missing) + ".";
+    }
+
+    return "BT-72 restoration kit is ready.";
+}
+
+std::string DescribeClearanceModuleNeeds(const SessionProfile& profile) {
+    std::vector<std::string> missing;
+    if (!profile.firstPlayableRoute.clearanceBlueprintRecovered) {
+        missing.push_back("clearance blueprint");
+    }
+    if (!profile.firstPlayableRoute.clearanceMaterialsRecovered) {
+        missing.push_back("bucket-rack parts");
+    }
+    if (profile.firstPlayableRoute.clearanceMaterialsRecovered && !HasClearanceInstallMaterials(profile)) {
+        if (InventoryCount(profile, "scrap_steel") < 1) {
+            missing.push_back("scrap_steel");
+        }
+        if (InventoryCount(profile, "hydraulic_seal") < 1) {
+            missing.push_back("hydraulic_seal");
+        }
+    }
+    return missing.empty()
+        ? "Clearance module install kit is ready."
+        : "Clearance module is missing: " + JoinMissingRouteLabels(missing) + ".";
+}
+
+void ApplyStarterBt72Restoration(SessionProfile& profile) {
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.partnerTank.deployed = false;
+    profile.partnerTank.inRepair = false;
+    profile.partnerTank.worldPositionKnown = false;
+    profile.partnerTank.damage.hull = 78.0f;
+    profile.partnerTank.damage.turret = 72.0f;
+    profile.partnerTank.damage.bucket = 100.0f;
+    profile.partnerTank.damage.sensors = 68.0f;
+    profile.partnerTank.damage.cockpit = 76.0f;
+    profile.partnerTank.damage.powerCore = 74.0f;
+    profile.partnerTank.energyReserve = 54.0f;
+    profile.partnerTank.ammoReserve = 28.0f;
+}
+
+std::string ResolveFirstPlayableRouteKill(const MapObject& object, bool insideTank, SessionProfile& profile) {
+    if (object.registryId == "[%enemy_laska_0001]") {
+        profile.firstPlayableRoute.earlyVerminEncounterResolved = true;
+        return "Archive corridor vermin cleared.";
+    }
+    if (object.registryId == "[%enemy_ghoul_0001]" && !profile.firstPlayableRoute.firstTankCombatResolved) {
+        profile.firstPlayableRoute.firstTankCombatResolved = true;
+        return insideTank ? "First BT-72 combat contact resolved." : "Outer route combat contact resolved.";
+    }
+    return {};
 }
 
 int CountRestoredPylons(const SessionProfile& profile) {
@@ -1356,6 +1482,37 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
         }
         AddCollectedTapeIfMissing(profile, nearest->registryId + "_echo", nearest->displayName + " // Echo Trace");
         const std::string targetId = nearest->linkTarget;
+        const auto revealLinkedTarget = [&]() -> bool {
+            if (targetId.empty()) {
+                return false;
+            }
+            if (auto* targetObject = FindObjectByRegistryId(world, targetId); targetObject != nullptr) {
+                targetObject->discovered = true;
+                gameState.lastEvent += " Trace now points to " + targetObject->displayName + ".";
+                return true;
+            }
+            gameState.lastEvent += " Trace marker linked to " + targetId + ".";
+            return true;
+        };
+
+        if (!profile.firstPlayableRoute.bt72ServiceNotesRecovered) {
+            profile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+            AddCollectedTapeIfMissing(profile, "bt72_service_reel_001", "BT-72 Service Reel");
+            gameState.lastEvent = "Maintenance echo resolved. BT-72 service notes and holo-records mirrored to Pip-Pad.";
+            (void)revealLinkedTarget();
+            return true;
+        }
+        if (!profile.story.tankLinked) {
+            gameState.lastEvent = "Echo residue still contains a deeper clearance schema, but a live BT-72 link is required to compile it.";
+            return true;
+        }
+        if (!profile.firstPlayableRoute.clearanceBlueprintRecovered) {
+            profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+            AddCollectedTapeIfMissing(profile, "bt72_clearance_blueprint", "BT-72 Clearance Module Blueprint");
+            gameState.lastEvent = "Maintenance echo recompiled into a clearance module blueprint for BT-72.";
+            (void)revealLinkedTarget();
+            return true;
+        }
         if (!targetId.empty()) {
             if (auto* targetObject = FindObjectByRegistryId(world, targetId); targetObject != nullptr) {
                 targetObject->discovered = true;
@@ -1495,11 +1652,25 @@ bool ShouldUseStarterStoryFlow(const World& world) {
 }
 
 void SyncStoryFlagsFromWorld(SessionProfile& profile, const StaticEraser& staticEraser) {
-    profile.story.bucketRecovered = profile.story.bucketRecovered || staticEraser.IsErased("#%it_bucket_0001");
+    profile.firstPlayableRoute.earlyVerminEncounterResolved =
+        profile.firstPlayableRoute.earlyVerminEncounterResolved || staticEraser.IsErased("[%enemy_laska_0001]");
+    profile.firstPlayableRoute.clearanceMaterialsRecovered =
+        profile.firstPlayableRoute.clearanceMaterialsRecovered || staticEraser.IsErased("#%it_bucket_0001");
+    profile.firstPlayableRoute.clearanceModuleInstalled =
+        profile.firstPlayableRoute.clearanceModuleInstalled || profile.story.bucketRecovered;
+    profile.firstPlayableRoute.firstTankCombatResolved =
+        profile.firstPlayableRoute.firstTankCombatResolved || staticEraser.IsErased("[%enemy_ghoul_0001]");
+    profile.firstPlayableRoute.firstRecoveryNodeActivated =
+        profile.firstPlayableRoute.firstRecoveryNodeActivated || profile.story.relayRecovered;
+    profile.firstPlayableRoute.debriefSummaryViewed =
+        profile.firstPlayableRoute.debriefSummaryViewed || profile.story.returnedToBase;
+    profile.story.bucketRecovered =
+        profile.story.bucketRecovered || profile.firstPlayableRoute.clearanceModuleInstalled || staticEraser.IsErased("#%it_bucket_0001");
     profile.story.outerRoadCleared = profile.story.outerRoadCleared || staticEraser.IsErased("#%res_scrap_0001");
     profile.story.pipPadRecovered = profile.story.pipPadRecovered || HasInventoryItem(profile, "#%it_pippad");
     profile.story.tankLinked = profile.story.tankLinked || profile.partnerTank.deployed;
-    profile.story.relayRecovered = profile.story.relayRecovered || HasInventoryItem(profile, "relay_reconstruction_data");
+    profile.story.relayRecovered =
+        profile.story.relayRecovered || profile.firstPlayableRoute.firstRecoveryNodeActivated || HasInventoryItem(profile, "relay_reconstruction_data");
 }
 
 std::string CurrentObjective(const SessionProfile& profile, const StaticEraser& staticEraser) {
@@ -2581,9 +2752,10 @@ void HandleAttack(World& world,
     }
 
     if (auto* mutableObject = const_cast<MapObject*>(hostile); mutableObject != nullptr) {
+        const bool hasEmergencyMeleeTool = HasEmergencyMeleeTool(profile);
         const float damage = player.insideTank
             ? ((TankUsesRamShield(profile) ? 36.0f : 28.0f) + static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * 1.5f)
-            : (14.0f + static_cast<float>(EffectiveStatValue(profile, gameState, 'S')) * 0.9f);
+            : ((hasEmergencyMeleeTool ? 20.0f : 14.0f) + static_cast<float>(EffectiveStatValue(profile, gameState, 'S')) * (hasEmergencyMeleeTool ? 1.05f : 0.9f));
         mutableObject->health -= damage;
         if (player.insideTank) {
             RegisterTankSyncStyle(profile, true);
@@ -2595,14 +2767,20 @@ void HandleAttack(World& world,
             if (player.insideTank) RegisterTankAction(profile, &skillEvent);
             else RegisterFootKill(profile, &skillEvent);
             AddInventoryItem(profile, player.insideTank ? "wreck_scrap" : "ether_tissue", 1, 0.4f);
+            const std::string routeEvent = ResolveFirstPlayableRouteKill(*mutableObject, player.insideTank, profile);
             staticEraser.Erase(mutableObject->registryId);
             staticEraser.Save(profile.selectedWorld);
             gameState.lastEvent = mutableObject->displayName + " neutralized. " + progressionEvent;
             if (!skillEvent.empty()) {
                 gameState.lastEvent += " " + skillEvent;
             }
+            if (!routeEvent.empty()) {
+                gameState.lastEvent += " " + routeEvent;
+            }
         } else {
-            gameState.lastEvent = player.insideTank ? "Ram impact landed on hostile target." : "Strike landed on hostile target.";
+            gameState.lastEvent = player.insideTank
+                ? "Ram impact landed on hostile target."
+                : (hasEmergencyMeleeTool ? "Emergency baton strike landed." : "Strike landed on hostile target.");
         }
     }
 }
@@ -2666,11 +2844,15 @@ void HandleSpecialAttack(World& world,
             if (player.insideTank) RegisterTankAction(profile, &skillEvent);
             else RegisterFootKill(profile, &skillEvent);
             AddInventoryItem(profile, player.insideTank ? "wreck_scrap" : "ether_tissue", 1, 0.4f);
+            const std::string routeEvent = ResolveFirstPlayableRouteKill(*mutableObject, player.insideTank, profile);
             staticEraser.Erase(mutableObject->registryId);
             staticEraser.Save(profile.selectedWorld);
             gameState.lastEvent = mutableObject->displayName + " destroyed by special attack. " + progressionEvent;
             if (!skillEvent.empty()) {
                 gameState.lastEvent += " " + skillEvent;
+            }
+            if (!routeEvent.empty()) {
+                gameState.lastEvent += " " + routeEvent;
             }
         } else {
             gameState.lastEvent = player.insideTank ? "Cannon strike landed." : "Precision shot landed.";
@@ -2701,8 +2883,56 @@ void HandleInteraction(const MapObject* nearest,
     }
 
     if (nearest->registryId == "[%cryo_0001]") {
+        if (profile.story.awakenedFromCryo) {
+            gameState.lastEvent = "Cryostasis already terminated. Emergency route markers remain on the capsule shell.";
+            return;
+        }
+        profile.firstPlayableRoute.introSeen = true;
         profile.story.awakenedFromCryo = true;
-        gameState.lastEvent = "Cryostasis terminated. Memory loss remains, but movement is stable.";
+        profile.firstPlayableRoute.prePipPadClueCount = std::max(profile.firstPlayableRoute.prePipPadClueCount, 1);
+        if (!HasEmergencyMeleeTool(profile)) {
+            AddInventoryItem(profile, "#%it_emergency_baton", 1, 1.2f);
+            profile.firstPlayableRoute.emergencyMeleeRecovered = true;
+            gameState.lastEvent = "Cryostasis terminated. Emergency baton and a stained service sketch recovered from the capsule tray.";
+        } else {
+            gameState.lastEvent = "Cryostasis terminated. Memory loss remains, but movement is stable.";
+        }
+        return;
+    }
+
+    if (nearest->registryId == "[%core_0001]") {
+        if (!profile.story.pipPadRecovered) {
+            profile.firstPlayableRoute.prePipPadClueCount = std::max(profile.firstPlayableRoute.prePipPadClueCount, 2);
+            gameState.lastEvent = "Paper maintenance sheets mention a missing BT-72 starter core and a lockout that only a Pip-Pad can clear.";
+            return;
+        }
+        if (profile.firstPlayableRoute.bt72CoreRecovered) {
+            gameState.lastEvent = "Central core rack already stripped for the BT-72 starter assembly.";
+            return;
+        }
+        profile.firstPlayableRoute.bt72CoreRecovered = true;
+        AddInventoryItem(profile, "power_cell", 1, 0.3f);
+        AddCollectedTapeIfMissing(profile, "bt72_core_service_001", "BT-72 Starter Core Ledger");
+        gameState.lastEvent = "Starter core package recovered from the rack. BT-72 can be powered once the hull and service notes are ready.";
+        return;
+    }
+
+    if (nearest->registryId == "[%garage_0001]") {
+        if (!profile.story.pipPadRecovered) {
+            profile.firstPlayableRoute.prePipPadClueCount = std::max(profile.firstPlayableRoute.prePipPadClueCount, 2);
+            gameState.lastEvent = "Old lift diagrams and grease-pencil notes point to a dormant BT-72 berth deeper in the garage.";
+            return;
+        }
+        if (profile.firstPlayableRoute.bt72HullInspected) {
+            gameState.lastEvent = profile.firstPlayableRoute.bt72Restored
+                ? "Garage lift remains locked around a partially restored BT-72 berth."
+                : "Garage lift survey already mirrored. BT-72 still needs its core and service notes.";
+            return;
+        }
+        profile.firstPlayableRoute.bt72HullInspected = true;
+        AddInventoryItem(profile, "old_plate", 1, 0.5f);
+        AddCollectedTapeIfMissing(profile, "bt72_hull_survey_001", "BT-72 Hull Survey Sheet");
+        gameState.lastEvent = "Garage lift survey mirrored. One serviceable hull plate recovered for BT-72 restoration.";
         return;
     }
 
@@ -2718,7 +2948,9 @@ void HandleInteraction(const MapObject* nearest,
         staticEraser.Erase(nearest->registryId);
         staticEraser.Save(profile.selectedWorld);
         world.RemoveObject(nearest->registryId);
-        gameState.lastEvent = "Pip-Pad recovered. Local UI shell restored.";
+        gameState.lastEvent = profile.firstPlayableRoute.prePipPadClueCount >= 2
+            ? "Pip-Pad recovered. Local UI shell restored and the bunker paper trail now makes sense."
+            : "Pip-Pad recovered. Local UI shell restored, but the bunker paper trail is still incomplete.";
         return;
     }
 
@@ -2740,7 +2972,7 @@ void HandleInteraction(const MapObject* nearest,
                 [&](const TapeEntry& tape) { return tape.tapeId == "damaged_blackbox_001"; })) {
             profile.character.collectedTapes.push_back({"damaged_blackbox_001", "Damaged Black Box Fragment", false, true, false});
         }
-        gameState.lastEvent = "Archive sync complete. One reactor core and one body are still missing.";
+        gameState.lastEvent = "Archive sync complete. One reactor core and one body are still missing, and BT-72 service traces terminate near the garage.";
         if (!skillEvent.empty()) {
             gameState.lastEvent += " " + skillEvent;
         }
@@ -2749,7 +2981,20 @@ void HandleInteraction(const MapObject* nearest,
 
     if (nearest->registryId == "[#tr_hull_0001]") {
         if (!profile.story.pipPadRecovered) {
-            gameState.lastEvent = "The tank refuses pairing. Recover the Pip-Pad first.";
+            gameState.lastEvent = "The tank berth is locked behind dead diagnostics. Recover the Pip-Pad first.";
+            return;
+        }
+        if (!profile.firstPlayableRoute.bt72Restored) {
+            if (!HasBt72RestorationPrerequisites(profile) || !HasBt72RestorationMaterials(profile)) {
+                gameState.lastEvent = DescribeBt72RestorationNeeds(profile);
+                return;
+            }
+            ConsumeInventoryItem(profile, "power_cell", 1);
+            ConsumeInventoryItem(profile, "repair_patch", 1);
+            ConsumeInventoryItem(profile, "old_plate", 1);
+            ApplyStarterBt72Restoration(profile);
+            player.bucketRaised = false;
+            gameState.lastEvent = "BT-72 restored to partial field condition. Cockpit link and training HUD are now available.";
             return;
         }
         if (!player.insideTank && profile.partnerTank.damage.hull <= 0.0f) {
@@ -2757,6 +3002,7 @@ void HandleInteraction(const MapObject* nearest,
             return;
         }
 
+        const bool firstLink = !profile.story.tankLinked;
         player.insideTank = !player.insideTank;
         profile.partnerTank.deployed = player.insideTank;
         profile.story.tankLinked = profile.story.tankLinked || player.insideTank;
@@ -2779,35 +3025,66 @@ void HandleInteraction(const MapObject* nearest,
             profile.partnerTank.worldPositionKnown = true;
         }
         gameState.lastEvent = player.insideTank
-            ? "BT-72 link established. Cockpit channel synchronized."
+            ? (firstLink
+                    ? "BT-72 link established. Cockpit channel synchronized and first-drive diagnostics are live."
+                    : "BT-72 link re-established. Cockpit channel synchronized.")
             : "BT-72 link suspended. Returning to foot movement.";
         return;
     }
 
     if (nearest->registryId == "#%it_bucket_0001") {
         if (!profile.story.tankLinked) {
-            gameState.lastEvent = "Recovering the bucket now is pointless. Link with BT-72 first.";
+            gameState.lastEvent = "Bucket-rack work is pointless without a live BT-72 link.";
             return;
         }
-
-        for (const auto& lootId : nearest->manualLootIds) {
-            AddInventoryItem(profile, lootId, 1, 0.4f);
+        if (profile.firstPlayableRoute.clearanceModuleInstalled) {
+            gameState.lastEvent = "Clearance module already installed on BT-72.";
+            return;
         }
+        if (!profile.firstPlayableRoute.clearanceBlueprintRecovered) {
+            gameState.lastEvent = "The rack makes no sense yet. Decode the clearance module blueprint from the maintenance echo first.";
+            return;
+        }
+        if (!profile.firstPlayableRoute.clearanceMaterialsRecovered) {
+            for (const auto& lootId : nearest->manualLootIds) {
+                AddInventoryItem(profile, lootId, 1, 0.4f);
+            }
+            profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+            gameState.lastEvent = "Bucket rack broken down into usable clearance parts. Bring BT-72 in for final install.";
+            return;
+        }
+        if (!IsTankNearServicePoint(profile, *nearest, 4.2f)) {
+            gameState.lastEvent = "Bring BT-72 to the rack before installing the clearance module.";
+            return;
+        }
+        if (!HasClearanceInstallMaterials(profile)) {
+            gameState.lastEvent = DescribeClearanceModuleNeeds(profile);
+            return;
+        }
+        auto* module = FindTankModule(profile, TankModuleSlotType::Bucket);
+        if (module != nullptr) {
+            module->moduleId = "bucket_shield_a";
+            module->displayName = "Bucket Rig Mk.I";
+            module->installed = true;
+        }
+        ConsumeInventoryItem(profile, "scrap_steel", 1);
+        ConsumeInventoryItem(profile, "hydraulic_seal", 1);
         player.bucketRaised = true;
+        profile.firstPlayableRoute.clearanceModuleInstalled = true;
         profile.story.bucketRecovered = true;
         staticEraser.Erase(nearest->registryId);
         staticEraser.Save(profile.selectedWorld);
         world.RemoveObject(nearest->registryId);
-        gameState.lastEvent = "Bucket plow recovered and mounted to the tank frame.";
+        gameState.lastEvent = "Clearance module installed on BT-72. Heavy debris routes can now be challenged.";
         return;
     }
 
     if (nearest->registryId == "[%bulkhead_0001]") {
         if (!profile.story.bucketRecovered) {
-            gameState.lastEvent = "The outer bulkhead opens, but the route beyond is still blocked by debris.";
+            gameState.lastEvent = "The outer bulkhead cycles, but heavy debris beyond it still demands a BT-72 clearance module.";
         } else {
             profile.story.exitedBunker = true;
-            gameState.lastEvent = "Outer bulkhead cycled. Recovery corridor is now accessible.";
+            gameState.lastEvent = "Outer bulkhead cycled. BT-72 can now enter the first blocked recovery corridor.";
         }
         return;
     }
@@ -2843,7 +3120,7 @@ void HandleInteraction(const MapObject* nearest,
                 profile.story.outerRoadCleared = true;
                 std::string progressionEvent;
                 AwardExperience(profile, 50, &progressionEvent);
-                gameState.lastEvent = "Outer debris barrier cleared. The bunker route is now stable. " + progressionEvent;
+                gameState.lastEvent = "Outer debris barrier cleared. BT-72 punched open the route to the first recovery node. " + progressionEvent;
             } else {
                 gameState.lastEvent = "Debris impact registered. Keep pushing the barrier.";
             }
@@ -2852,12 +3129,18 @@ void HandleInteraction(const MapObject* nearest,
     }
 
     if (nearest->registryId == "#%term_0001") {
-        if (!profile.story.outerRoadCleared || !staticEraser.IsErased("[%enemy_ghoul_0001]")) {
+        if (!profile.story.outerRoadCleared || !(profile.firstPlayableRoute.firstTankCombatResolved || staticEraser.IsErased("[%enemy_ghoul_0001]"))) {
             gameState.lastEvent = "Relay sync is unsafe. Secure the outer route first.";
             return;
         }
+        if (!profile.firstPlayableRoute.firstServicePerformed) {
+            gameState.lastEvent = "BT-72 is still hot off first contact. Run one service/rest cycle before syncing the node.";
+            return;
+        }
         if (!profile.story.relayRecovered) {
+            auto& worldState = EnsureSelectedWorldFieldState(profile);
             profile.story.relayRecovered = true;
+            profile.firstPlayableRoute.firstRecoveryNodeActivated = true;
             std::string skillEvent;
             RegisterArchiveSync(profile, &skillEvent);
             AddInventoryItem(profile, "relay_reconstruction_data", 1, 0.2f);
@@ -2866,9 +3149,12 @@ void HandleInteraction(const MapObject* nearest,
                     [&](const TapeEntry& tape) { return tape.tapeId == "relay_reconstruction_data"; })) {
                 profile.character.collectedTapes.push_back({"relay_reconstruction_data", "Relay Reconstruction Packet", false});
             }
+            worldState.localRelayAvailable = true;
+            worldState.routeContamination = std::max(0.0f, worldState.routeContamination - 10.0f);
+            worldState.infrastructureDecay = std::max(0.0f, worldState.infrastructureDecay - 6.0f);
             std::string progressionEvent;
             AwardExperience(profile, HasEquippedPassiveSkill(profile, "skill_data_miner") ? 50 : 40, &progressionEvent);
-            gameState.lastEvent = "Relay schematics recovered. Return to Shelter 17 for debrief. " + progressionEvent;
+            gameState.lastEvent = "Recovery node synchronized. Shelter 17 now reads a live route toward the city fringe. Return for debrief. " + progressionEvent;
             if (!skillEvent.empty()) {
                 gameState.lastEvent += " " + skillEvent;
             }
@@ -2884,6 +3170,7 @@ void HandleInteraction(const MapObject* nearest,
             return;
         }
         if (!profile.story.returnedToBase) {
+            profile.firstPlayableRoute.debriefSummaryViewed = true;
             profile.story.returnedToBase = true;
             std::string skillEvent;
             RegisterArchiveSync(profile, &skillEvent);
@@ -2894,7 +3181,7 @@ void HandleInteraction(const MapObject* nearest,
             }
             std::string progressionEvent;
             AwardExperience(profile, HasEquippedPassiveSkill(profile, "skill_data_miner") ? 75 : 60, &progressionEvent);
-            gameState.lastEvent = "Debrief uploaded. Starter route complete and industrial recovery planning unlocked for Shelter 17. " + progressionEvent;
+            gameState.lastEvent = "Debrief uploaded. The first route is closed, city approach hooks are tagged, and industrial recovery planning is now live for Shelter 17. " + progressionEvent;
             if (!skillEvent.empty()) {
                 gameState.lastEvent += " " + skillEvent;
             }
@@ -2947,8 +3234,10 @@ void HandleInteraction(const MapObject* nearest,
                 gameState.lastEvent = "Workshop recognizes no active vehicle link.";
                 break;
             }
-            if (!IsRegionalGridOnline(profile)) {
-                gameState.lastEvent = "Workshop service grid offline. Sync the relay network first.";
+            const bool gridOnline = IsRegionalGridOnline(profile);
+            const bool manualStarterService = !gridOnline && profile.firstPlayableRoute.firstTankCombatResolved;
+            if (!gridOnline && !manualStarterService) {
+                gameState.lastEvent = "Workshop grid is offline. Use field service or return after first combat for a manual recovery pass.";
                 break;
             }
             if (!profile.partnerTank.worldPositionKnown) {
@@ -2960,8 +3249,10 @@ void HandleInteraction(const MapObject* nearest,
                 break;
             }
             if (player.insideTank && profile.partnerTank.energyReserve < 100.0f) {
-                profile.partnerTank.energyReserve = std::min(100.0f, profile.partnerTank.energyReserve + 14.0f);
-                gameState.lastEvent = "Workshop power coupler connected. BT-72 batteries boosted.";
+                profile.partnerTank.energyReserve = std::min(100.0f, profile.partnerTank.energyReserve + (manualStarterService ? 7.0f : 14.0f));
+                gameState.lastEvent = manualStarterService
+                    ? "Manual workshop coupler connected. BT-72 batteries boosted from local reserves."
+                    : "Workshop power coupler connected. BT-72 batteries boosted.";
                 break;
             }
             if (!TankNeedsRepair(profile)) {
@@ -2976,7 +3267,7 @@ void HandleInteraction(const MapObject* nearest,
             const float intelligence = static_cast<float>(EffectiveStatValue(profile, gameState, 'I'));
             const bool hasEngineer = HasAssignedSpecialistRole(profile, "engineer", "workshop");
             const float engineerBoost = hasEngineer ? 1.18f : 1.0f;
-            const float doctrineBoost = DoctrineWorkshopBoost(profile) * PylonGridBoost(profile);
+            const float doctrineBoost = DoctrineWorkshopBoost(profile) * PylonGridBoost(profile) * (manualStarterService ? 0.84f : 1.0f);
             const auto* worldState = FindWorldFieldState(profile, profile.selectedWorld);
             const float infrastructurePenalty = worldState != nullptr
                 ? std::max(0.68f, 1.0f - worldState->infrastructureDecay / 150.0f)
@@ -2988,15 +3279,25 @@ void HandleInteraction(const MapObject* nearest,
             profile.partnerTank.damage.turret = std::min(100.0f, profile.partnerTank.damage.turret + (12.0f + intelligence * 0.6f) * repairBoost);
             profile.partnerTank.damage.cockpit = std::min(100.0f, profile.partnerTank.damage.cockpit + (10.0f + intelligence * 0.5f) * repairBoost);
             profile.partnerTank.damage.powerCore = std::min(100.0f, profile.partnerTank.damage.powerCore + (14.0f + intelligence * 0.6f) * repairBoost);
-            profile.partnerTank.energyReserve = std::min(100.0f, profile.partnerTank.energyReserve + 22.0f);
-            profile.partnerTank.ammoReserve = std::min(100.0f, profile.partnerTank.ammoReserve + 12.0f);
+            profile.partnerTank.energyReserve = std::min(100.0f, profile.partnerTank.energyReserve + (manualStarterService ? 12.0f : 22.0f));
+            profile.partnerTank.ammoReserve = std::min(100.0f, profile.partnerTank.ammoReserve + (manualStarterService ? 6.0f : 12.0f));
             gameState.workshopServiceCooldown = 120.0f;
             {
                 std::string progressionEvent;
                 AwardExperience(profile, 25, &progressionEvent);
-                gameState.lastEvent = hasEngineer
-                    ? "Workshop cycle complete. Resident engineer boosted BT-72 repair output. " + progressionEvent
-                    : "Workshop cycle complete. BT-72 repaired and resupplied. " + progressionEvent;
+                if (manualStarterService) {
+                    gameState.lastEvent = hasEngineer
+                        ? "Manual workshop cycle complete. Resident engineer stabilized the first BT-72 recovery pass. " + progressionEvent
+                        : "Manual workshop cycle complete. BT-72 patched and resupplied off bunker reserves. " + progressionEvent;
+                } else {
+                    gameState.lastEvent = hasEngineer
+                        ? "Workshop cycle complete. Resident engineer boosted BT-72 repair output. " + progressionEvent
+                        : "Workshop cycle complete. BT-72 repaired and resupplied. " + progressionEvent;
+                }
+                if (profile.firstPlayableRoute.firstTankCombatResolved && !profile.firstPlayableRoute.firstServicePerformed) {
+                    profile.firstPlayableRoute.firstServicePerformed = true;
+                    gameState.lastEvent += " First service halt logged for the route.";
+                }
                 if (profile.doctrine == ShelterDoctrine::Industry) {
                     gameState.lastEvent += " Industry doctrine amplified service throughput.";
                 } else if (profile.doctrine == ShelterDoctrine::Medical) {
@@ -3498,7 +3799,19 @@ void DrawPipPad(const World& world,
         const bool stableRecoveryBackbone = worldFieldState != nullptr &&
             IsStableRecoveryBackbone(profile, *worldFieldState);
         ImGui::Text("Mission Log");
+        ImGui::BulletText("Checkpoint: %s", CurrentStoryCheckpointLabel(profile).c_str());
         ImGui::BulletText("%s", CurrentStoryObjective(profile, staticEraser).c_str());
+        if (!profile.firstPlayableRoute.bt72Restored || !profile.firstPlayableRoute.clearanceModuleInstalled) {
+            ImGui::Separator();
+            ImGui::Text("BT-72 Restore Route");
+            for (const auto& entry : BuildBt72RestorationRoute(profile)) {
+                if (entry.completed) {
+                    ImGui::TextDisabled("%s", entry.text.c_str());
+                } else {
+                    ImGui::BulletText("%s", entry.text.c_str());
+                }
+            }
+        }
         ImGui::Separator();
         ImGui::Text("Recovery Support Stock");
         ImGui::BulletText("Trade Vouchers: %d", InventoryCount(profile, "trade_voucher"));

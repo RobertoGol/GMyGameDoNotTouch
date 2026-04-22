@@ -175,6 +175,12 @@
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerLauncher.dir\\src\\StoryRoute.cpp.obj /FdCMakeFiles\\BunkerLauncher.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\StoryRoute.cpp",
+  "file": "D:/Projects/Game_Project/src/StoryRoute.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerLauncher.dir/src/StoryRoute.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
   "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerLauncher.dir\\external\\imgui\\imgui.cpp.obj /FdCMakeFiles\\BunkerLauncher.dir\\ /FS -c D:\\Projects\\Game_Project\\external\\imgui\\imgui.cpp",
   "file": "D:/Projects/Game_Project/external/imgui/imgui.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerLauncher.dir/external/imgui/imgui.cpp.obj"
@@ -346,6 +352,12 @@
   "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\SessionProfiles.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\SessionProfiles.cpp",
   "file": "D:/Projects/Game_Project/src/SessionProfiles.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/SessionProfiles.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\StoryRoute.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\StoryRoute.cpp",
+  "file": "D:/Projects/Game_Project/src/StoryRoute.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/StoryRoute.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",

@@ -7,13 +7,74 @@ namespace bunker {
 namespace {
 
 constexpr char kSessionProfileFormat[] = "BPF1";
-constexpr int kCurrentSessionProfileVersion = 3;
+constexpr int kCurrentSessionProfileVersion = 4;
+
+bool HasInventoryEntry(const SessionProfile& profile, const std::string& itemId) {
+    return std::any_of(
+        profile.character.inventory.begin(),
+        profile.character.inventory.end(),
+        [&](const InventoryEntry& entry) { return entry.itemId == itemId && entry.count > 0; });
+}
+
+void NormalizeFirstPlayableRouteProgress(SessionProfile& profile) {
+    auto& route = profile.firstPlayableRoute;
+    route.prePipPadClueCount = std::clamp(route.prePipPadClueCount, 0, 2);
+    route.introSeen = route.introSeen || profile.story.awakenedFromCryo;
+    route.emergencyMeleeRecovered = route.emergencyMeleeRecovered || HasInventoryEntry(profile, "#%it_emergency_baton");
+    route.earlyVerminEncounterResolved = route.earlyVerminEncounterResolved ||
+        profile.character.awakening.footKills > 0 ||
+        profile.story.tankLinked;
+    route.bt72HullInspected = route.bt72HullInspected || profile.story.tankLinked || profile.story.bucketRecovered;
+    route.bt72CoreRecovered = route.bt72CoreRecovered || profile.story.tankLinked || profile.story.bucketRecovered;
+    route.bt72ServiceNotesRecovered = route.bt72ServiceNotesRecovered ||
+        profile.story.tankLinked ||
+        profile.story.bucketRecovered ||
+        HasCollectedTapeId(profile, "bt72_service_reel_001");
+    route.bt72Restored = route.bt72Restored || profile.story.tankLinked || profile.story.bucketRecovered;
+    route.clearanceBlueprintRecovered = route.clearanceBlueprintRecovered ||
+        profile.story.bucketRecovered ||
+        HasCollectedTapeId(profile, "bt72_clearance_blueprint");
+    route.clearanceMaterialsRecovered = route.clearanceMaterialsRecovered || profile.story.bucketRecovered;
+    route.clearanceModuleInstalled = route.clearanceModuleInstalled || profile.story.bucketRecovered;
+    route.firstTankCombatResolved = route.firstTankCombatResolved || profile.story.relayRecovered || profile.story.returnedToBase;
+    route.firstServicePerformed = route.firstServicePerformed ||
+        profile.story.relayRecovered ||
+        profile.story.returnedToBase ||
+        profile.character.awakening.fieldServiceUses > 0;
+    route.firstRecoveryNodeActivated = route.firstRecoveryNodeActivated || profile.story.relayRecovered;
+    route.debriefSummaryViewed = route.debriefSummaryViewed ||
+        profile.story.returnedToBase ||
+        HasCollectedTapeId(profile, "debrief_shelter17");
+    profile.story.bucketRecovered = profile.story.bucketRecovered || route.clearanceModuleInstalled;
+    profile.story.relayRecovered = profile.story.relayRecovered || route.firstRecoveryNodeActivated;
+    profile.story.returnedToBase = profile.story.returnedToBase || route.debriefSummaryViewed;
+}
 
 void MigrateSessionProfile(SessionProfile& profile, int loadedVersion) {
     if (loadedVersion < 2) {
         if (profile.fieldCheckpointKnown && profile.fieldCheckpointWorld.empty()) {
             profile.fieldCheckpointWorld = profile.selectedWorld;
         }
+    }
+    if (loadedVersion < 4) {
+        auto& route = profile.firstPlayableRoute;
+        route.introSeen = profile.story.awakenedFromCryo;
+        route.emergencyMeleeRecovered = profile.story.awakenedFromCryo;
+        route.earlyVerminEncounterResolved = profile.story.archiveRecovered || profile.story.tankLinked;
+        route.prePipPadClueCount = profile.story.pipPadRecovered ? 2 : (profile.story.awakenedFromCryo ? 1 : 0);
+        route.bt72HullInspected = profile.story.archiveRecovered || profile.story.tankLinked;
+        route.bt72CoreRecovered = profile.story.tankLinked || profile.story.bucketRecovered;
+        route.bt72ServiceNotesRecovered = profile.story.tankLinked || profile.story.bucketRecovered;
+        route.bt72Restored = profile.story.tankLinked || profile.story.bucketRecovered;
+        route.clearanceBlueprintRecovered = profile.story.bucketRecovered;
+        route.clearanceMaterialsRecovered = profile.story.bucketRecovered;
+        route.clearanceModuleInstalled = profile.story.bucketRecovered;
+        route.firstTankCombatResolved = profile.story.relayRecovered || profile.story.returnedToBase;
+        route.firstServicePerformed = profile.story.relayRecovered ||
+            profile.story.returnedToBase ||
+            profile.character.awakening.fieldServiceUses > 0;
+        route.firstRecoveryNodeActivated = profile.story.relayRecovered;
+        route.debriefSummaryViewed = profile.story.returnedToBase;
     }
 }
 
@@ -107,6 +168,7 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     if (profile.fieldCheckpointKnown && profile.fieldCheckpointWorld.empty()) {
         profile.fieldCheckpointWorld = profile.selectedWorld;
     }
+    NormalizeFirstPlayableRouteProgress(profile);
     (void)FindWorldFieldState(profile, profile.selectedWorld, true);
 }
 
@@ -181,6 +243,21 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
     out << "story_debris=" << (profile.story.outerRoadCleared ? 1 : 0) << '\n';
     out << "story_relay=" << (profile.story.relayRecovered ? 1 : 0) << '\n';
     out << "story_return=" << (profile.story.returnedToBase ? 1 : 0) << '\n';
+    out << "route_intro_seen=" << (profile.firstPlayableRoute.introSeen ? 1 : 0) << '\n';
+    out << "route_emergency_melee=" << (profile.firstPlayableRoute.emergencyMeleeRecovered ? 1 : 0) << '\n';
+    out << "route_early_vermin=" << (profile.firstPlayableRoute.earlyVerminEncounterResolved ? 1 : 0) << '\n';
+    out << "route_pre_pippad_clues=" << profile.firstPlayableRoute.prePipPadClueCount << '\n';
+    out << "route_bt72_hull=" << (profile.firstPlayableRoute.bt72HullInspected ? 1 : 0) << '\n';
+    out << "route_bt72_core=" << (profile.firstPlayableRoute.bt72CoreRecovered ? 1 : 0) << '\n';
+    out << "route_bt72_notes=" << (profile.firstPlayableRoute.bt72ServiceNotesRecovered ? 1 : 0) << '\n';
+    out << "route_bt72_restored=" << (profile.firstPlayableRoute.bt72Restored ? 1 : 0) << '\n';
+    out << "route_clearance_blueprint=" << (profile.firstPlayableRoute.clearanceBlueprintRecovered ? 1 : 0) << '\n';
+    out << "route_clearance_materials=" << (profile.firstPlayableRoute.clearanceMaterialsRecovered ? 1 : 0) << '\n';
+    out << "route_clearance_installed=" << (profile.firstPlayableRoute.clearanceModuleInstalled ? 1 : 0) << '\n';
+    out << "route_first_tank_combat=" << (profile.firstPlayableRoute.firstTankCombatResolved ? 1 : 0) << '\n';
+    out << "route_first_service=" << (profile.firstPlayableRoute.firstServicePerformed ? 1 : 0) << '\n';
+    out << "route_first_recovery=" << (profile.firstPlayableRoute.firstRecoveryNodeActivated ? 1 : 0) << '\n';
+    out << "route_debrief=" << (profile.firstPlayableRoute.debriefSummaryViewed ? 1 : 0) << '\n';
     out << "awakening_archive=" << profile.character.awakening.archiveSyncs << '\n';
     out << "awakening_foot=" << profile.character.awakening.footKills << '\n';
     out << "awakening_tank=" << profile.character.awakening.tankActions << '\n';
@@ -349,6 +426,21 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         else if (key == "story_debris") outProfile.story.outerRoadCleared = (std::stoi(value) != 0);
         else if (key == "story_relay") outProfile.story.relayRecovered = (std::stoi(value) != 0);
         else if (key == "story_return") outProfile.story.returnedToBase = (std::stoi(value) != 0);
+        else if (key == "route_intro_seen") outProfile.firstPlayableRoute.introSeen = (std::stoi(value) != 0);
+        else if (key == "route_emergency_melee") outProfile.firstPlayableRoute.emergencyMeleeRecovered = (std::stoi(value) != 0);
+        else if (key == "route_early_vermin") outProfile.firstPlayableRoute.earlyVerminEncounterResolved = (std::stoi(value) != 0);
+        else if (key == "route_pre_pippad_clues") outProfile.firstPlayableRoute.prePipPadClueCount = std::stoi(value);
+        else if (key == "route_bt72_hull") outProfile.firstPlayableRoute.bt72HullInspected = (std::stoi(value) != 0);
+        else if (key == "route_bt72_core") outProfile.firstPlayableRoute.bt72CoreRecovered = (std::stoi(value) != 0);
+        else if (key == "route_bt72_notes") outProfile.firstPlayableRoute.bt72ServiceNotesRecovered = (std::stoi(value) != 0);
+        else if (key == "route_bt72_restored") outProfile.firstPlayableRoute.bt72Restored = (std::stoi(value) != 0);
+        else if (key == "route_clearance_blueprint") outProfile.firstPlayableRoute.clearanceBlueprintRecovered = (std::stoi(value) != 0);
+        else if (key == "route_clearance_materials") outProfile.firstPlayableRoute.clearanceMaterialsRecovered = (std::stoi(value) != 0);
+        else if (key == "route_clearance_installed") outProfile.firstPlayableRoute.clearanceModuleInstalled = (std::stoi(value) != 0);
+        else if (key == "route_first_tank_combat") outProfile.firstPlayableRoute.firstTankCombatResolved = (std::stoi(value) != 0);
+        else if (key == "route_first_service") outProfile.firstPlayableRoute.firstServicePerformed = (std::stoi(value) != 0);
+        else if (key == "route_first_recovery") outProfile.firstPlayableRoute.firstRecoveryNodeActivated = (std::stoi(value) != 0);
+        else if (key == "route_debrief") outProfile.firstPlayableRoute.debriefSummaryViewed = (std::stoi(value) != 0);
         else if (key == "awakening_archive") outProfile.character.awakening.archiveSyncs = std::stoi(value);
         else if (key == "awakening_foot") outProfile.character.awakening.footKills = std::stoi(value);
         else if (key == "awakening_tank") outProfile.character.awakening.tankActions = std::stoi(value);

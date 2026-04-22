@@ -247,6 +247,9 @@ bool TankUsesTowCoupler(const SessionProfile& profile) {
 }
 
 const char* CurrentUtilityModuleLabel(const SessionProfile& profile) {
+    if (!profile.firstPlayableRoute.clearanceModuleInstalled && !profile.story.bucketRecovered) {
+        return "Utility Hardpoint Unfitted";
+    }
     if (TankUsesRamShield(profile)) {
         return "Ram Shield Mk.I";
     }
@@ -260,6 +263,10 @@ void ToggleTankUtilityModule(SessionProfile& profile, PlayerState& player, GameS
     auto* module = FindTankModule(profile, TankModuleSlotType::Bucket);
     if (module == nullptr) {
         gameState.lastEvent = "No utility hardpoint found on BT-72.";
+        return;
+    }
+    if (!profile.firstPlayableRoute.clearanceModuleInstalled && !profile.story.bucketRecovered) {
+        gameState.lastEvent = "BT-72 utility hardpoint is still unfitted. Install the clearance module first.";
         return;
     }
 
@@ -333,6 +340,10 @@ bool TryRunFieldWorkbench(PlayerState& player,
     gameState.lastEvent = hasEngineer
         ? "Field service rack cycled. Scavenger-side engineer tuning improved the repair pass."
         : "Field service rack cycled. BT-72 patched and partially resupplied in the field.";
+    if (profile.firstPlayableRoute.firstTankCombatResolved && !profile.firstPlayableRoute.firstServicePerformed) {
+        profile.firstPlayableRoute.firstServicePerformed = true;
+        gameState.lastEvent += " First service halt logged for the route.";
+    }
     if (!recipeEvent.empty()) {
         gameState.lastEvent += " " + recipeEvent;
     }
@@ -477,6 +488,7 @@ void DrawPipPadDataTab(PlayerState& player, SessionProfile& profile, GameState& 
     ImGui::Text("Vehicle Telemetry");
     ImGui::Text("Partner Tank: %s", profile.partnerTank.callSign.c_str());
     ImGui::Text("Class: %s", ToString(profile.partnerTank.tankClass));
+    ImGui::BulletText("Route Checkpoint: %s", CurrentStoryCheckpointLabel(profile).c_str());
     ImGui::Text("Sync Mode: %s", CurrentTankSyncMode(profile.partnerTank).c_str());
     ImGui::Text("Trust Link: %.0f%%", profile.partnerTank.trustLink * 100.0f);
     ImGui::Text("Utility Module: %s", CurrentUtilityModuleLabel(profile));
@@ -484,6 +496,8 @@ void DrawPipPadDataTab(PlayerState& player, SessionProfile& profile, GameState& 
         ImGui::TextDisabled("Tow Coupler: +logistics, -mobility, +thermal load");
     } else if (TankUsesRamShield(profile)) {
         ImGui::TextDisabled("Ram Shield: +impact, +survivability");
+    } else if (!profile.firstPlayableRoute.clearanceModuleInstalled && !profile.story.bucketRecovered) {
+        ImGui::TextDisabled("Hardpoint unfitted: decode blueprint, recover rack parts, then install.");
     } else {
         ImGui::TextDisabled("Bucket Rig: debris clearing and field works");
     }
@@ -524,6 +538,15 @@ void DrawPipPadDataTab(PlayerState& player, SessionProfile& profile, GameState& 
         ImGui::TextDisabled("Field Service Cooldown: %.0fs", gameState.fieldWorkbenchCooldown);
     } else {
         ImGui::TextDisabled("Field Service ready when BT-72 is stationary.");
+    }
+    ImGui::Separator();
+    ImGui::Text("BT-72 Restore Route");
+    for (const auto& entry : BuildBt72RestorationRoute(profile)) {
+        if (entry.completed) {
+            ImGui::TextDisabled("%s", entry.text.c_str());
+        } else {
+            ImGui::BulletText("%s", entry.text.c_str());
+        }
     }
     ImGui::Separator();
 

@@ -71,6 +71,7 @@ add_executable(BunkerLauncher
     src/LanlineSession.cpp
     src/LaunchSession.cpp
     src/SessionProfiles.cpp
+    src/StoryRoute.cpp
     ${IMGUI_SRC}
 )
 configure_bunker_target(BunkerLauncher)
@@ -98,6 +99,7 @@ add_executable(BunkerSmokeChecks
     src/LanlineSession.cpp
     src/LaunchSession.cpp
     src/SessionProfiles.cpp
+    src/StoryRoute.cpp
     src/World.cpp
     src/WorldEditorUndo.cpp
     src/WorldExport.cpp

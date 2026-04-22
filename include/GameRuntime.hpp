@@ -74,15 +74,15 @@ struct GameState {
     bool tankServiceNearby = false;
     bool medicalSupportNearby = false;
     WeatherAnomaly weather = WeatherAnomaly::Clear;
-    std::string lastEvent = "Cryostasis breached. Reorient and recover the bunker route.";
+    std::string lastEvent = "Cryostasis breached. Reorient, recover the Pip-Pad, and trace the BT-72 berth.";
     std::string lastSupportAction = "No support activity.";
     std::string lastPortalAction = "No portal updates.";
     std::vector<std::string> radioMessages = {
-        "SYSTEM: 'Cryo wing unstable. Search for your missing Pip-Pad.'",
-        "ARCHIVE: 'One reactor core is missing. One body is missing. Records are incomplete.'",
-        "BT-72: 'Pilot link pending. Garage anchor is available when you are ready.'",
-        "HQ: 'The outer bulkhead is blocked. Recover the bucket rig and clear the route.'",
-        "ARCHIVE: 'Factory and relay schematics remain fragmented. Continue recovery.'"
+        "SYSTEM: 'Cryo wing unstable. Sweep the bunker, recover the Pip-Pad, and follow the paper trail.'",
+        "ARCHIVE: 'One reactor core is missing. One body is missing. Garage service traces remain incomplete.'",
+        "BT-72: 'Hull detected. Restore the chassis before any cockpit link attempt.'",
+        "HQ: 'The outer bulkhead is blocked. Install a clearance module before forcing that route.'",
+        "ARCHIVE: 'Relay and city-fringe schematics remain fragmented. Continue recovery.'"
     };
 };
 
