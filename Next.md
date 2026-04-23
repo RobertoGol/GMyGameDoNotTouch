@@ -104,5 +104,5 @@
 
 ## 5. Следующий рабочий пакет
 
-1. `hangar -> bunker exit -> surface arrival` presentation/readability polish без authored layout work
-2. точечный follow-up по `BT-72 / combat / RPG depth`, только если он напрямую усиливает first playable route
+1. точечный follow-up по `BT-72 / combat / RPG depth`, только если он напрямую усиливает first playable route
+2. усиление `recovery / industry / logistics` readability после debrief, только как честное продолжение первого маршрута

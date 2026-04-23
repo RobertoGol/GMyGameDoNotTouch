@@ -14,6 +14,12 @@ struct StoryRouteEntry {
     bool completed = false;
 };
 
+struct FirstPlayableRouteBeat {
+    std::string label;
+    std::string cue;
+    std::string payoff;
+};
+
 std::string CurrentStoryCheckpointLabel(const SessionProfile& profile);
 std::string CurrentStoryObjectivePreview(const SessionProfile& profile);
 std::string CurrentStoryObjectivePreview(const SessionProfile& profile, std::string_view worldReference);
@@ -22,6 +28,8 @@ std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile);
 std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile, std::string_view worldReference);
 std::string ActiveRouteEventSummary(const SessionProfile& profile);
 std::string ActiveRouteEventSummary(const SessionProfile& profile, std::string_view worldReference);
+FirstPlayableRouteBeat CurrentFirstPlayableRouteBeat(const SessionProfile& profile);
+FirstPlayableRouteBeat CurrentFirstPlayableRouteBeat(const SessionProfile& profile, std::string_view worldReference);
 std::vector<StoryRouteEntry> BuildBt72RestorationRoute(const SessionProfile& profile);
 std::vector<StoryRouteEntry> BuildFirstPlayableRouteSlice(const SessionProfile& profile);
 std::vector<StoryRouteEntry> BuildStarterRoute(const SessionProfile& profile, const StaticEraser& staticEraser);

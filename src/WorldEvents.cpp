@@ -62,6 +62,8 @@ void ProcessScriptedWorldEvents(const World& world, const PlayerState& player, S
         profile.firstPlayableRoute.surfaceArrivalReached = true;
         gameState.zoneEventExterior = true;
         gameState.lastEvent = "SURFACE ARRIVAL: 'BT-72 reached the first exterior foothold. Skyline active, debris barrier ahead, and the first hostile contact is forming beyond the lift route.'";
+        const auto beat = CurrentFirstPlayableRouteBeat(profile);
+        gameState.lastEvent += " Route beat: " + beat.label + ". Readable payoff: " + beat.payoff;
         return;
     }
 
@@ -80,6 +82,8 @@ void ProcessScriptedWorldEvents(const World& world, const PlayerState& player, S
         IsNear(player, -2.5f, 3.2f, 3.0f)) {
         gameState.zoneEventReturn = true;
         gameState.lastEvent = "DEBRIEF: 'Recovery node recognized. Upload the route summary and authorize Shelter 17 planning: rail, orbital, fabrication, then the inner spur.'";
+        const auto beat = CurrentFirstPlayableRouteBeat(profile);
+        gameState.lastEvent += " Route beat: " + beat.label + ". Readable payoff: " + beat.payoff;
         return;
     }
 

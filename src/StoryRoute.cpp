@@ -502,6 +502,98 @@ std::string ActiveRouteEventSummaryForProfile(const SessionProfile& profile) {
     return "Route event layer ready for the next field incident window.";
 }
 
+FirstPlayableRouteBeat CurrentFirstPlayableRouteBeatForProfile(const SessionProfile& profile) {
+    if (!profile.story.pipPadRecovered) {
+        return {
+            "Bunker Trace",
+            "Recover the access card, stabilize the paper trail, and pull the missing Pip-Pad into the route.",
+            "The archive trail should point cleanly toward the hangar and BT-72."
+        };
+    }
+    if (!profile.story.archiveRecovered) {
+        return {
+            "Archive Corridor",
+            "Clear the vermin gate and sync the missing personnel trail into the Pip-Pad.",
+            "The hangar berth should read as the next honest destination."
+        };
+    }
+    if (!Bt72Restored(profile)) {
+        return {
+            "Hangar Recovery",
+            "Read the BT-72 hull, core, and service notes, then restore the chassis from bunker salvage.",
+            "The slice shifts from bunker scavenging into mechanized recovery."
+        };
+    }
+    if (!profile.story.tankLinked) {
+        return {
+            "BT-72 Sync",
+            "Climb into the cockpit and stabilize the first BT-72 link.",
+            "Pilot and gunner identity should become readable before the outer push."
+        };
+    }
+    if (!ClearanceModuleInstalled(profile)) {
+        return {
+            "Hangar Prep",
+            "Recover and install the clearance module before forcing the outer route.",
+            "The bulkhead breakout and lift ascent become viable."
+        };
+    }
+    if (!profile.story.exitedBunker) {
+        return {
+            "Bulkhead Breakout",
+            "Cycle the outer bulkhead and line BT-72 up for the ascent corridor.",
+            "The bunker should finally give way to the surface approach."
+        };
+    }
+    if (!SurfaceArrivalReached(profile)) {
+        return {
+            "Surface Ascent",
+            "Push BT-72 through the lift and secure the first exterior foothold.",
+            "Skyline, exposure, and the debris wall should read as the route's first hard reveal."
+        };
+    }
+    if (!profile.story.outerRoadCleared) {
+        return {
+            "Exterior Exposure",
+            "Hold the exterior line, read the debris wall, and clear the blocked lane with the bucket rig.",
+            "A clean clearance pass should open the first real combat lane."
+        };
+    }
+    if (!FirstTankCombatResolved(profile)) {
+        return {
+            "First Contact",
+            "Use BT-72 to survive the first surface contact without losing the lane.",
+            "A short service halt should feel earned instead of menu-like."
+        };
+    }
+    if (!FirstServicePerformed(profile)) {
+        return {
+            "Service Halt",
+            "Run one field or workshop service cycle to cool BT-72 and reset the push.",
+            "The recovery node becomes the next honest objective."
+        };
+    }
+    if (!FirstRecoveryNodeActivated(profile)) {
+        return {
+            "Recovery Sync",
+            "Sync the first recovery node and prove the route changed Shelter 17.",
+            "Debrief turns the slice into a real recovery handoff."
+        };
+    }
+    if (!DebriefSummaryViewed(profile)) {
+        return {
+            "Debrief Window",
+            "Return to Shelter 17, upload the route summary, and close the first sortie cleanly.",
+            "Industrial planning becomes the mid-game continuation."
+        };
+    }
+    return {
+        "Industrial Handoff",
+        CurrentRecoveryHandoffSummaryForProfile(profile),
+        "Route events, recovery state, and BT-72 service now carry progression beyond the starter lane."
+    };
+}
+
 }  // namespace
 
 std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile) {
@@ -518,6 +610,14 @@ std::string ActiveRouteEventSummary(const SessionProfile& profile) {
 
 std::string ActiveRouteEventSummary(const SessionProfile& profile, std::string_view worldReference) {
     return ActiveRouteEventSummaryForProfile(BuildWorldScopedProfile(profile, worldReference));
+}
+
+FirstPlayableRouteBeat CurrentFirstPlayableRouteBeat(const SessionProfile& profile) {
+    return CurrentFirstPlayableRouteBeatForProfile(profile);
+}
+
+FirstPlayableRouteBeat CurrentFirstPlayableRouteBeat(const SessionProfile& profile, std::string_view worldReference) {
+    return CurrentFirstPlayableRouteBeatForProfile(BuildWorldScopedProfile(profile, worldReference));
 }
 
 std::vector<StoryRouteEntry> BuildBt72RestorationRoute(const SessionProfile& profile) {

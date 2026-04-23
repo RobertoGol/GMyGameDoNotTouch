@@ -283,6 +283,78 @@ bool RunFirstPlayableRouteStorySmoke() {
             "first route smoke expected industrial follow-up objective preview");
 }
 
+bool RunRouteBeatPresentationSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    if (!Check(bunker::CurrentFirstPlayableRouteBeat(profile).label == "Bunker Trace",
+            "route beat smoke expected bunker-trace opening label")) {
+        return false;
+    }
+
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    if (!Check(bunker::CurrentFirstPlayableRouteBeat(profile).label == "Bulkhead Breakout",
+            "route beat smoke expected bulkhead-breakout label before exit")) {
+        return false;
+    }
+
+    profile.story.exitedBunker = true;
+    const auto surfaceAscentBeat = bunker::CurrentFirstPlayableRouteBeat(profile);
+    if (!Check(surfaceAscentBeat.label == "Surface Ascent",
+            "route beat smoke expected surface-ascent label after bunker exit")) {
+        return false;
+    }
+    if (!Check(surfaceAscentBeat.cue.find("exterior foothold") != std::string::npos,
+            "route beat smoke expected exterior-foothold cue for surface-ascent beat")) {
+        return false;
+    }
+
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    if (!Check(bunker::CurrentFirstPlayableRouteBeat(profile).label == "Exterior Exposure",
+            "route beat smoke expected exterior-exposure label after surface arrival")) {
+        return false;
+    }
+
+    profile.story.outerRoadCleared = true;
+    if (!Check(bunker::CurrentFirstPlayableRouteBeat(profile).label == "First Contact",
+            "route beat smoke expected first-contact label after debris clear")) {
+        return false;
+    }
+
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+    if (!Check(bunker::CurrentFirstPlayableRouteBeat(profile).label == "Service Halt",
+            "route beat smoke expected service-halt label after first combat")) {
+        return false;
+    }
+
+    profile.firstPlayableRoute.firstServicePerformed = true;
+    if (!Check(bunker::CurrentFirstPlayableRouteBeat(profile).label == "Recovery Sync",
+            "route beat smoke expected recovery-sync label after first service")) {
+        return false;
+    }
+
+    profile.story.relayRecovered = true;
+    profile.firstPlayableRoute.firstRecoveryNodeActivated = true;
+    if (!Check(bunker::CurrentFirstPlayableRouteBeat(profile).label == "Debrief Window",
+            "route beat smoke expected debrief-window label after relay sync")) {
+        return false;
+    }
+
+    profile.story.returnedToBase = true;
+    profile.firstPlayableRoute.debriefSummaryViewed = true;
+    (void)bunker::FindWorldFieldState(profile, profile.selectedWorld, true);
+    const auto industrialBeat = bunker::CurrentFirstPlayableRouteBeat(profile);
+    return Check(industrialBeat.label == "Industrial Handoff",
+            "route beat smoke expected industrial-handoff label after debrief") &&
+        Check(industrialBeat.cue.find("rail freight") != std::string::npos,
+            "route beat smoke expected industrial handoff cue to point at rail freight");
+}
+
 bool RunSurfaceArrivalWorldEventSmoke() {
     bunker::World world;
 
@@ -340,7 +412,9 @@ bool RunSurfaceArrivalWorldEventSmoke() {
         Check(gameState.lastEvent.find("SURFACE ARRIVAL") != std::string::npos,
             "surface arrival smoke expected exterior event copy") &&
         Check(gameState.lastEvent.find("first exterior foothold") != std::string::npos,
-            "surface arrival smoke expected foothold payoff text");
+            "surface arrival smoke expected foothold payoff text") &&
+        Check(gameState.lastEvent.find("Route beat: Exterior Exposure") != std::string::npos,
+            "surface arrival smoke expected exterior-exposure beat copy");
 }
 
 bool RunFirstCombatWorldEventSmoke() {
@@ -420,7 +494,9 @@ bool RunWorkshopServiceRouteHandoffSmoke() {
         Check(gameState.lastEvent.find("First service halt logged") != std::string::npos,
             "workshop handoff smoke expected first service log copy") &&
         Check(gameState.lastEvent.find("recovery node") != std::string::npos,
-            "workshop handoff smoke expected relay handoff cue");
+            "workshop handoff smoke expected relay handoff cue") &&
+        Check(gameState.lastEvent.find("Route beat: Recovery Sync") != std::string::npos,
+            "workshop handoff smoke expected recovery-sync beat cue");
 }
 
 bool RunDebriefIndustrialHandoffSmoke() {
@@ -461,7 +537,9 @@ bool RunDebriefIndustrialHandoffSmoke() {
         Check(gameState.lastEvent.find("Next:") != std::string::npos,
             "debrief handoff smoke expected explicit next-objective cue") &&
         Check(gameState.lastEvent.find("rail depot") != std::string::npos,
-            "debrief handoff smoke expected industrial rail-depot handoff");
+            "debrief handoff smoke expected industrial rail-depot handoff") &&
+        Check(gameState.lastEvent.find("Route beat: Industrial Handoff") != std::string::npos,
+            "debrief handoff smoke expected industrial-handoff beat cue");
 }
 
 bool RunRecoveryHandoffSummarySmoke() {
@@ -3203,6 +3281,7 @@ int main() {
     const bool ok = RunWorldRoundtrip() &&
         RunProfileRoundtrip() &&
         RunFirstPlayableRouteStorySmoke() &&
+        RunRouteBeatPresentationSmoke() &&
         RunSurfaceArrivalWorldEventSmoke() &&
         RunFirstCombatWorldEventSmoke() &&
         RunWorkshopServiceRouteHandoffSmoke() &&

@@ -597,6 +597,7 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
     const auto* worldState = bunker::FindWorldFieldState(
         sessionProfile,
         selectedWorldReference.empty() ? sessionProfile.selectedWorld : selectedWorldReference);
+    const auto routeBeat = bunker::CurrentFirstPlayableRouteBeat(sessionProfile, selectedWorldReference);
     const auto verticalSliceRoute = bunker::BuildFirstPlayableRouteSlice(sessionProfile);
     const int completedSliceSteps = static_cast<int>(std::count_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
         [](const bunker::StoryRouteEntry& entry) { return entry.completed; }));
@@ -609,6 +610,7 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
     ImGui::BulletText("Level %d | XP %d", sessionProfile.character.level, sessionProfile.character.experience);
     ImGui::BulletText("Relay Credits: %d", sessionProfile.lanlineServices.relayCredits);
     ImGui::BulletText("Route checkpoint: %s", bunker::CurrentStoryCheckpointLabel(sessionProfile).c_str());
+    ImGui::BulletText("Route beat: %s", routeBeat.label.c_str());
     ImGui::BulletText("Vertical slice progress: %d / %d", completedSliceSteps, static_cast<int>(verticalSliceRoute.size()));
     ImGui::BulletText("Surface arrival: %s",
         sessionProfile.firstPlayableRoute.surfaceArrivalReached
@@ -626,6 +628,8 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
         bunker::CurrentRecoveryHandoffSummary(sessionProfile, selectedWorldReference).c_str());
     ImGui::TextWrapped("Route event layer: %s",
         bunker::ActiveRouteEventSummary(sessionProfile, selectedWorldReference).c_str());
+    ImGui::TextWrapped("Beat cue: %s", routeBeat.cue.c_str());
+    ImGui::TextWrapped("Readable payoff: %s", routeBeat.payoff.c_str());
     if (worldState != nullptr) {
         ImGui::BulletText("Route events resolved/failed: %d / %d",
             worldState->routeEventsResolved,

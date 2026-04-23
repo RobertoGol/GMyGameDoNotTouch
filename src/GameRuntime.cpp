@@ -68,6 +68,16 @@ void AppendObjectiveRuntimeHint(std::string& message, const SessionProfile& prof
     AppendObjectiveHint(message, CurrentStoryObjective(profile, staticEraser));
 }
 
+void AppendRouteBeatReadabilityHint(std::string& message, const SessionProfile& profile) {
+    const auto beat = CurrentFirstPlayableRouteBeat(profile);
+    if (!beat.label.empty() && message.find("Route beat: " + beat.label) == std::string::npos) {
+        message += " Route beat: " + beat.label + ".";
+    }
+    if (!beat.payoff.empty() && message.find(beat.payoff) == std::string::npos) {
+        message += " Readable payoff: " + beat.payoff;
+    }
+}
+
 enum class HostileRole {
     VerminRush,
     GhoulRush,
@@ -1197,6 +1207,7 @@ bool TryRunFieldWorkbench(PlayerState& player,
         profile.firstPlayableRoute.firstServicePerformed = true;
         gameState.lastEvent += " First service halt logged for the route.";
         AppendObjectivePreviewHint(gameState.lastEvent, profile);
+        AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
     }
     if (!recipeEvent.empty()) {
         gameState.lastEvent += " " + recipeEvent;
@@ -2330,6 +2341,7 @@ void UpdateRadio(GameState& gameState, const World& world, const SessionProfile&
         gameState.lastEvent = gameState.radioMessages[gameState.radioPhase++];
     } else {
         gameState.lastEvent = "COMMS: '" + CurrentStoryObjective(profile, staticEraser) + "'";
+        AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
     }
 
     gameState.radioTimer = 40.0f;
@@ -3879,6 +3891,7 @@ void HandleAttack(World& world,
             }
             if (!routeEvent.empty()) {
                 gameState.lastEvent += " " + routeEvent;
+                AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
             }
         } else {
             gameState.lastEvent = gunnerSeat
@@ -4271,6 +4284,7 @@ void HandleInteraction(const MapObject* nearest,
         } else {
             profile.story.exitedBunker = true;
             gameState.lastEvent = "Outer bulkhead cycled and the lift route unlocks to the surface approach. BT-72 can now enter the first blocked recovery corridor.";
+            AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
         }
         return;
     }
@@ -4311,6 +4325,7 @@ void HandleInteraction(const MapObject* nearest,
                 std::string progressionEvent;
                 AwardExperience(profile, 50, &progressionEvent);
                 gameState.lastEvent = "Outer debris barrier cleared. BT-72 punched open the route to the first recovery node. " + progressionEvent;
+                AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
             } else {
                 gameState.lastEvent = "Debris impact registered. Keep pushing the barrier.";
             }
@@ -4349,6 +4364,7 @@ void HandleInteraction(const MapObject* nearest,
                 gameState.lastEvent += " " + skillEvent;
             }
             AppendObjectiveRuntimeHint(gameState.lastEvent, profile, staticEraser);
+            AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
         } else {
             gameState.lastEvent = "Relay packet already copied to the Pip-Pad.";
         }
@@ -4360,9 +4376,9 @@ void HandleInteraction(const MapObject* nearest,
             gameState.lastEvent = "Debrief incomplete. Recover the relay packet first.";
             return;
         }
-        if (!profile.story.returnedToBase) {
-            profile.firstPlayableRoute.debriefSummaryViewed = true;
-            profile.story.returnedToBase = true;
+            if (!profile.story.returnedToBase) {
+                profile.firstPlayableRoute.debriefSummaryViewed = true;
+                profile.story.returnedToBase = true;
             std::string skillEvent;
             RegisterArchiveSync(profile, &skillEvent);
             if (std::none_of(profile.character.collectedTapes.begin(),
@@ -4373,15 +4389,16 @@ void HandleInteraction(const MapObject* nearest,
             std::string progressionEvent;
             AwardExperience(profile, HasEquippedPassiveSkill(profile, "skill_data_miner") ? 75 : 60, &progressionEvent);
             gameState.lastEvent = "Debrief uploaded. The first route is closed, city approach hooks are tagged, and industrial recovery planning is now live for Shelter 17. " + progressionEvent;
-            if (!skillEvent.empty()) {
-                gameState.lastEvent += " " + skillEvent;
+                if (!skillEvent.empty()) {
+                    gameState.lastEvent += " " + skillEvent;
+                }
+                AppendObjectiveRuntimeHint(gameState.lastEvent, profile, staticEraser);
+                AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
+            } else {
+                gameState.lastEvent = "Debrief log already archived. Shelter 17 recovery planning remains on file.";
             }
-            AppendObjectiveRuntimeHint(gameState.lastEvent, profile, staticEraser);
-        } else {
-            gameState.lastEvent = "Debrief log already archived. Shelter 17 recovery planning remains on file.";
+            return;
         }
-        return;
-    }
 
     if (nearest->registryId == "[%camp_0001]") {
         const bool firstSurfaceArrival = profile.story.exitedBunker && !profile.firstPlayableRoute.surfaceArrivalReached;
@@ -4412,6 +4429,7 @@ void HandleInteraction(const MapObject* nearest,
         if (erosionCleared > 0) {
             gameState.lastEvent += " Ether bloom reduced by " + std::to_string(erosionCleared) + "%.";
         }
+        AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
         return;
     }
 
@@ -4498,6 +4516,7 @@ void HandleInteraction(const MapObject* nearest,
                     profile.firstPlayableRoute.firstServicePerformed = true;
                     gameState.lastEvent += " First service halt logged for the route.";
                     AppendObjectivePreviewHint(gameState.lastEvent, profile);
+                    AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
                 }
             }
             break;
@@ -4992,9 +5011,11 @@ void DrawPipPad(const World& world,
         auto* worldFieldState = FindWorldFieldState(profile, profile.selectedWorld, true);
         const bool stableRecoveryBackbone = worldFieldState != nullptr &&
             IsStableRecoveryBackbone(profile, *worldFieldState);
+        const auto routeBeat = CurrentFirstPlayableRouteBeat(profile);
         ImGui::Text("Mission Log");
         ImGui::BulletText("Checkpoint: %s", CurrentStoryCheckpointLabel(profile).c_str());
         ImGui::BulletText("%s", CurrentStoryObjective(profile, staticEraser).c_str());
+        ImGui::BulletText("Route Beat: %s", routeBeat.label.c_str());
         const auto verticalSliceRoute = BuildFirstPlayableRouteSlice(profile);
         const int completedSliceSteps = static_cast<int>(std::count_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
             [](const StoryRouteEntry& entry) { return entry.completed; }));
@@ -5007,6 +5028,8 @@ void DrawPipPad(const World& world,
                 : (profile.story.exitedBunker ? "approach unlocked" : "locked"));
         ImGui::TextWrapped("Recovery Handoff: %s", CurrentRecoveryHandoffSummary(profile).c_str());
         ImGui::TextWrapped("Route Event Layer: %s", ActiveRouteEventSummary(profile).c_str());
+        ImGui::TextWrapped("Beat Cue: %s", routeBeat.cue.c_str());
+        ImGui::TextWrapped("Readable Payoff: %s", routeBeat.payoff.c_str());
         if (worldFieldState != nullptr) {
             ImGui::BulletText("Route events resolved/failed: %d / %d",
                 worldFieldState->routeEventsResolved,

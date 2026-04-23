@@ -13,5 +13,6 @@
 - lightweight route-event layer теперь живет в world/profile persistence: weighted incidents, cooldown, resolve/fail state, rewards и smoke-check coverage без ломания authored route;
 - ранний `BT-72 / RPG` weight pass закрыт: `SPECIAL`, passive skills, crew-support и doctrine/service choices теперь реально меняют first combat, gunner burst и first service;
 - launcher selected-world summary hardening закрыт: story objective, recovery handoff, route-event layer и Lanline Services preview больше не расходятся с выбранным в UI миром; world-scoped preview путь покрыт smoke-checks;
+- `hangar -> bunker exit -> surface arrival` presentation/readability pass закрыт: route-beat layer теперь дает единые beat/cue/payoff в runtime, Pip-Pad, launcher и ключевых route events без authored layout work;
 - Debug build для `BunkerGame`, `BunkerLauncher`, `BunkerEditor` и `BunkerSmokeChecks` снова проходит под MSVC;
-- активный следующий фронт: `hangar -> bunker exit -> surface arrival` readability/presentation polish без authored layout work, затем точечный `BT-72 / combat / RPG` follow-up для первого маршрута.
+- активный следующий фронт: точечный `BT-72 / combat / RPG` follow-up для первого маршрута, затем усиление `recovery / industry / logistics` readability после debrief.

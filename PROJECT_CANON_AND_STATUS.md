@@ -265,6 +265,7 @@ Legacy reactive tech stack не является отдельной игрой �
 - lightweight route-event layer поверх route/recovery state с persistence, cooldown и smoke coverage;
 - early `BT-72 / RPG` weight pass: `SPECIAL`, passive skills, crew coordination и service doctrine теперь реально влияют на first combat / gunner loop / first service;
 - launcher selected-world preview, recovery handoff, route-event summary и services unlock теперь читают один и тот же world-scoped state без рассинхрона между UI-выбором мира и summary;
+- first-route presentation pass для `hangar -> bunker exit -> surface arrival` теперь собран в единый route-beat слой: beat/cue/payoff читаются одинаково в runtime, Pip-Pad, launcher и key event copy, плюс покрыты smoke-checks;
 - shared world semantic/descriptor/validation contracts.
 
 ### Первый маршрут уже поддержан системно
