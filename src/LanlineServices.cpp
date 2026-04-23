@@ -9,6 +9,7 @@
 #include "imgui.h"
 
 #include "../include/AppPaths.hpp"
+#include "../include/StoryRoute.hpp"
 
 namespace bunker {
 
@@ -363,6 +364,12 @@ void DrawLanlineServicesLockedScreen(const ServicesUnlockState& unlockState) {
         }
     }
     ImGui::BulletText("Unlock tier: %s", ToLabel(unlockState.tier));
+    if (!unlockState.backboneStage.empty()) {
+        ImGui::BulletText("Industrial backbone: %s", unlockState.backboneStage.c_str());
+    }
+    if (!unlockState.backbonePayoff.empty()) {
+        ImGui::TextWrapped("Backbone payoff: %s", unlockState.backbonePayoff.c_str());
+    }
 }
 
 void DrawFriendsTab(LanlineServicesState& state, char* searchBuffer, std::size_t searchBufferSize) {
@@ -688,6 +695,10 @@ ServicesUnlockState BuildServicesUnlockState(const SessionProfile& profile, cons
     const WorldFieldState* resolvedWorldState = worldState != nullptr
         ? worldState
         : FindWorldFieldState(profile, profile.selectedWorld);
+    SessionProfile scopedProfile = profile;
+    if (resolvedWorldState != nullptr && !resolvedWorldState->worldName.empty()) {
+        scopedProfile.selectedWorld = NormalizeWorldReference(resolvedWorldState->worldName);
+    }
     ServicesUnlockState state{};
     state.towerSyncRecovered = resolvedWorldState != nullptr && resolvedWorldState->towerSyncRecovered;
     state.firstTowerActivated = state.towerSyncRecovered;
@@ -700,17 +711,30 @@ ServicesUnlockState BuildServicesUnlockState(const SessionProfile& profile, cons
     state.waterReclaimerActive = resolvedWorldState != nullptr &&
         IsWaterReclaimerOperational(*resolvedWorldState);
     state.backboneStable = resolvedWorldState != nullptr &&
-        IsStableRecoveryBackbone(profile, *resolvedWorldState);
+        IsStableRecoveryBackbone(scopedProfile, *resolvedWorldState);
     state.feyRingIntercityUnlocked = state.backboneStable &&
         resolvedWorldState != nullptr &&
         resolvedWorldState->feyRingIntercityUnlocked;
     state.feyRingInterserverUnlocked = state.backboneStable &&
         resolvedWorldState != nullptr &&
         resolvedWorldState->feyRingInterserverUnlocked &&
-        IsOrbitalUplinkOperational(profile, *resolvedWorldState) &&
-        IsTradeNetworkOperational(profile, *resolvedWorldState);
+        IsOrbitalUplinkOperational(scopedProfile, *resolvedWorldState) &&
+        IsTradeNetworkOperational(scopedProfile, *resolvedWorldState);
     state.intercityPortalsUnlocked = state.feyRingIntercityUnlocked;
     state.interserverPortalsUnlocked = state.feyRingInterserverUnlocked;
+    const auto backboneStatus = CurrentRecoveryBackboneStatus(scopedProfile);
+    state.backboneStage = backboneStatus.stage;
+    state.backboneStatus = backboneStatus.status;
+    state.backbonePayoff = backboneStatus.payoff;
+    state.routeEventSummary = ActiveRouteEventSummary(scopedProfile);
+    if (resolvedWorldState != nullptr) {
+        state.merchantWindowActive =
+            resolvedWorldState->activeRouteEventType == "merchant_window" &&
+            HasActiveRouteEvent(*resolvedWorldState);
+        state.routeEventsResolved = resolvedWorldState->routeEventsResolved;
+        state.routeEventsFailed = resolvedWorldState->routeEventsFailed;
+        state.routeEventsExpired = resolvedWorldState->routeEventsExpired;
+    }
 
     if (!state.towerSyncRecovered) {
         state.tier = ServicesUnlockTier::Locked;
@@ -1113,6 +1137,25 @@ void DrawLanlineServicesPanel(LanlineServicesState& state,
     ImGui::BulletText("Backbone stable: %s", unlockState.backboneStable ? "yes" : "no");
     ImGui::BulletText("Fey inter-city: %s", unlockState.feyRingIntercityUnlocked ? "unlocked" : "locked");
     ImGui::BulletText("Fey inter-server: %s", unlockState.feyRingInterserverUnlocked ? "unlocked" : "locked");
+    if (!unlockState.backboneStage.empty()) {
+        ImGui::BulletText("Industrial backbone: %s", unlockState.backboneStage.c_str());
+    }
+    if (!unlockState.backboneStatus.empty()) {
+        ImGui::TextWrapped("Backbone status: %s", unlockState.backboneStatus.c_str());
+    }
+    if (!unlockState.backbonePayoff.empty()) {
+        ImGui::TextWrapped("Backbone payoff: %s", unlockState.backbonePayoff.c_str());
+    }
+    if (!unlockState.routeEventSummary.empty()) {
+        ImGui::TextWrapped("Route event layer: %s", unlockState.routeEventSummary.c_str());
+    }
+    ImGui::BulletText("Route events resolved/failed/expired: %d / %d / %d",
+        unlockState.routeEventsResolved,
+        unlockState.routeEventsFailed,
+        unlockState.routeEventsExpired);
+    if (unlockState.merchantWindowActive) {
+        ImGui::TextWrapped("Merchant window: one discreet broker exchange is currently open on the active recovery route.");
+    }
     ImGui::Separator();
 
     if (ImGui::BeginTabBar("LanlineServicesTabs")) {

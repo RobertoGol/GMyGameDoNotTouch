@@ -37,6 +37,14 @@ struct ServicesUnlockState {
     bool feyRingInterserverUnlocked = false;
     bool intercityPortalsUnlocked = false;
     bool interserverPortalsUnlocked = false;
+    bool merchantWindowActive = false;
+    int routeEventsResolved = 0;
+    int routeEventsFailed = 0;
+    int routeEventsExpired = 0;
+    std::string backboneStage{};
+    std::string backboneStatus{};
+    std::string backbonePayoff{};
+    std::string routeEventSummary{};
 };
 
 inline bool IsLanlineServicesUnlocked(const ServicesUnlockState& state) {

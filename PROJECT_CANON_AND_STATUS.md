@@ -258,6 +258,7 @@ Legacy reactive tech stack не является отдельной игрой �
 - import assistant;
 - world-format tightening и export discipline;
 - `Lanline Services` save/load и profile/runtime/launcher sync;
+- `Lanline Services` support shell теперь тоже читает shared route truth: `ServicesUnlockState` зеркалит backbone stage/status/payoff, route-event summary и merchant-window presence из того же world-scoped состояния, что runtime и launcher;
 - launcher announcement widget с локальным persisted read-state;
 - `tank_service` как реальный `BT-72` payoff;
 - relay-credit progression helpers;

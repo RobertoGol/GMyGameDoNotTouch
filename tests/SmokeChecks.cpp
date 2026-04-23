@@ -1459,7 +1459,23 @@ bool RunLanlineServicesRoundtripSmoke() {
     profile.selectedWorld = "lanline_smoke_world.bwld";
     profile.fieldCheckpointKnown = true;
     profile.fieldCheckpointWorld = profile.selectedWorld;
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
     profile.story.outerRoadCleared = true;
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+    profile.firstPlayableRoute.firstServicePerformed = true;
+    profile.story.relayRecovered = true;
+    profile.firstPlayableRoute.firstRecoveryNodeActivated = true;
+    profile.story.returnedToBase = true;
+    profile.firstPlayableRoute.debriefSummaryViewed = true;
     profile.character.collectedTapes.push_back({"tower_pylon_alpha", "Pylon Alpha", true, false, true});
     profile.character.collectedTapes.push_back({"tower_pylon_beta", "Pylon Beta", true, false, true});
     bunker::WorldFieldState* worldState = bunker::FindWorldFieldState(profile, profile.selectedWorld, true);
@@ -1517,6 +1533,25 @@ bool RunLanlineServicesRoundtripSmoke() {
     if (!Check(bunker::IsMedicalSupportUnlocked(unlockState), "lanline services smoke expected medical support unlock")) {
         return false;
     }
+    if (!Check(unlockState.backboneStage == "Backbone Stable",
+            "lanline services smoke expected mirrored stable backbone stage")) {
+        return false;
+    }
+    if (!Check(unlockState.backboneStatus.find("14/14") != std::string::npos,
+            "lanline services smoke expected mirrored full backbone status")) {
+        return false;
+    }
+    if (!Check(unlockState.backbonePayoff.find("stable recovery backbone") != std::string::npos,
+            "lanline services smoke expected mirrored backbone payoff")) {
+        return false;
+    }
+    if (!Check(unlockState.routeEventSummary.find("rare field prompt") != std::string::npos,
+            "lanline services smoke expected mirrored idle route-event summary")) {
+        return false;
+    }
+    if (!Check(!unlockState.merchantWindowActive, "lanline services smoke expected merchant window to start inactive")) {
+        return false;
+    }
 
     bunker::LanlineServicesState state = bunker::MakeDefaultLanlineServicesState(1000);
     state.relayCredits = 777;
@@ -1564,6 +1599,18 @@ bool RunLanlineServicesRoundtripSmoke() {
     bunker::AdvanceLanlineSupportOrders(loadedState, 1500);
     if (!Check(bunker::CountSupportOrdersInState(loadedState, bunker::SupportOrderState::Delivered) == 1,
             "lanline services smoke expected one delivered support order after time advance")) {
+        return false;
+    }
+
+    worldState->activeRouteEventType = "merchant_window";
+    worldState->routeEventTimeRemaining = 20.0f;
+    worldState->routeEventOfferTimeRemaining = 6.0f;
+    const auto merchantUnlockState = bunker::BuildServicesUnlockState(profile, worldState);
+    if (!Check(merchantUnlockState.merchantWindowActive, "lanline services smoke expected merchant window mirror when active")) {
+        return false;
+    }
+    if (!Check(merchantUnlockState.routeEventSummary.find("Merchant window offered") != std::string::npos,
+            "lanline services smoke expected merchant route-event summary mirror")) {
         return false;
     }
 

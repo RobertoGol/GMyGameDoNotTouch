@@ -17,5 +17,6 @@
 - `BT-72 / combat` modular-damage pass закрыт для первого маршрута: robot contacts теперь теряют sensors / weapon / mobility от тяжелых BT-72 ударов, threat/readability cues живут в prompt/HUD/Pip-Pad и smoke-checks это проверяют;
 - random-event hardening закрыт для базового слоя: route-event lifecycle теперь читает offered/active/success/failed/expired/cooldown состояния, остается locked до завершения onboarding и debrief handoff, а редкий `merchant_window` живет как один merchant incident через Pip-Pad/service glue без постоянного рынка на карте;
 - post-debrief `recovery / industry / logistics` readability pass закрыт: shared backbone stage/status/payoff теперь читается одинаково в runtime, Pip-Pad и launcher, а debrief и route-event copy подтягивают ту же industrial-backbone стадию;
+- `Lanline Services` consistency hardening закрыт: support shell теперь зеркалит industrial-backbone stage/status/payoff, route-event summary и merchant-window presence из того же world-scoped unlock snapshot;
 - Debug build для `BunkerGame`, `BunkerLauncher`, `BunkerEditor` и `BunkerSmokeChecks` снова проходит под MSVC;
 - активный следующий фронт: только точечный `BT-72 / combat / RPG` follow-up, если всплывет реальный vertical-slice blocker; остальное — только smoke/build-driven hardening без открытия новой ветки.
