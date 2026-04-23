@@ -110,6 +110,7 @@ bool RunProfileRoundtrip() {
     savedProfile.story.archiveRecovered = true;
     savedProfile.firstPlayableRoute.introSeen = true;
     savedProfile.firstPlayableRoute.emergencyMeleeRecovered = true;
+    savedProfile.firstPlayableRoute.accessCardRecovered = true;
     savedProfile.firstPlayableRoute.earlyVerminEncounterResolved = true;
     savedProfile.firstPlayableRoute.prePipPadClueCount = 2;
     savedProfile.firstPlayableRoute.bt72HullInspected = true;
@@ -118,6 +119,11 @@ bool RunProfileRoundtrip() {
     savedProfile.firstPlayableRoute.bt72Restored = true;
     savedProfile.firstPlayableRoute.clearanceBlueprintRecovered = true;
     savedProfile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    savedProfile.partnerTank.secondSeatUnlocked = true;
+    savedProfile.partnerTank.secondSeatPolicy = "trusted_only";
+    savedProfile.partnerTank.trustedGunnerHandle = "Lan Buddy";
+    savedProfile.partnerTank.assignedGunnerHandle = "Lan Buddy";
+    savedProfile.partnerTank.gunnerDrillSeen = true;
 
     const auto saveStatus = bunker::SaveProfileAtomically(savedProfile, bunker::DefaultSessionProfilePath());
     if (!Check(saveStatus.ok, "profile save failed: " + saveStatus.message)) {
@@ -137,9 +143,13 @@ bool RunProfileRoundtrip() {
             "profile launcher last-seen build mismatch") &&
         Check(loadedProfile.launcherAnnouncements.lastSeenAnnouncementId == savedProfile.launcherAnnouncements.lastSeenAnnouncementId,
             "profile launcher last-seen announcement mismatch") &&
+        Check(loadedProfile.firstPlayableRoute.accessCardRecovered, "profile first route access card mismatch") &&
         Check(loadedProfile.firstPlayableRoute.prePipPadClueCount == 2, "profile first route clue count mismatch") &&
         Check(loadedProfile.firstPlayableRoute.bt72Restored, "profile first route restore flag mismatch") &&
-        Check(loadedProfile.firstPlayableRoute.clearanceMaterialsRecovered, "profile first route clearance material flag mismatch");
+        Check(loadedProfile.firstPlayableRoute.clearanceMaterialsRecovered, "profile first route clearance material flag mismatch") &&
+        Check(loadedProfile.partnerTank.secondSeatUnlocked, "profile second seat unlock mismatch") &&
+        Check(loadedProfile.partnerTank.secondSeatPolicy == "trusted_only", "profile second seat policy mismatch") &&
+        Check(loadedProfile.partnerTank.trustedGunnerHandle == "Lan Buddy", "profile trusted gunner mismatch");
 }
 
 bool RunFirstPlayableRouteStorySmoke() {
@@ -154,6 +164,7 @@ bool RunFirstPlayableRouteStorySmoke() {
     }
 
     profile.story.awakenedFromCryo = true;
+    profile.firstPlayableRoute.accessCardRecovered = true;
     profile.firstPlayableRoute.prePipPadClueCount = 2;
     if (!Check(bunker::CurrentStoryCheckpointLabel(profile) == "Pip-Pad Recovery",
             "first route smoke expected Pip-Pad checkpoint label")) {
@@ -501,6 +512,39 @@ bool RunTankServiceKitSmoke() {
             "tank service smoke expected explicit no-damage guidance");
 }
 
+bool RunLanlineSeatRoundtripSmoke() {
+    bunker::LanlineSessionState savedState;
+    savedState.sessionId = "lanline_smoke";
+    savedState.mode = "LAN Host";
+    savedState.lifecycleStage = "HostRuntimeActive";
+    savedState.worldName = "smoke_zone.bwld";
+    savedState.hostEndpoint = "127.0.0.1:4400";
+    savedState.activeActor = "Smoke Host";
+    savedState.bt72SecondSeatUnlocked = true;
+    savedState.bt72SecondSeatPolicy = "trusted_only";
+    savedState.bt72TrustedGunnerHandle = "Smoke Client";
+    savedState.bt72AssignedGunnerHandle = "Smoke Client";
+    savedState.players.push_back({"Smoke Host", "Host", true, true, "pilot"});
+    savedState.players.push_back({"Smoke Client", "Client", true, true, "gunner"});
+
+    if (!Check(bunker::SaveLanlineSessionState(savedState), "lanline seat smoke failed to save session state")) {
+        return false;
+    }
+
+    bunker::LanlineSessionState loadedState;
+    if (!Check(bunker::LoadLanlineSessionState(loadedState), "lanline seat smoke failed to load session state")) {
+        return false;
+    }
+
+    return Check(loadedState.bt72SecondSeatUnlocked, "lanline seat smoke expected second seat unlock") &&
+        Check(loadedState.bt72SecondSeatPolicy == "trusted_only", "lanline seat smoke expected second seat policy") &&
+        Check(loadedState.bt72TrustedGunnerHandle == "Smoke Client", "lanline seat smoke expected trusted gunner handle") &&
+        Check(loadedState.bt72AssignedGunnerHandle == "Smoke Client", "lanline seat smoke expected assigned gunner handle") &&
+        Check(loadedState.players.size() == 2, "lanline seat smoke expected two roster entries") &&
+        Check(loadedState.players[0].seatAssignment == "pilot", "lanline seat smoke expected pilot seat assignment") &&
+        Check(loadedState.players[1].seatAssignment == "gunner", "lanline seat smoke expected gunner seat assignment");
+}
+
 bool RunLaunchTicketFlow() {
     bunker::LaunchTicketInfo issuedTicket;
     issuedTicket.accountId = "#10077";
@@ -509,6 +553,9 @@ bool RunLaunchTicketFlow() {
     issuedTicket.selectedWorld = "smoke_zone.bwld";
     issuedTicket.lanlineSessionId = "relay-test-01";
     issuedTicket.hostEndpoint = "127.0.0.1:4100";
+    issuedTicket.bt72SeatRole = "gunner";
+    issuedTicket.bt72SecondSeatPolicy = "trusted_only";
+    issuedTicket.bt72TrustedGunnerHandle = "Smoke Scout";
 
     if (!Check(bunker::IssueLaunchTicket(issuedTicket), "launch ticket issue failed")) {
         return false;
@@ -523,6 +570,9 @@ bool RunLaunchTicketFlow() {
     return Check(consumedTicket.accountId == issuedTicket.accountId, "launch ticket account mismatch") &&
         Check(consumedTicket.sessionMode == issuedTicket.sessionMode, "launch ticket mode mismatch") &&
         Check(consumedTicket.selectedWorld == issuedTicket.selectedWorld, "launch ticket world mismatch") &&
+        Check(consumedTicket.bt72SeatRole == "gunner", "launch ticket seat role mismatch") &&
+        Check(consumedTicket.bt72SecondSeatPolicy == "trusted_only", "launch ticket seat policy mismatch") &&
+        Check(consumedTicket.bt72TrustedGunnerHandle == "Smoke Scout", "launch ticket trusted gunner mismatch") &&
         Check(!fs::exists(bunker::LaunchTicketPath()), "launch ticket file was not removed after consume");
 }
 
@@ -2364,6 +2414,7 @@ int main() {
         RunLauncherAnnouncementSmoke() &&
         RunLanlineServicesRoundtripSmoke() &&
         RunTankServiceKitSmoke() &&
+        RunLanlineSeatRoundtripSmoke() &&
         RunLaunchTicketFlow() &&
         RunGameplayDescriptorValidationSmoke() &&
         RunSemanticDependencyValidationSmoke() &&

@@ -5,6 +5,7 @@
 - реализовать objective helper-ы по текущему `selectedWorld`
 - выделить checkpoint/objective preview для launcher
 - держать checklist `BT-72 restore -> clearance -> first service -> recovery node -> debrief`
+- starter objective теперь учитывает ранний `access card` шаг до `Pip-Pad recovery`
 - брать данные из `profile.worldFieldStates`
 - использовать флаги:
   - `towerSyncRecovered`

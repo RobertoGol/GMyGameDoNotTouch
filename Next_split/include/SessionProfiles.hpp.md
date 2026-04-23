@@ -20,9 +20,12 @@
   - `lanlineServices`
   - launcher announcement read-state
   - `fieldCheckpointKnown`, `fieldCheckpointX`, `fieldCheckpointY`
-  - `FirstPlayableRouteProgress` для persisted первого маршрута: intro/clues/early vermin/BT-72 restore/clearance/service/recovery/debrief
+  - `FirstPlayableRouteProgress` для persisted первого маршрута: intro/clues/early vermin/access-card/Pip-Pad/BT-72 restore/clearance/service/recovery/debrief
+  - `PartnerTankProfile` для `BT-72` second-seat policy, trusted/assigned gunner и gunner-drill state
 - helper-нормализация:
   - `NormalizeLanlineServicesProfile`
   - `NormalizeWorldFieldState`
+  - `NormalizeFirstPlayableRouteProgress`
+  - `NormalizeBt72SecondSeatPolicy`
 
 Смысл этого блока: держать сервисный прогресс, launcher read-state и world-state не в UI, а в профиле сессии.

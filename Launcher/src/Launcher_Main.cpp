@@ -745,6 +745,7 @@ using launcher_support::PrepareSelectedCharacter;
 using launcher_support::RefreshLauncherData;
 using launcher_support::ReserveLanlinePeerSlot;
 using launcher_support::SaveLanlineRosterState;
+using launcher_support::SaveLanlineSnapshotAndMaybeActive;
 using launcher_support::SelectedWorldPath;
 using launcher_support::SelectedJoinTarget;
 using launcher_support::SetLanlineMatchStartArmed;
@@ -938,11 +939,23 @@ int main() {
                 ? bunker::NormalizeWorldReference(joinTarget->worldName)
                 : bunker::NormalizeWorldReference(selectedWorld.string());
             bunker::SaveProfileAtomically(sessionProfile, profilePath);
-            const auto launchSession = SaveLanlineRosterState(
+            auto launchSession = SaveLanlineRosterState(
                 launcherState,
                 characters[launcherState.selectedCharacter],
                 selectedWorld,
                 joinTarget);
+            if (joinTarget != nullptr) {
+                launchSession.bt72SecondSeatUnlocked = joinTarget->bt72SecondSeatUnlocked;
+                launchSession.bt72SecondSeatPolicy = joinTarget->bt72SecondSeatPolicy;
+                launchSession.bt72TrustedGunnerHandle = joinTarget->bt72TrustedGunnerHandle;
+                launchSession.bt72AssignedGunnerHandle = joinTarget->bt72AssignedGunnerHandle;
+            } else {
+                launchSession.bt72SecondSeatUnlocked = bunker::Bt72SecondSeatUnlocked(sessionProfile);
+                launchSession.bt72SecondSeatPolicy = bunker::NormalizeBt72SecondSeatPolicy(sessionProfile.partnerTank.secondSeatPolicy);
+                launchSession.bt72TrustedGunnerHandle = sessionProfile.partnerTank.trustedGunnerHandle;
+                launchSession.bt72AssignedGunnerHandle = sessionProfile.partnerTank.assignedGunnerHandle;
+            }
+            SaveLanlineSnapshotAndMaybeActive(launchSession);
             bunker::LaunchTicketInfo launchTicket;
             launchTicket.accountId = sessionProfile.account.accountId;
             launchTicket.sessionMode = sessionProfile.sessionMode;
@@ -950,6 +963,11 @@ int main() {
             launchTicket.selectedWorld = sessionProfile.selectedWorld;
             launchTicket.lanlineSessionId = launchSession.sessionId;
             launchTicket.hostEndpoint = launchSession.hostEndpoint;
+            launchTicket.bt72SeatRole = launcherState.sessionModeIndex == static_cast<int>(bunker::SessionMode::LanClient)
+                ? "gunner"
+                : "pilot";
+            launchTicket.bt72SecondSeatPolicy = launchSession.bt72SecondSeatPolicy;
+            launchTicket.bt72TrustedGunnerHandle = launchSession.bt72TrustedGunnerHandle;
             if (!bunker::IssueLaunchTicket(launchTicket)) {
                 launcherState.statusText = "Failed to create launcher ticket.";
             } else {
@@ -1028,6 +1046,14 @@ int main() {
                 ImGui::BulletText("Active actor: %s", selectedSnapshot.activeActor.c_str());
                 ImGui::BulletText("Pending peer: %s", selectedSnapshot.pendingPeer.empty() ? "none" : selectedSnapshot.pendingPeer.c_str());
                 ImGui::BulletText("Connected peer: %s", selectedSnapshot.connectedPeer.empty() ? "none" : selectedSnapshot.connectedPeer.c_str());
+                ImGui::BulletText("BT-72 second seat: %s",
+                    selectedSnapshot.bt72SecondSeatUnlocked
+                        ? bunker::Bt72SecondSeatPolicyLabel(selectedSnapshot.bt72SecondSeatPolicy)
+                        : "sealed");
+                ImGui::BulletText("Trusted gunner: %s",
+                    selectedSnapshot.bt72TrustedGunnerHandle.empty() ? "none" : selectedSnapshot.bt72TrustedGunnerHandle.c_str());
+                ImGui::BulletText("Assigned gunner: %s",
+                    selectedSnapshot.bt72AssignedGunnerHandle.empty() ? "none" : selectedSnapshot.bt72AssignedGunnerHandle.c_str());
                 ImGui::BulletText("Host: %s", diagnostics.hostReachable ? "reachable" : "offline/unreachable");
                 ImGui::BulletText("Ping: %s",
                     diagnostics.pingMs >= 0 ? (std::to_string(diagnostics.pingMs) + " ms").c_str() : "n/a");
@@ -1043,9 +1069,10 @@ int main() {
                 for (std::size_t seatIndex = 0; seatIndex < selectedSnapshot.players.size(); ++seatIndex) {
                     const auto& playerEntry = selectedSnapshot.players[seatIndex];
                     ImGui::PushID(static_cast<int>(seatIndex));
-                    ImGui::Text("%s | %s | %s | %s",
+                    ImGui::Text("%s | %s | %s | %s | %s",
                         playerEntry.displayName.c_str(),
                         playerEntry.role.c_str(),
+                        bunker::Bt72SeatAssignmentLabel(playerEntry.seatAssignment),
                         bunker::LanlineSlotStateLabel(playerEntry),
                         bunker::LanlineReadyLabel(playerEntry));
                     if (bunker::IsLanlineReadyEligibleSlot(playerEntry)) {

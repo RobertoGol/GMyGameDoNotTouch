@@ -283,7 +283,8 @@ Editor — это не toy map tool, а production authoring tool.
 - Lanline Services profile/runtime sync;
 - launcher announcement widget;
 - BT-72 service-kit payoff;
-- first playable route как отдельный persistence/objective/runtime layer.
+- first playable route как отдельный persistence/objective/runtime layer;
+- access-card gated start route и `BT-72` second-seat / gunner permission flow.
 
 ### Что теперь главное
 Главная незакрытая работа уже не в инструментах, а в самой игре:
@@ -325,24 +326,10 @@ Editor — это не toy map tool, а production authoring tool.
 -> возврат / дебриф / следующий хук
 
 ### Что реализовывать для этого
-- cryo start state;
-- early melee / vermin support;
-- access cards before Pip-Pad;
-- Pip-Pad acquisition;
-- blueprint / holo-record discovery;
-- staged BT-72 restoration;
-- core installation;
-- sync/link;
 - hangar tutorial support;
 - bunker exit unlock logic;
 - lift/gate transition support;
 - first surface arrival hooks;
-- first heavy clearance;
-- first combat;
-- first service/rest;
-- recovery node / tower payoff;
-- debrief / next hook;
-- BT-72 second seat permission + gunner role support.
 
 ---
 

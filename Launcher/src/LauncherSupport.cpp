@@ -600,6 +600,10 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
         (sessionProfile.firstPlayableRoute.bt72HullInspected ? 1 : 0) +
             (sessionProfile.firstPlayableRoute.bt72CoreRecovered ? 1 : 0) +
             (sessionProfile.firstPlayableRoute.bt72ServiceNotesRecovered ? 1 : 0));
+    ImGui::BulletText("BT-72 second seat: %s",
+        bunker::Bt72SecondSeatUnlocked(sessionProfile)
+            ? bunker::Bt72SecondSeatPolicyLabel(sessionProfile.partnerTank.secondSeatPolicy)
+            : "sealed");
     const std::string objective = BuildLauncherObjectivePreview(sessionProfile, worldState);
     ImGui::TextWrapped("Objective: %s", objective.c_str());
 }

@@ -549,12 +549,26 @@ void DrawPipPadInventoryTab(SessionProfile& profile, GameState& gameState) {
 }
 
 void DrawPipPadDataTab(PlayerState& player, SessionProfile& profile, GameState& gameState) {
+    LanlineSessionState sessionState;
+    const bool hasSessionState = LoadLanlineSessionState(sessionState);
+    const std::string seatAssignment = player.insideTank
+        ? (player.bt72GunnerSeat ? "gunner" : "pilot")
+        : "on_foot";
     ImGui::Text("Vehicle Telemetry");
     ImGui::Text("Partner Tank: %s", profile.partnerTank.callSign.c_str());
     ImGui::Text("Class: %s", ToString(profile.partnerTank.tankClass));
     ImGui::BulletText("Route Checkpoint: %s", CurrentStoryCheckpointLabel(profile).c_str());
     ImGui::Text("Sync Mode: %s", CurrentTankSyncMode(profile.partnerTank).c_str());
     ImGui::Text("Trust Link: %.0f%%", profile.partnerTank.trustLink * 100.0f);
+    ImGui::BulletText("Crew Seat: %s", Bt72SeatAssignmentLabel(seatAssignment));
+    ImGui::BulletText("Second Seat Access: %s",
+        Bt72SecondSeatUnlocked(profile)
+            ? Bt72SecondSeatPolicyLabel(profile.partnerTank.secondSeatPolicy)
+            : "Sealed");
+    ImGui::BulletText("Trusted Gunner: %s",
+        profile.partnerTank.trustedGunnerHandle.empty() ? "none" : profile.partnerTank.trustedGunnerHandle.c_str());
+    ImGui::BulletText("Assigned Gunner: %s",
+        profile.partnerTank.assignedGunnerHandle.empty() ? "none" : profile.partnerTank.assignedGunnerHandle.c_str());
     ImGui::Text("Utility Module: %s", CurrentUtilityModuleLabel(profile));
     if (TankUsesTowCoupler(profile)) {
         ImGui::TextDisabled("Tow Coupler: +logistics, -mobility, +thermal load");
@@ -577,6 +591,27 @@ void DrawPipPadDataTab(PlayerState& player, SessionProfile& profile, GameState& 
     ImGui::BulletText("Field Engineer: %s", HasAssignedSpecialistRole(profile, "engineer", "scavenger_support") ? "assigned" : "not assigned");
     ImGui::BulletText("Repair Recipe: %s", HasInventoryItem(profile, "recipe_repair_patch") ? "awakened" : "still dormant");
     ImGui::Separator();
+    if (profile.story.tankLinked) {
+        if (ImGui::Button("Swap Crew Seat")) {
+            TryToggleBt72CrewSeat(player, profile, gameState);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cycle Seat Access")) {
+            CycleBt72SecondSeatPolicy(profile, gameState);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Trust Lanline Peer")) {
+            TrustLanlinePeerAsBt72Gunner(profile, hasSessionState ? &sessionState : nullptr, gameState);
+        }
+        if (!Bt72SecondSeatUnlocked(profile)) {
+            ImGui::TextDisabled("Second seat unlocks once the first BT-72 sync link stabilizes.");
+        } else if (player.bt72GunnerSeat) {
+            ImGui::TextDisabled("Gunner seat active: hull movement reduced, weapon handling stabilized.");
+        } else {
+            ImGui::TextDisabled("Pilot seat active: second station can be opened for LAN gunner support.");
+        }
+        ImGui::Separator();
+    }
     ImGui::Text("Tank Integrity");
     ImGui::ProgressBar(profile.partnerTank.damage.hull / 100.0f, ImVec2(-1.0f, 16.0f), "Hull");
     ImGui::ProgressBar(profile.partnerTank.damage.bucket / 100.0f, ImVec2(-1.0f, 16.0f), "Bucket");
@@ -732,15 +767,24 @@ void DrawPipPadNetTab(const SessionProfile& profile, GameState& gameState) {
         diagnostics.pingMs >= 0 ? (std::to_string(diagnostics.pingMs) + " ms").c_str() : "n/a");
     ImGui::BulletText("Snapshot freshness: %s", diagnostics.snapshotFresh ? "fresh" : "stale");
     ImGui::BulletText("Presence: %d / %d online", diagnostics.onlinePlayers, diagnostics.totalPlayers);
+    ImGui::BulletText("BT-72 second seat: %s",
+        sessionState.bt72SecondSeatUnlocked
+            ? Bt72SecondSeatPolicyLabel(sessionState.bt72SecondSeatPolicy)
+            : "sealed");
+    ImGui::BulletText("Trusted gunner: %s",
+        sessionState.bt72TrustedGunnerHandle.empty() ? "none" : sessionState.bt72TrustedGunnerHandle.c_str());
+    ImGui::BulletText("Assigned gunner: %s",
+        sessionState.bt72AssignedGunnerHandle.empty() ? "none" : sessionState.bt72AssignedGunnerHandle.c_str());
     if (!diagnostics.lastError.empty()) {
         ImGui::TextDisabled("%s", diagnostics.lastError.c_str());
     }
     ImGui::Separator();
     ImGui::Text("Session Roster");
     for (const auto& playerEntry : sessionState.players) {
-        ImGui::BulletText("%s | %s | %s | %s | %s",
+        ImGui::BulletText("%s | %s | %s | %s | %s | %s",
             playerEntry.displayName.c_str(),
             playerEntry.role.c_str(),
+            Bt72SeatAssignmentLabel(playerEntry.seatAssignment),
             playerEntry.online ? "Online" : "Offline",
             LanlineSlotStateLabel(playerEntry),
             LanlineReadyLabel(playerEntry));
@@ -803,7 +847,7 @@ void DrawPipPadNetTab(const SessionProfile& profile, GameState& gameState) {
         for (const auto& knownSession : knownSessions) {
             const auto normalizedKnownWorld = NormalizeWorldReference(knownSession.worldName);
             const auto& knownDiagnostics = CachedLanlineDiagnostics(knownSession, profile.selectedWorld);
-            ImGui::BulletText("%s | %s | %s | %s | %s",
+            ImGui::BulletText("%s | %s | %s | %s | %s | %s",
                 knownSession.sessionId.c_str(),
                 knownSession.mode.c_str(),
                 knownSession.lifecycleStage.c_str(),

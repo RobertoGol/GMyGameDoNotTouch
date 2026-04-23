@@ -78,18 +78,20 @@ void UpsertLanlinePlayer(bunker::LanlineSessionState& state,
     const std::string& displayName,
     const std::string& role,
     bool online,
-    bool ready = false) {
+    bool ready = false,
+    std::string seatAssignment = "on_foot") {
     auto playerIt = std::find_if(state.players.begin(), state.players.end(),
         [&](const bunker::LanlinePlayerEntry& entry) {
             return entry.displayName == displayName;
         });
     if (playerIt == state.players.end()) {
-        state.players.push_back({displayName, role, online, ready});
+        state.players.push_back({displayName, role, online, ready, std::move(seatAssignment)});
         return;
     }
     playerIt->role = role;
     playerIt->online = online;
     playerIt->ready = ready;
+    playerIt->seatAssignment = std::move(seatAssignment);
 }
 
 void AcceptLanlineLobbySlot(bunker::LanlineSessionState& state, const std::string& peerName) {
@@ -98,6 +100,7 @@ void AcceptLanlineLobbySlot(bunker::LanlineSessionState& state, const std::strin
             player.role = "Client";
             player.online = true;
             player.ready = false;
+            player.seatAssignment = "on_foot";
             return;
         }
     }
@@ -108,9 +111,17 @@ void AcceptLanlineLobbySlot(bunker::LanlineSessionState& state, const std::strin
         slot.role = "Client";
         slot.online = true;
         slot.ready = false;
+        slot.seatAssignment = "on_foot";
         return;
     }
     UpsertLanlinePlayer(state, peerName, "Client", true, false);
+}
+
+std::string CurrentRuntimeSeatAssignment(const bunker::PlayerState& player) {
+    if (!player.insideTank) {
+        return "on_foot";
+    }
+    return player.bt72GunnerSeat ? "gunner" : "pilot";
 }
 
 void SyncLanlineRuntimeLaunchState(const bunker::LaunchTicketInfo& launchTicket, const bunker::SessionProfile& sessionProfile) {
@@ -139,6 +150,13 @@ void SyncLanlineRuntimeLaunchState(const bunker::LaunchTicketInfo& launchTicket,
     if (!launchTicket.hostEndpoint.empty()) {
         state.hostEndpoint = launchTicket.hostEndpoint;
     }
+    state.bt72SecondSeatUnlocked = bunker::Bt72SecondSeatUnlocked(sessionProfile) || launchTicket.bt72SeatRole == "gunner";
+    state.bt72SecondSeatPolicy = bunker::NormalizeBt72SecondSeatPolicy(
+        launchTicket.bt72SecondSeatPolicy.empty() ? sessionProfile.partnerTank.secondSeatPolicy : launchTicket.bt72SecondSeatPolicy);
+    state.bt72TrustedGunnerHandle = launchTicket.bt72TrustedGunnerHandle.empty()
+        ? sessionProfile.partnerTank.trustedGunnerHandle
+        : launchTicket.bt72TrustedGunnerHandle;
+    state.bt72AssignedGunnerHandle = sessionProfile.partnerTank.assignedGunnerHandle;
 
     const std::string actorName = sessionProfile.character.displayName.empty()
         ? (launchTicket.characterName.empty() ? "Operator" : launchTicket.characterName)
@@ -183,7 +201,13 @@ void SyncLanlineRuntimeLaunchState(const bunker::LaunchTicketInfo& launchTicket,
             break;
         }
     }
-    UpsertLanlinePlayer(state, actorName, actorRole, true, currentReady);
+    const std::string seatAssignment = sessionProfile.partnerTank.deployed
+        ? bunker::NormalizeBt72SeatAssignment(launchTicket.bt72SeatRole)
+        : std::string("on_foot");
+    if (seatAssignment == "gunner") {
+        state.bt72AssignedGunnerHandle = actorName;
+    }
+    UpsertLanlinePlayer(state, actorName, actorRole, true, currentReady, seatAssignment);
 
     state.eventLog.push_back(actorName + " entered BunkerGame runtime via launcher ticket.");
     state.eventLog.push_back("Lanline lifecycle advanced to " + state.lifecycleStage + ".");
@@ -193,6 +217,65 @@ void SyncLanlineRuntimeLaunchState(const bunker::LaunchTicketInfo& launchTicket,
     TrimLanlineEventLog(state, 12);
     bunker::SaveLanlineSessionState(state);
     bunker::SaveLanlineSessionState(state, bunker::LanlineSessionSnapshotPath(state.sessionId));
+}
+
+void SyncLanlineRuntimePresence(const bunker::PlayerState& player, const bunker::SessionProfile& sessionProfile) {
+    static std::string previousSignature;
+    static double lastSyncTime = -10.0;
+
+    const double now = glfwGetTime();
+    const std::string seatAssignment = CurrentRuntimeSeatAssignment(player);
+    const std::string actorName = sessionProfile.character.displayName.empty() ? "Operator" : sessionProfile.character.displayName;
+    const std::string actorRole = sessionProfile.sessionMode == "LAN Host"
+        ? "Host"
+        : (sessionProfile.sessionMode == "LAN Client" ? "Client" : "Local Operator");
+    const std::string signature =
+        sessionProfile.sessionMode + "|" +
+        sessionProfile.selectedWorld + "|" +
+        actorName + "|" +
+        actorRole + "|" +
+        seatAssignment + "|" +
+        sessionProfile.partnerTank.secondSeatPolicy + "|" +
+        sessionProfile.partnerTank.trustedGunnerHandle + "|" +
+        sessionProfile.partnerTank.assignedGunnerHandle;
+    if (signature == previousSignature && (now - lastSyncTime) < 1.0) {
+        return;
+    }
+
+    bunker::LanlineSessionState state;
+    if (!bunker::LoadLanlineSessionState(state)) {
+        return;
+    }
+
+    std::string previousSeatAssignment;
+    bool currentReady = false;
+    for (const auto& entry : state.players) {
+        if (entry.displayName == actorName) {
+            previousSeatAssignment = entry.seatAssignment;
+            currentReady = entry.ready;
+            break;
+        }
+    }
+
+    state.activeActor = actorName;
+    state.worldName = sessionProfile.selectedWorld;
+    state.bt72SecondSeatUnlocked = bunker::Bt72SecondSeatUnlocked(sessionProfile);
+    state.bt72SecondSeatPolicy = bunker::NormalizeBt72SecondSeatPolicy(sessionProfile.partnerTank.secondSeatPolicy);
+    state.bt72TrustedGunnerHandle = sessionProfile.partnerTank.trustedGunnerHandle;
+    state.bt72AssignedGunnerHandle = seatAssignment == "gunner"
+        ? actorName
+        : sessionProfile.partnerTank.assignedGunnerHandle;
+    UpsertLanlinePlayer(state, actorName, actorRole, true, currentReady, seatAssignment);
+
+    if (previousSeatAssignment != seatAssignment) {
+        state.eventLog.push_back(actorName + " shifted to " +
+            std::string(bunker::Bt72SeatAssignmentLabel(seatAssignment)) + ".");
+    }
+    TrimLanlineEventLog(state, 12);
+    bunker::SaveLanlineSessionState(state);
+    bunker::SaveLanlineSessionState(state, bunker::LanlineSessionSnapshotPath(state.sessionId));
+    previousSignature = signature;
+    lastSyncTime = now;
 }
 
 }  // namespace
@@ -269,6 +352,15 @@ int main() {
     }
     
     bunker::NormalizeSessionProfile(sessionProfile);
+    if (launchTicket.sessionMode == "LAN Client") {
+        sessionProfile.partnerTank.secondSeatUnlocked =
+            sessionProfile.partnerTank.secondSeatUnlocked || launchTicket.bt72SeatRole == "gunner";
+        sessionProfile.partnerTank.secondSeatPolicy =
+            bunker::NormalizeBt72SecondSeatPolicy(launchTicket.bt72SecondSeatPolicy);
+        if (!launchTicket.bt72TrustedGunnerHandle.empty()) {
+            sessionProfile.partnerTank.trustedGunnerHandle = launchTicket.bt72TrustedGunnerHandle;
+        }
+    }
     SyncLanlineRuntimeLaunchState(launchTicket, sessionProfile);
 
     bunker::StaticEraser staticEraser;
@@ -317,6 +409,8 @@ int main() {
     }
     if (sessionProfile.story.tankLinked) {
         player.insideTank = sessionProfile.partnerTank.deployed;
+        player.bt72GunnerSeat = player.insideTank &&
+            bunker::NormalizeBt72SeatAssignment(launchTicket.bt72SeatRole) == "gunner";
         player.viewMode = player.insideTank ? bunker::ViewMode::Cockpit : bunker::ViewMode::ThirdPerson;
     }
     if (sessionProfile.story.bucketRecovered) {
@@ -343,6 +437,7 @@ int main() {
 
         bunker::SyncStoryFlagsFromWorld(sessionProfile, staticEraser);
         bunker::UpdateWorldMetadata(world, sessionProfile, staticEraser);
+        SyncLanlineRuntimePresence(player, sessionProfile);
         bunker::UpdateRadio(gameState, world, sessionProfile, staticEraser, dt);
         bunker::ProcessScriptedWorldEvents(world, player, sessionProfile, gameState);
         bunker::SyncPartnerTankAnchor(world, player, sessionProfile);
@@ -486,6 +581,12 @@ int main() {
         }
         gameState.cycleViewPressed = cycleViewNow;
 
+        const bool toggleSeatNow = glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS;
+        if (toggleSeatNow && !gameState.seatSwapPressed && player.insideTank) {
+            bunker::TryToggleBt72CrewSeat(player, sessionProfile, gameState);
+        }
+        gameState.seatSwapPressed = toggleSeatNow;
+
         const bool toggleBucketNow = glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS;
         if (toggleBucketNow && !gameState.bucketPressed && player.insideTank && sessionProfile.story.bucketRecovered) {
             std::string utilityModuleId = "bucket_shield_a";
@@ -499,6 +600,8 @@ int main() {
                 gameState.lastEvent = "Ram Shield mounted. Swap back to Bucket Rig before using bucket controls.";
             } else if (utilityModuleId == "tow_coupler_mk1") {
                 gameState.lastEvent = "Tow Coupler mounted. Swap back to Bucket Rig before using bucket controls.";
+            } else if (player.bt72GunnerSeat) {
+                gameState.lastEvent = "Return to BT-72 pilot controls before raising the bucket rig.";
             } else {
                 player.bucketRaised = !player.bucketRaised;
                 gameState.lastEvent = player.bucketRaised ? "Bucket rig raised." : "Bucket rig stowed.";
@@ -580,6 +683,9 @@ int main() {
         if (towCouplerMounted) {
             moveSpeed *= 0.88f;
         }
+        if (player.insideTank && player.bt72GunnerSeat) {
+            moveSpeed *= 0.32f;
+        }
         if (player.insideTank && gameState.tankThermalLoad >= 80.0f) {
             moveSpeed *= 0.76f;
             sessionProfile.partnerTank.damage.powerCore = std::max(0.0f, sessionProfile.partnerTank.damage.powerCore - dt * 0.35f);
@@ -613,6 +719,7 @@ int main() {
         bunker::UpdateHostiles(world, player, sessionProfile, staticEraser, gameState, dt);
         if (player.insideTank && sessionProfile.partnerTank.damage.hull <= 0.0f && !gameState.soulLineTriggered) {
             player.insideTank = false;
+            player.bt72GunnerSeat = false;
             player.viewMode = bunker::ViewMode::ThirdPerson;
             player.x += std::cos(player.facingRadians) * 0.8f;
             player.y += std::sin(player.facingRadians) * 0.8f;
@@ -678,6 +785,7 @@ int main() {
                     player.y = world.metadata.playerSpawnY;
                 }
                 player.insideTank = false;
+                player.bt72GunnerSeat = false;
                 player.viewMode = bunker::ViewMode::ThirdPerson;
                 player.velocityX = 0.0f;
                 player.velocityY = 0.0f;
@@ -720,9 +828,13 @@ int main() {
             }
             ImGui::Separator();
             ImGui::Text("TAB Pip-Pad | H Medkit | R Reload | F5 Save");
-            ImGui::Text("Left/Right rotate | C camera | B bucket");
+            ImGui::Text("Left/Right rotate | C camera | V crew seat | B bucket");
             if (promptTowCouplerMounted) {
                 ImGui::TextDisabled("Tow Coupler active: logistics boost, lower mobility");
+            }
+            if (player.insideTank) {
+                ImGui::TextDisabled("BT-72 seat: %s",
+                    player.bt72GunnerSeat ? "gunner station" : "pilot controls");
             }
             ImGui::Text("Weather: %s", bunker::ToString(gameState.weather));
             ImGui::Text("Ether Pressure: %.0f%%", bunker::CurrentEtherErosion(sessionProfile));
@@ -755,6 +867,7 @@ int main() {
             ImGui::Text("Ammo %.0f%%", sessionProfile.partnerTank.ammoReserve);
             ImGui::Text("Sync %s", bunker::CurrentTankSyncMode(sessionProfile.partnerTank).c_str());
             ImGui::Text("Link %.0f%%", sessionProfile.partnerTank.trustLink * 100.0f);
+            ImGui::Text("Seat %s", player.bt72GunnerSeat ? "Gunner" : "Pilot");
             ImGui::Text("Weather %s", bunker::ToString(gameState.weather));
             ImGui::Text("Ether Pressure %.0f%%", bunker::CurrentEtherErosion(sessionProfile));
             ImGui::Text("Thermal %.0f%%", gameState.tankThermalLoad);
@@ -763,6 +876,9 @@ int main() {
             ImGui::Text("SoulLine %s", gameState.soulLineTriggered || sessionProfile.partnerTank.damage.hull <= 0.0f ? "tripped" : "standby");
             if (hudTowCouplerMounted) {
                 ImGui::TextDisabled("Tow mode: +logistics / -mobility");
+            }
+            if (player.bt72GunnerSeat) {
+                ImGui::TextDisabled("Gunner station: movement reduced, support weapons prioritized.");
             }
             if (sessionProfile.partnerTank.damage.hull <= 25.0f) {
                 ImGui::TextColored(ImVec4(0.95f, 0.3f, 0.25f, 1.0f), "Hull critical. Mobility reduced.");
