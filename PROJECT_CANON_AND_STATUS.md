@@ -267,6 +267,7 @@ Legacy reactive tech stack не является отдельной игрой �
 - lightweight route-event layer поверх route/recovery state с persistence, cooldown и smoke coverage;
 - lightweight route-event layer больше не висит как "почти готово": он теперь живет как offered/active/success/failed/expired/cooldown state machine, остается locked до завершения onboarding и route handoff, и включает редкий merchant-window incident через Pip-Pad/service glue без постоянных торговых точек на карте;
 - early `BT-72 / RPG` weight pass: `SPECIAL`, passive skills, crew coordination и service doctrine теперь реально влияют на first combat / gunner loop / first service;
+- `BT-72` second-seat policy теперь не расходится с runtime loop: локальный seat toggle уважает `pilot_only / trusted_only / open_crew`, отдает читаемый deny/success feedback и покрыт smoke-checks;
 - limited modular damage для mechanical hostiles теперь реально живет в first combat: роботам можно сбивать sensors / weapon / mobility, а runtime prompt, tank HUD и Pip-Pad читают этот combat state одинаково и smoke-checks его покрывают;
 - launcher selected-world preview, recovery handoff, route-event summary и services unlock теперь читают один и тот же world-scoped state без рассинхрона между UI-выбором мира и summary;
 - first-route presentation pass для `hangar -> bunker exit -> surface arrival` теперь собран в единый route-beat слой: beat/cue/payoff читаются одинаково в runtime, Pip-Pad, launcher и key event copy, плюс покрыты smoke-checks;

@@ -713,6 +713,18 @@ std::string CurrentBt72SeatAssignment(const PlayerState& player) {
     return player.bt72GunnerSeat ? "gunner" : "pilot";
 }
 
+std::string Bt72SeatPolicyBlockReason(const SessionProfile& profile) {
+    const std::string normalizedPolicy = NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy);
+    if (normalizedPolicy == "trusted_only") {
+        if (profile.partnerTank.trustedGunnerHandle.empty()) {
+            return "BT-72 gunner seat is restricted to a trusted gunner, but no trusted gunner is assigned yet.";
+        }
+        return "BT-72 gunner seat is restricted to trusted gunner " + profile.partnerTank.trustedGunnerHandle + ".";
+    }
+    return std::string("BT-72 gunner seat is restricted by current second-seat policy: ") +
+        Bt72SecondSeatPolicyLabel(profile.partnerTank.secondSeatPolicy) + ".";
+}
+
 void ToggleTankUtilityModule(SessionProfile& profile, PlayerState& player, GameState& gameState) {
     auto* module = FindTankModule(profile, TankModuleSlotType::Bucket);
     if (module == nullptr) {
@@ -2455,12 +2467,19 @@ void TryToggleBt72CrewSeat(PlayerState& player, SessionProfile& profile, GameSta
         return;
     }
 
+    if (!player.bt72GunnerSeat &&
+        !Bt72GunnerHandleAllowed(profile, profile.character.displayName)) {
+        gameState.lastEvent = Bt72SeatPolicyBlockReason(profile);
+        return;
+    }
+
     player.bt72GunnerSeat = !player.bt72GunnerSeat;
     if (player.bt72GunnerSeat) {
         profile.partnerTank.gunnerDrillSeen = true;
         profile.partnerTank.assignedGunnerHandle = profile.character.displayName;
         player.bucketRaised = false;
-        gameState.lastEvent = "Crew station shifted to the BT-72 gunner seat. Driver assist holds the hull at crawl speed.";
+        gameState.lastEvent = std::string("Crew station shifted to the BT-72 gunner seat. Driver assist holds the hull at crawl speed. Seat policy: ") +
+            Bt72SecondSeatPolicyLabel(profile.partnerTank.secondSeatPolicy) + ".";
     } else {
         if (profile.partnerTank.assignedGunnerHandle == profile.character.displayName) {
             profile.partnerTank.assignedGunnerHandle.clear();

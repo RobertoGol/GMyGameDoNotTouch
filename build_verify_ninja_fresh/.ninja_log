@@ -296,3 +296,8 @@
 9279	11094	7986680189873803	CMakeFiles/BunkerLauncher.dir/src/LanlineServices.cpp.obj	905a48f94dbd3fd7
 11094	12881	7986680208025124	BunkerGame.exe	7ca4939cf7f32c21
 12881	15383	7986680225900030	BunkerLauncher.exe	79aaa3df6952779b
+18	7260	7986693317897629	CMakeFiles/BunkerSmokeChecks.dir/tests/SmokeChecks.cpp.obj	745ecc378e6f5548
+7261	9166	7986693390329309	CMakeFiles/BunkerSmokeChecks.dir/src/GameRuntime.cpp.obj	de63b954b3fc4ad7
+9167	37361	7986693409378321	BunkerSmokeChecks.exe	1fac90bba90551aa
+31	1965	7986693930290598	CMakeFiles/BunkerGame.dir/src/GameRuntime.cpp.obj	181a20f8a094aa29
+1965	8262	7986693949624280	BunkerGame.exe	7ca4939cf7f32c21

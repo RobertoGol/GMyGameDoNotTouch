@@ -1357,6 +1357,61 @@ bool RunBt72CrewCoordinationWeightSmoke() {
             "crew coordination smoke expected readable crew-support feedback copy");
 }
 
+bool RunBt72SeatPolicySmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.partnerTank.secondSeatUnlocked = true;
+    profile.partnerTank.secondSeatPolicy = "trusted_only";
+    profile.partnerTank.trustedGunnerHandle = "Lan Buddy";
+
+    bunker::PlayerState player;
+    player.insideTank = true;
+    bunker::GameState gameState;
+
+    bunker::TryToggleBt72CrewSeat(player, profile, gameState);
+    if (!Check(!player.bt72GunnerSeat, "bt72 seat policy smoke expected trusted-only policy to block local gunner seat")) {
+        return false;
+    }
+    if (!Check(gameState.lastEvent.find("trusted gunner Lan Buddy") != std::string::npos,
+            "bt72 seat policy smoke expected trusted-only block copy")) {
+        return false;
+    }
+
+    profile.partnerTank.trustedGunnerHandle = profile.character.displayName;
+    bunker::TryToggleBt72CrewSeat(player, profile, gameState);
+    if (!Check(player.bt72GunnerSeat, "bt72 seat policy smoke expected trusted self to unlock gunner seat")) {
+        return false;
+    }
+    if (!Check(profile.partnerTank.gunnerDrillSeen, "bt72 seat policy smoke expected gunner drill flag after seat shift")) {
+        return false;
+    }
+    if (!Check(profile.partnerTank.assignedGunnerHandle == profile.character.displayName,
+            "bt72 seat policy smoke expected local operator to become assigned gunner")) {
+        return false;
+    }
+    if (!Check(gameState.lastEvent.find("Trusted Gunner") != std::string::npos,
+            "bt72 seat policy smoke expected readable seat policy on successful seat shift")) {
+        return false;
+    }
+
+    bunker::TryToggleBt72CrewSeat(player, profile, gameState);
+    if (!Check(!player.bt72GunnerSeat, "bt72 seat policy smoke expected second toggle to return to pilot seat")) {
+        return false;
+    }
+    if (!Check(profile.partnerTank.assignedGunnerHandle.empty(),
+            "bt72 seat policy smoke expected pilot return to clear local assigned gunner")) {
+        return false;
+    }
+
+    profile.partnerTank.secondSeatPolicy = "open_crew";
+    profile.partnerTank.trustedGunnerHandle = "Remote Scout";
+    bunker::TryToggleBt72CrewSeat(player, profile, gameState);
+    return Check(player.bt72GunnerSeat, "bt72 seat policy smoke expected open-crew policy to allow local gunner seat") &&
+        Check(gameState.lastEvent.find("Open Crew") != std::string::npos,
+            "bt72 seat policy smoke expected open-crew readability copy");
+}
+
 bool RunServiceChoiceWeightSmoke() {
     bunker::World world;
     world.GeneratePrototypeZone();
@@ -3676,6 +3731,7 @@ int main() {
         RunMechanicalHostileDamageSmoke() &&
         RunFieldReflexRpgWeightSmoke() &&
         RunBt72CrewCoordinationWeightSmoke() &&
+        RunBt72SeatPolicySmoke() &&
         RunServiceChoiceWeightSmoke() &&
         RunLauncherAnnouncementSmoke() &&
         RunLanlineServicesRoundtripSmoke() &&
