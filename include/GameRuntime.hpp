@@ -21,6 +21,13 @@ struct HostileAwarenessState {
     float lostTimer = 0.0f;
 };
 
+struct MechanicalHostileDamageState {
+    std::string registryId;
+    float sensorDamage = 0.0f;
+    float weaponDamage = 0.0f;
+    float mobilityDamage = 0.0f;
+};
+
 struct GameState {
     bool cycleViewPressed = false;
     bool usePressed = false;
@@ -83,6 +90,7 @@ struct GameState {
     bool medicalSupportNearby = false;
     WeatherAnomaly weather = WeatherAnomaly::Clear;
     std::vector<HostileAwarenessState> hostileAwareness{};
+    std::vector<MechanicalHostileDamageState> mechanicalHostileDamage{};
     std::string lastEvent = "Cryostasis breached. Reorient, secure an access card, recover the Pip-Pad, and trace the BT-72 berth.";
     std::string lastSupportAction = "No support activity.";
     std::string lastPortalAction = "No portal updates.";
@@ -110,6 +118,8 @@ void UpdateWorldMetadata(World& world, const SessionProfile& profile, const Stat
 void UpdateWindowTitle(GLFWwindow* window, const PlayerState& player, const World& world, const SessionProfile& sessionProfile);
 void UpdateRadio(GameState& gameState, const World& world, const SessionProfile& profile, const StaticEraser& staticEraser, float dt);
 const MapObject* FindNearestHostile(const World& world, float x, float y, float radius);
+const char* TankIntegrityBand(float integrity);
+std::string DescribeHostileReadability(const MapObject& object, const GameState& gameState);
 void UpdateHostiles(World& world,
     PlayerState& player,
     SessionProfile& profile,
