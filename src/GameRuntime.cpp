@@ -96,6 +96,12 @@ enum class HostileRole {
     Unknown
 };
 
+enum class ReactiveBreakableKind {
+    None,
+    Glass,
+    LightVegetation
+};
+
 HostileRole ClassifyHostileRole(const MapObject& object) {
     const std::string normalizedTag = std::string(NormalizeGameplayDescriptorTag(object.scriptTag));
     const std::string registryIdLower = AsciiLower(object.registryId);
@@ -125,6 +131,37 @@ HostileRole ClassifyHostileRole(const MapObject& object) {
         return HostileRole::RobotControl;
     }
     return HostileRole::Unknown;
+}
+
+ReactiveBreakableKind ClassifyReactiveBreakable(const MapObject& object) {
+    if (object.interaction == InteractionType::Hostile) {
+        return ReactiveBreakableKind::None;
+    }
+
+    const std::string registryIdLower = AsciiLower(object.registryId);
+    const std::string displayNameLower = AsciiLower(object.displayName);
+    const std::string scriptTagLower = AsciiLower(object.scriptTag);
+    const bool looksLikeGlass = registryIdLower.find("glass") != std::string::npos ||
+        displayNameLower.find("glass") != std::string::npos ||
+        displayNameLower.find("window") != std::string::npos ||
+        scriptTagLower.find("glass") != std::string::npos;
+    if (looksLikeGlass) {
+        return ReactiveBreakableKind::Glass;
+    }
+
+    const bool looksLikeVegetation = registryIdLower.find("brush") != std::string::npos ||
+        registryIdLower.find("shrub") != std::string::npos ||
+        displayNameLower.find("brush") != std::string::npos ||
+        displayNameLower.find("shrub") != std::string::npos ||
+        displayNameLower.find("foliage") != std::string::npos ||
+        displayNameLower.find("vine") != std::string::npos ||
+        scriptTagLower.find("foliage") != std::string::npos ||
+        scriptTagLower.find("vegetation") != std::string::npos;
+    if (looksLikeVegetation) {
+        return ReactiveBreakableKind::LightVegetation;
+    }
+
+    return ReactiveBreakableKind::None;
 }
 
 float HostileAlertRadius(HostileRole role, bool insideTank) {
@@ -564,6 +601,197 @@ float DistancePointToSegment(float px, float py, float x1, float y1, float x2, f
     const float offsetX = px - nearestX;
     const float offsetY = py - nearestY;
     return std::sqrt(offsetX * offsetX + offsetY * offsetY);
+}
+
+float ReactiveBreakableRadius(const MapObject& object) {
+    return std::max(0.4f, std::max(object.width, object.depth) * 0.58f);
+}
+
+const MapObject* FindNearestReactiveBreakable(const World& world,
+    const PlayerState& player,
+    float radius,
+    bool requireForwardArc) {
+    const MapObject* nearest = nullptr;
+    float bestScore = radius * radius + 1.0f;
+    const float forwardX = std::cos(player.facingRadians);
+    const float forwardY = std::sin(player.facingRadians);
+
+    for (const auto& object : world.objects) {
+        if (ClassifyReactiveBreakable(object) == ReactiveBreakableKind::None) {
+            continue;
+        }
+
+        const float dx = object.x - player.x;
+        const float dy = object.y - player.y;
+        const float distanceSq = dx * dx + dy * dy;
+        if (distanceSq > radius * radius) {
+            continue;
+        }
+
+        const float distance = std::sqrt(std::max(0.0001f, distanceSq));
+        const float alignment = (dx * forwardX + dy * forwardY) / distance;
+        if (requireForwardArc && alignment < (player.insideTank ? 0.0f : -0.12f)) {
+            continue;
+        }
+
+        const float score = distanceSq - std::max(0.0f, alignment) * 0.4f;
+        if (score <= bestScore) {
+            bestScore = score;
+            nearest = &object;
+        }
+    }
+
+    return nearest;
+}
+
+MapObject* FindReactiveBreakableOnShotLine(World& world,
+    const PlayerState& player,
+    float targetX,
+    float targetY) {
+    const float totalDx = targetX - player.x;
+    const float totalDy = targetY - player.y;
+    const float totalLengthSq = totalDx * totalDx + totalDy * totalDy;
+    if (totalLengthSq <= 0.0001f) {
+        return nullptr;
+    }
+
+    MapObject* nearest = nullptr;
+    float bestProjection = 1.0f;
+    for (auto& object : world.objects) {
+        if (ClassifyReactiveBreakable(object) == ReactiveBreakableKind::None) {
+            continue;
+        }
+
+        const float projection = ((object.x - player.x) * totalDx + (object.y - player.y) * totalDy) / totalLengthSq;
+        if (projection <= 0.06f || projection >= 0.94f) {
+            continue;
+        }
+
+        const float laneDistance = DistancePointToSegment(object.x, object.y, player.x, player.y, targetX, targetY);
+        if (laneDistance > ReactiveBreakableRadius(object) + 0.16f) {
+            continue;
+        }
+
+        if (projection <= bestProjection) {
+            bestProjection = projection;
+            nearest = &object;
+        }
+    }
+    return nearest;
+}
+
+float ReactiveBreakableDamage(ReactiveBreakableKind kind,
+    const PlayerState& player,
+    bool specialAttack,
+    float momentum) {
+    if (kind == ReactiveBreakableKind::Glass) {
+        if (player.insideTank) {
+            if (specialAttack) {
+                return player.bt72GunnerSeat ? 68.0f : 82.0f;
+            }
+            return player.bt72GunnerSeat ? 26.0f : (28.0f + momentum * 14.0f);
+        }
+        return specialAttack ? 42.0f : 24.0f;
+    }
+
+    if (kind == ReactiveBreakableKind::LightVegetation) {
+        if (player.insideTank) {
+            if (specialAttack) {
+                return player.bt72GunnerSeat ? 74.0f : 96.0f;
+            }
+            return player.bt72GunnerSeat ? 34.0f : (30.0f + momentum * 18.0f);
+        }
+        return specialAttack ? 50.0f : 28.0f;
+    }
+
+    return 0.0f;
+}
+
+std::string ReactiveBreakableImpactText(std::string_view displayName,
+    ReactiveBreakableKind kind,
+    const PlayerState& player,
+    bool destroyed,
+    bool specialAttack,
+    bool lineIntercept,
+    float momentum) {
+    const std::string name(displayName);
+    if (kind == ReactiveBreakableKind::Glass) {
+        if (destroyed) {
+            if (player.insideTank) {
+                if (specialAttack) {
+                    return lineIntercept
+                        ? "Cannon strike shattered " + name + " and opened the firing lane."
+                        : "Cannon strike shattered " + name + " into the lift dust.";
+                }
+                return player.bt72GunnerSeat
+                    ? "BT-72 support burst shattered " + name + " and cleared the lane."
+                    : "BT-72 rammed through " + name + " and burst the glass across the corridor.";
+            }
+            return specialAttack
+                ? "Precision shot shattered " + name + " and cleared the sight line."
+                : "Emergency baton smashed " + name + ".";
+        }
+        return name + " cracked but still hangs in the lane.";
+    }
+
+    if (kind == ReactiveBreakableKind::LightVegetation) {
+        if (destroyed) {
+            if (player.insideTank) {
+                if (specialAttack) {
+                    return "Heavy fire ripped through " + name + " and stripped the route edge clear.";
+                }
+                return momentum >= 1.0f
+                    ? "BT-72 plowed through " + name + " and threw brush clear of the route."
+                    : "BT-72 crushed " + name + " and cleared the route edge.";
+            }
+            return specialAttack
+                ? "Shot tore through " + name + " and dropped the route clutter."
+                : "Emergency baton chopped through " + name + ".";
+        }
+        return name + " thrashed but still clings to the route edge.";
+    }
+
+    return name + " reacted to the hit.";
+}
+
+bool ApplyReactiveBreakableHit(World& world,
+    const MapObject& object,
+    const PlayerState& player,
+    StaticEraser& staticEraser,
+    GameState& gameState,
+    std::string_view worldName,
+    bool specialAttack,
+    bool lineIntercept,
+    float momentum) {
+    const ReactiveBreakableKind kind = ClassifyReactiveBreakable(object);
+    if (kind == ReactiveBreakableKind::None) {
+        return false;
+    }
+
+    const std::string registryId = object.registryId;
+    const std::string displayName = object.displayName;
+    MapObject* mutableObject = world.FindObjectByRegistryId(registryId);
+    if (mutableObject == nullptr) {
+        return false;
+    }
+
+    mutableObject->health -= ReactiveBreakableDamage(kind, player, specialAttack, momentum);
+    const bool destroyed = mutableObject->health <= 0.0f;
+    gameState.lastEvent = ReactiveBreakableImpactText(
+        displayName,
+        kind,
+        player,
+        destroyed,
+        specialAttack,
+        lineIntercept,
+        momentum);
+
+    if (destroyed) {
+        staticEraser.Erase(registryId);
+        staticEraser.Save(worldName);
+        world.RemoveObject(registryId);
+    }
+    return true;
 }
 
 bool HasFriendlyOnShotLine(const World& world,
@@ -4229,8 +4457,14 @@ void HandleAttack(World& world,
     StaticEraser& staticEraser,
     GameState& gameState) {
     const bool gunnerSeat = player.insideTank && player.bt72GunnerSeat;
+    const float momentum = std::sqrt((player.velocityX * player.velocityX) + (player.velocityY * player.velocityY));
     const MapObject* hostile = FindNearestHostile(world, player.x, player.y, player.insideTank ? (gunnerSeat ? 6.6f : 2.6f) : 1.8f);
-    if (hostile == nullptr) {
+    const MapObject* reactiveBreakable = FindNearestReactiveBreakable(
+        world,
+        player,
+        player.insideTank ? (gunnerSeat ? 7.2f : 2.8f) : 1.9f,
+        true);
+    if (hostile == nullptr && reactiveBreakable == nullptr) {
         gameState.lastEvent = player.insideTank
             ? (gunnerSeat ? "No hostile target in gunner range." : "No hostile target in ram range.")
             : "No hostile target in melee range.";
@@ -4250,10 +4484,46 @@ void HandleAttack(World& world,
         gameState.tankThermalLoad = std::min(100.0f, gameState.tankThermalLoad + 4.0f);
     }
 
+    if (hostile == nullptr && reactiveBreakable != nullptr) {
+        if (gunnerSeat) {
+            TriggerCombatFeedback(player, 0.24f, 0.52f, 0.0f, 0.0f);
+        } else if (player.insideTank) {
+            TriggerCombatFeedback(player, 0.0f, 0.0f, 0.18f, std::min(0.85f, 0.32f + momentum * 0.14f));
+        }
+        ApplyReactiveBreakableHit(
+            world,
+            *reactiveBreakable,
+            player,
+            staticEraser,
+            gameState,
+            profile.selectedWorld,
+            false,
+            false,
+            momentum);
+        return;
+    }
+
+    if (gunnerSeat) {
+        if (MapObject* lineBreakable = FindReactiveBreakableOnShotLine(world, player, hostile->x, hostile->y);
+            lineBreakable != nullptr) {
+            TriggerCombatFeedback(player, 0.24f, 0.52f, 0.0f, 0.0f);
+            ApplyReactiveBreakableHit(
+                world,
+                *lineBreakable,
+                player,
+                staticEraser,
+                gameState,
+                profile.selectedWorld,
+                false,
+                true,
+                0.0f);
+            return;
+        }
+    }
+
     if (auto* mutableObject = const_cast<MapObject*>(hostile); mutableObject != nullptr) {
         const HostileRole role = ClassifyHostileRole(*mutableObject);
         const bool hasEmergencyMeleeTool = HasEmergencyMeleeTool(profile);
-        const float momentum = std::sqrt((player.velocityX * player.velocityX) + (player.velocityY * player.velocityY));
         const bool fieldReflexEquipped = !player.insideTank && HasEquippedPassiveSkill(profile, "skill_field_reflex");
         const bool crewSupportReadable = player.insideTank &&
             HasEquippedPassiveSkill(profile, "skill_pilot_sync") &&
@@ -4342,7 +4612,8 @@ void HandleSpecialAttack(World& world,
     const bool gunnerSeat = player.insideTank && player.bt72GunnerSeat;
     const float radius = player.insideTank ? (gunnerSeat ? 10.5f : 9.0f) : 6.5f;
     const MapObject* hostile = FindNearestHostile(world, player.x, player.y, radius);
-    if (hostile == nullptr) {
+    const MapObject* reactiveBreakable = FindNearestReactiveBreakable(world, player, radius, true);
+    if (hostile == nullptr && reactiveBreakable == nullptr) {
         gameState.lastEvent = player.insideTank
             ? (gunnerSeat ? "No hostile target in the BT-72 gunner arc." : "No hostile target in cannon range.")
             : "No hostile target in firing range.";
@@ -4390,6 +4661,50 @@ void HandleSpecialAttack(World& world,
         profile.character.mp = std::max(0.0f, profile.character.mp - precisionCost);
     }
 
+    auto triggerSpecialFeedback = [&]() {
+        if (player.insideTank) {
+            TriggerCombatFeedback(
+                player,
+                gunnerSeat ? 0.34f : 0.48f,
+                gunnerSeat ? 0.82f : 1.0f,
+                gunnerSeat ? 0.24f : 0.38f,
+                gunnerSeat ? 0.62f : 1.0f);
+        } else {
+            TriggerCombatFeedback(player, 0.18f, 0.34f, 0.0f, 0.0f);
+        }
+    };
+
+    if (hostile == nullptr && reactiveBreakable != nullptr) {
+        triggerSpecialFeedback();
+        ApplyReactiveBreakableHit(
+            world,
+            *reactiveBreakable,
+            player,
+            staticEraser,
+            gameState,
+            profile.selectedWorld,
+            true,
+            false,
+            0.0f);
+        return;
+    }
+
+    if (MapObject* lineBreakable = FindReactiveBreakableOnShotLine(world, player, hostile->x, hostile->y);
+        lineBreakable != nullptr) {
+        triggerSpecialFeedback();
+        ApplyReactiveBreakableHit(
+            world,
+            *lineBreakable,
+            player,
+            staticEraser,
+            gameState,
+            profile.selectedWorld,
+            true,
+            true,
+            0.0f);
+        return;
+    }
+
     if (auto* mutableObject = const_cast<MapObject*>(hostile); mutableObject != nullptr) {
         const HostileRole role = ClassifyHostileRole(*mutableObject);
         const bool fieldReflexEquipped = !player.insideTank && HasEquippedPassiveSkill(profile, "skill_field_reflex");
@@ -4427,16 +4742,7 @@ void HandleSpecialAttack(World& world,
         if (player.insideTank) {
             RegisterTankSyncStyle(profile, false);
         }
-        if (player.insideTank) {
-            TriggerCombatFeedback(
-                player,
-                gunnerSeat ? 0.34f : 0.48f,
-                gunnerSeat ? 0.82f : 1.0f,
-                gunnerSeat ? 0.24f : 0.38f,
-                gunnerSeat ? 0.62f : 1.0f);
-        } else {
-            TriggerCombatFeedback(player, 0.18f, 0.34f, 0.0f, 0.0f);
-        }
+        triggerSpecialFeedback();
         if (mutableObject->health <= 0.0f) {
             std::string progressionEvent;
             AwardExperience(profile, player.insideTank ? 60 : 40, &progressionEvent);

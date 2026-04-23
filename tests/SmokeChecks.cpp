@@ -1142,6 +1142,106 @@ bool RunBt72CombatFeedbackSmoke() {
             "bt72 combat feedback smoke expected heavy-shot feedback copy");
 }
 
+bool RunReactiveBreakableGlassSmoke() {
+    bunker::World world;
+
+    bunker::MapObject glass;
+    glass.registryId = "[%glass_break_smoke_0001]";
+    glass.displayName = "Observation Glass";
+    glass.interaction = bunker::InteractionType::Static;
+    glass.category = bunker::ObjectCategory::Structure;
+    glass.x = 2.4f;
+    glass.y = 0.0f;
+    glass.width = 1.4f;
+    glass.depth = 0.5f;
+    glass.health = 18.0f;
+    glass.blocksMovement = true;
+    world.AddObject(glass);
+
+    bunker::MapObject robot;
+    robot.registryId = "[%enemy_robot_glass_0001]";
+    robot.displayName = "Sentinel Drone";
+    robot.interaction = bunker::InteractionType::Hostile;
+    robot.category = bunker::ObjectCategory::Hostile;
+    robot.x = 5.0f;
+    robot.y = 0.0f;
+    robot.width = 1.1f;
+    robot.depth = 1.1f;
+    robot.health = 220.0f;
+    robot.scriptTag = "robot_control";
+    world.AddObject(robot);
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+
+    bunker::PlayerState player;
+    player.insideTank = true;
+    player.x = 0.0f;
+    player.y = 0.0f;
+    player.facingRadians = 0.0f;
+
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    bunker::HandleSpecialAttack(world, player, profile, staticEraser, gameState);
+
+    const auto* survivingRobot = world.FindObjectByRegistryId("[%enemy_robot_glass_0001]");
+    return Check(player.muzzleFlashTimer > 0.0f && player.shockWaveTimer > 0.0f,
+            "reactive glass smoke expected combat feedback to fire on glass impact") &&
+        Check(world.FindObjectByRegistryId("[%glass_break_smoke_0001]") == nullptr,
+            "reactive glass smoke expected shatterable glass to be removed") &&
+        Check(staticEraser.IsErased("[%glass_break_smoke_0001]"),
+            "reactive glass smoke expected shattered glass to persist in static eraser") &&
+        Check(survivingRobot != nullptr && std::fabs(survivingRobot->health - 220.0f) < 0.001f,
+            "reactive glass smoke expected the intercepting pane to absorb the first shot") &&
+        Check(gameState.lastEvent.find("shattered") != std::string::npos &&
+                gameState.lastEvent.find("lane") != std::string::npos,
+            "reactive glass smoke expected readable shatter feedback copy");
+}
+
+bool RunReactiveBreakableFoliageSmoke() {
+    bunker::World world;
+
+    bunker::MapObject foliage;
+    foliage.registryId = "[%brush_break_smoke_0001]";
+    foliage.displayName = "Route Brush Cluster";
+    foliage.interaction = bunker::InteractionType::Static;
+    foliage.category = bunker::ObjectCategory::ResourceNode;
+    foliage.x = 1.7f;
+    foliage.y = 0.0f;
+    foliage.width = 1.3f;
+    foliage.depth = 1.0f;
+    foliage.health = 10.0f;
+    foliage.blocksMovement = false;
+    world.AddObject(foliage);
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+
+    bunker::PlayerState player;
+    player.insideTank = true;
+    player.x = 0.0f;
+    player.y = 0.0f;
+    player.facingRadians = 0.0f;
+    player.velocityX = 2.0f;
+
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    bunker::HandleAttack(world, player, profile, staticEraser, gameState);
+
+    return Check(world.FindObjectByRegistryId("[%brush_break_smoke_0001]") == nullptr,
+            "reactive foliage smoke expected light vegetation to break under tank pressure") &&
+        Check(staticEraser.IsErased("[%brush_break_smoke_0001]"),
+            "reactive foliage smoke expected broken vegetation to persist in static eraser") &&
+        Check(player.shockWaveTimer > 0.0f && player.shockWaveStrength > 0.0f,
+            "reactive foliage smoke expected ram-style shock feedback on foliage break") &&
+        Check(gameState.lastEvent.find("BT-72") != std::string::npos &&
+                (gameState.lastEvent.find("brush") != std::string::npos ||
+                 gameState.lastEvent.find("route edge") != std::string::npos),
+            "reactive foliage smoke expected readable foliage-break feedback");
+}
+
 bool RunMechanicalHostileDamageSmoke() {
     auto makeWorld = []() {
         bunker::World world;
@@ -3728,6 +3828,8 @@ int main() {
         RunHostileAwarenessSmoke() &&
         RunHumanTriggerDisciplineSmoke() &&
         RunBt72CombatFeedbackSmoke() &&
+        RunReactiveBreakableGlassSmoke() &&
+        RunReactiveBreakableFoliageSmoke() &&
         RunMechanicalHostileDamageSmoke() &&
         RunFieldReflexRpgWeightSmoke() &&
         RunBt72CrewCoordinationWeightSmoke() &&

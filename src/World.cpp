@@ -598,6 +598,24 @@ void World::GeneratePrototypeZone() {
     });
 
     AddObject({
+        "[%glass_lift_0001]",
+        "Lift Observation Glass",
+        InteractionType::Static,
+        ObjectCategory::Structure,
+        14.6f,
+        -1.3f,
+        0.0f,
+        2.0f,
+        0.5f,
+        2.0f,
+        20.0f,
+        true,
+        true,
+        false,
+        {}
+    });
+
+    AddObject({
         "#%res_scrap_0001",
         "Outer Debris Barrier",
         InteractionType::Resource,
@@ -627,6 +645,24 @@ void World::GeneratePrototypeZone() {
         1.5f,
         2.0f,
         90.0f,
+        false,
+        true,
+        false,
+        {}
+    });
+
+    AddObject({
+        "[%brush_surface_0001]",
+        "Surface Brush Cluster",
+        InteractionType::Static,
+        ObjectCategory::ResourceNode,
+        19.0f,
+        2.8f,
+        0.0f,
+        1.8f,
+        1.2f,
+        1.0f,
+        14.0f,
         false,
         true,
         false,

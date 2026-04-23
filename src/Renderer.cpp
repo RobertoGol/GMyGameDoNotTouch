@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 namespace bunker {
 
@@ -62,6 +63,27 @@ void DrawRing(float x, float y, float radius, float thickness, int segments) {
         glVertex2f(x + cosAngle * innerRadius, y + sinAngle * innerRadius);
     }
     glEnd();
+}
+
+std::string ToLowerCopy(std::string_view value) {
+    std::string lower(value);
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return lower;
+}
+
+bool LooksLikeGlassObject(const MapObject& object) {
+    const std::string label = ToLowerCopy(object.registryId + " " + object.displayName + " " + object.scriptTag);
+    return label.find("glass") != std::string::npos || label.find("window") != std::string::npos;
+}
+
+bool LooksLikeFoliageObject(const MapObject& object) {
+    const std::string label = ToLowerCopy(object.registryId + " " + object.displayName + " " + object.scriptTag);
+    return label.find("brush") != std::string::npos ||
+        label.find("shrub") != std::string::npos ||
+        label.find("foliage") != std::string::npos ||
+        label.find("vine") != std::string::npos;
 }
 
 }  // namespace
@@ -137,10 +159,41 @@ void RenderWorld(const World& world, const PlayerState& player, WeatherAnomaly w
     }
     glEnd();
 
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     for (const auto& object : world.objects) {
+        const bool glassObject = LooksLikeGlassObject(object);
+        const bool foliageObject = LooksLikeFoliageObject(object);
+        const float swayOffset = foliageObject
+            ? std::sin(static_cast<float>(glfwGetTime()) * 2.1f + object.x * 0.45f) * 0.12f
+            : 0.0f;
+        const float renderX = object.x + swayOffset;
+
+        if (glassObject) {
+            glColor4f(0.56f, 0.82f, 0.96f, 0.34f);
+            DrawRect(renderX, object.y, object.width * 0.5f, object.depth * 0.5f);
+
+            glColor4f(0.88f, 0.96f, 1.0f, 0.5f);
+            glBegin(GL_LINE_LOOP);
+            glVertex2f(renderX - object.width * 0.5f, object.y - object.depth * 0.5f);
+            glVertex2f(renderX + object.width * 0.5f, object.y - object.depth * 0.5f);
+            glVertex2f(renderX + object.width * 0.5f, object.y + object.depth * 0.5f);
+            glVertex2f(renderX - object.width * 0.5f, object.y + object.depth * 0.5f);
+            glEnd();
+            continue;
+        }
+
+        if (foliageObject) {
+            const float rainBias = weather == WeatherAnomaly::AcidRain ? std::min(0.22f, weatherIntensity * 0.14f) : 0.0f;
+            glColor4f(0.24f, 0.64f + rainBias, 0.30f, 0.82f);
+            DrawRect(renderX, object.y, object.width * 0.5f, object.depth * 0.5f);
+            continue;
+        }
+
         SetColorForCategory(object.category);
-        DrawRect(object.x, object.y, object.width * 0.5f, object.depth * 0.5f);
+        DrawRect(renderX, object.y, object.width * 0.5f, object.depth * 0.5f);
     }
+    glDisable(GL_BLEND);
 
     const float forwardX = std::cos(player.facingRadians);
     const float forwardY = std::sin(player.facingRadians);
