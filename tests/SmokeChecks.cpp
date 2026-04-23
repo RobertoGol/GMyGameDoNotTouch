@@ -1,6 +1,7 @@
 #include "../include/AppPaths.hpp"
 #include "../include/AtomicPersistence.hpp"
 #include "../include/BuildAnnouncement.hpp"
+#include "../include/GameRuntime.hpp"
 #include "../include/GameplayDescriptorRegistry.hpp"
 #include "../include/HangarSystem.hpp"
 #include "../include/LanlineServices.hpp"
@@ -306,6 +307,127 @@ bool RunSurfaceArrivalWorldEventSmoke() {
             "surface arrival smoke expected exterior event copy") &&
         Check(gameState.lastEvent.find("first exterior foothold") != std::string::npos,
             "surface arrival smoke expected foothold payoff text");
+}
+
+bool RunFirstCombatWorldEventSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    profile.story.outerRoadCleared = true;
+
+    bunker::PlayerState player;
+    player.insideTank = true;
+    if (const auto* ghoul = world.FindObjectByRegistryId("[%enemy_ghoul_0001]"); ghoul != nullptr) {
+        player.x = ghoul->x;
+        player.y = ghoul->y;
+    } else {
+        return Check(false, "first combat smoke expected starter ghoul anchor");
+    }
+
+    bunker::GameState gameState;
+    bunker::ProcessScriptedWorldEvents(world, player, profile, gameState);
+
+    return Check(gameState.zoneEventFirstCombat, "first combat smoke expected first-contact event to trigger") &&
+        Check(gameState.lastEvent.find("CONTACT:") != std::string::npos,
+            "first combat smoke expected contact event copy") &&
+        Check(gameState.lastEvent.find("service halt") != std::string::npos,
+            "first combat smoke expected service-halt cue in contact event");
+}
+
+bool RunWorkshopServiceRouteHandoffSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    const bunker::MapObject* workshop = world.FindObjectByRegistryId("[%workshop_0001]");
+    if (!Check(workshop != nullptr, "workshop handoff smoke expected workshop anchor")) {
+        return false;
+    }
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.selectedWorld = "service_handoff_smoke.bwld";
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    profile.story.outerRoadCleared = true;
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+    profile.partnerTank.worldPositionKnown = true;
+    profile.partnerTank.worldX = workshop->x;
+    profile.partnerTank.worldY = workshop->y;
+    profile.partnerTank.damage.hull = 82.0f;
+    profile.partnerTank.energyReserve = 100.0f;
+    profile.partnerTank.ammoReserve = 100.0f;
+    profile.character.inventory.push_back({"repair_patch", 1, 0.2f});
+
+    bunker::PlayerState player;
+    player.insideTank = true;
+
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    bunker::HandleInteraction(workshop, world, player, profile, staticEraser, gameState);
+
+    return Check(profile.firstPlayableRoute.firstServicePerformed, "workshop handoff smoke expected first service flag") &&
+        Check(gameState.lastEvent.find("First service halt logged") != std::string::npos,
+            "workshop handoff smoke expected first service log copy") &&
+        Check(gameState.lastEvent.find("recovery node") != std::string::npos,
+            "workshop handoff smoke expected relay handoff cue");
+}
+
+bool RunDebriefIndustrialHandoffSmoke() {
+    bunker::World world;
+    bunker::MapObject debrief;
+    debrief.registryId = "[%debrief_0001]";
+    debrief.displayName = "Shelter 17 Debrief Console";
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.selectedWorld = "debrief_handoff_smoke.bwld";
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    profile.story.outerRoadCleared = true;
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+    profile.firstPlayableRoute.firstServicePerformed = true;
+    profile.story.relayRecovered = true;
+    profile.firstPlayableRoute.firstRecoveryNodeActivated = true;
+    if (!Check(bunker::FindWorldFieldState(profile, profile.selectedWorld, true) != nullptr,
+            "debrief handoff smoke expected world field state")) {
+        return false;
+    }
+
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    bunker::HandleInteraction(&debrief, world, player, profile, staticEraser, gameState);
+
+    return Check(profile.story.returnedToBase, "debrief handoff smoke expected returned-to-base flag") &&
+        Check(profile.firstPlayableRoute.debriefSummaryViewed, "debrief handoff smoke expected debrief flag") &&
+        Check(gameState.lastEvent.find("Next:") != std::string::npos,
+            "debrief handoff smoke expected explicit next-objective cue") &&
+        Check(gameState.lastEvent.find("rail depot") != std::string::npos,
+            "debrief handoff smoke expected industrial rail-depot handoff");
 }
 
 bool RunLauncherAnnouncementSmoke() {
@@ -2497,6 +2619,9 @@ int main() {
         RunProfileRoundtrip() &&
         RunFirstPlayableRouteStorySmoke() &&
         RunSurfaceArrivalWorldEventSmoke() &&
+        RunFirstCombatWorldEventSmoke() &&
+        RunWorkshopServiceRouteHandoffSmoke() &&
+        RunDebriefIndustrialHandoffSmoke() &&
         RunLauncherAnnouncementSmoke() &&
         RunLanlineServicesRoundtripSmoke() &&
         RunTankServiceKitSmoke() &&

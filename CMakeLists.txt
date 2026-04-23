@@ -93,12 +93,17 @@ configure_bunker_target(BunkerEditor)
 
 add_executable(BunkerSmokeChecks
     tests/SmokeChecks.cpp
+    src/GameRuntime.cpp
+    src/GameRuntimePipPad.cpp
     src/PrefabLibrary.cpp
     src/GameplayDescriptorRegistry.cpp
     src/LanlineServices.cpp
     src/LanlineSession.cpp
     src/LaunchSession.cpp
+    src/Progression.cpp
+    src/Renderer.cpp
     src/SessionProfiles.cpp
+    src/SkillSystem.cpp
     src/StoryRoute.cpp
     src/World.cpp
     src/WorldEditorUndo.cpp

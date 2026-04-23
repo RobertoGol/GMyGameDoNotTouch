@@ -428,7 +428,8 @@ void World::GeneratePrototypeZone() {
         true,
         true,
         false,
-        {}
+        {},
+        "vermin_rush"
     });
 
     AddObject({
@@ -1085,7 +1086,8 @@ void World::GeneratePrototypeZone() {
         true,
         true,
         false,
-        {}
+        {},
+        "ghoul_rush"
     });
 
     AddObject({

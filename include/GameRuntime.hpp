@@ -38,6 +38,7 @@ struct GameState {
     bool zoneEventArchive = false;
     bool zoneEventGarage = false;
     bool zoneEventExterior = false;
+    bool zoneEventFirstCombat = false;
     bool zoneEventReturn = false;
     bool stressThresholdTriggered = false;
     bool secondWindTriggered = false;

@@ -14,17 +14,93 @@ int CountInventory(const SessionProfile& profile, const std::string& itemId) {
     return total;
 }
 
+bool HasAccessCardRecovered(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.accessCardRecovered || profile.story.pipPadRecovered;
+}
+
+bool ArchiveCorridorCleared(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.earlyVerminEncounterResolved ||
+        profile.story.archiveRecovered ||
+        profile.story.tankLinked;
+}
+
 bool ArchiveCorridorCleared(const SessionProfile& profile, const StaticEraser& staticEraser) {
-    return profile.firstPlayableRoute.earlyVerminEncounterResolved || staticEraser.IsErased("[%enemy_laska_0001]");
+    return ArchiveCorridorCleared(profile) || staticEraser.IsErased("[%enemy_laska_0001]");
+}
+
+bool Bt72HullInspected(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.bt72HullInspected || profile.story.tankLinked || profile.story.bucketRecovered;
+}
+
+bool Bt72CoreRecovered(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.bt72CoreRecovered || profile.story.tankLinked || profile.story.bucketRecovered;
+}
+
+bool Bt72ServiceNotesRecovered(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.bt72ServiceNotesRecovered ||
+        profile.story.tankLinked ||
+        profile.story.bucketRecovered ||
+        HasCollectedTapeId(profile, "bt72_service_reel_001");
+}
+
+bool Bt72Restored(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.bt72Restored || profile.story.tankLinked || profile.story.bucketRecovered;
+}
+
+bool ClearanceBlueprintRecovered(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.clearanceBlueprintRecovered ||
+        profile.story.bucketRecovered ||
+        profile.story.exitedBunker;
+}
+
+bool ClearanceMaterialsRecovered(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.clearanceMaterialsRecovered ||
+        profile.story.bucketRecovered ||
+        profile.story.exitedBunker;
+}
+
+bool ClearanceModuleInstalled(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.clearanceModuleInstalled ||
+        profile.story.bucketRecovered ||
+        profile.story.exitedBunker;
+}
+
+bool SurfaceArrivalReached(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.surfaceArrivalReached ||
+        profile.story.outerRoadCleared ||
+        profile.story.relayRecovered ||
+        profile.story.returnedToBase;
+}
+
+bool FirstTankCombatResolved(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.firstTankCombatResolved ||
+        profile.story.relayRecovered ||
+        profile.story.returnedToBase;
 }
 
 bool FirstTankCombatResolved(const SessionProfile& profile, const StaticEraser& staticEraser) {
-    return profile.firstPlayableRoute.firstTankCombatResolved || staticEraser.IsErased("[%enemy_ghoul_0001]");
+    return FirstTankCombatResolved(profile) || staticEraser.IsErased("[%enemy_ghoul_0001]");
+}
+
+bool FirstServicePerformed(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.firstServicePerformed ||
+        profile.story.relayRecovered ||
+        profile.story.returnedToBase ||
+        profile.character.awakening.fieldServiceUses > 0;
+}
+
+bool FirstRecoveryNodeActivated(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.firstRecoveryNodeActivated || profile.story.relayRecovered;
+}
+
+bool DebriefSummaryViewed(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.debriefSummaryViewed ||
+        profile.story.returnedToBase ||
+        HasCollectedTapeId(profile, "debrief_shelter17");
 }
 
 bool HasBt72RestorationPrerequisites(const SessionProfile& profile) {
-    const auto& route = profile.firstPlayableRoute;
-    return route.bt72HullInspected && route.bt72CoreRecovered && route.bt72ServiceNotesRecovered;
+    return Bt72HullInspected(profile) && Bt72CoreRecovered(profile) && Bt72ServiceNotesRecovered(profile);
 }
 
 bool HasBt72RestorationMaterials(const SessionProfile& profile) {
@@ -106,42 +182,42 @@ std::string CurrentStoryCheckpointLabel(const SessionProfile& profile) {
         return "Intro // Cryo Wake";
     }
     if (!profile.story.pipPadRecovered) {
-        if (!route.accessCardRecovered) {
+        if (!HasAccessCardRecovered(profile)) {
             return "Bunker Passage";
         }
         return route.prePipPadClueCount >= 2 ? "Pip-Pad Recovery" : "Bunker Passage";
     }
     if (!profile.story.archiveRecovered) {
-        return route.earlyVerminEncounterResolved ? "Archive Sync" : "Archive Corridor";
+        return ArchiveCorridorCleared(profile) ? "Archive Sync" : "Archive Corridor";
     }
-    if (!route.bt72Restored) {
+    if (!Bt72Restored(profile)) {
         return "BT-72 Restoration";
     }
     if (!profile.story.tankLinked) {
         return "BT-72 Sync Link";
     }
-    if (!route.clearanceBlueprintRecovered || !route.clearanceModuleInstalled) {
+    if (!ClearanceBlueprintRecovered(profile) || !ClearanceModuleInstalled(profile)) {
         return "Clearance Module";
     }
     if (!profile.story.exitedBunker) {
         return "Outer Bulkhead";
     }
-    if (!route.surfaceArrivalReached) {
+    if (!SurfaceArrivalReached(profile)) {
         return "Surface Arrival";
     }
     if (!profile.story.outerRoadCleared) {
         return "Heavy Clearance";
     }
-    if (!route.firstTankCombatResolved) {
+    if (!FirstTankCombatResolved(profile)) {
         return "First Tank Combat";
     }
-    if (!route.firstServicePerformed) {
+    if (!FirstServicePerformed(profile)) {
         return "First Service Halt";
     }
-    if (!route.firstRecoveryNodeActivated) {
+    if (!FirstRecoveryNodeActivated(profile)) {
         return "Recovery Node";
     }
-    if (!route.debriefSummaryViewed) {
+    if (!DebriefSummaryViewed(profile)) {
         return "Debrief";
     }
     return "Industrial Expansion";
@@ -153,7 +229,7 @@ std::string CurrentStoryObjectivePreview(const SessionProfile& profile) {
         return "Wake from the cryo capsule and stabilize your first bunker route.";
     }
     if (!profile.story.pipPadRecovered) {
-        if (!route.accessCardRecovered) {
+        if (!HasAccessCardRecovered(profile)) {
             return "Recover a bunker access card and trace the paper trail to the missing Pip-Pad.";
         }
         if (route.prePipPadClueCount < 2) {
@@ -166,7 +242,7 @@ std::string CurrentStoryObjectivePreview(const SessionProfile& profile) {
             ? "Sync the archive and pull the missing personnel trail into the Pip-Pad."
             : "Clear the archive corridor and put down the first vermin nest.";
     }
-    if (!route.bt72Restored) {
+    if (!Bt72Restored(profile)) {
         if (!HasBt72RestorationPrerequisites(profile)) {
             return "Survey the BT-72 hull, recover the starter core, and decode the service notes.";
         }
@@ -178,34 +254,34 @@ std::string CurrentStoryObjectivePreview(const SessionProfile& profile) {
     if (!profile.story.tankLinked) {
         return "Climb into the BT-72 cockpit and complete the first sync link.";
     }
-    if (!route.clearanceBlueprintRecovered) {
+    if (!ClearanceBlueprintRecovered(profile)) {
         return "Decode the clearance module blueprint from the maintenance echo.";
     }
-    if (!route.clearanceMaterialsRecovered) {
+    if (!ClearanceMaterialsRecovered(profile)) {
         return "Recover the clearance-module parts from the bucket rack.";
     }
-    if (!route.clearanceModuleInstalled) {
+    if (!ClearanceModuleInstalled(profile)) {
         return "Install the BT-72 clearance module and prep for heavy debris work.";
     }
     if (!profile.story.exitedBunker) {
         return "Cycle the outer bulkhead and push BT-72 into the blocked corridor.";
     }
-    if (!route.surfaceArrivalReached) {
+    if (!SurfaceArrivalReached(profile)) {
         return "Push BT-72 through the lift route and establish the first exterior foothold.";
     }
     if (!profile.story.outerRoadCleared) {
         return "Use the clearance module to break the outer debris barrier.";
     }
-    if (!route.firstTankCombatResolved) {
+    if (!FirstTankCombatResolved(profile)) {
         return "Hold the route through BT-72's first real combat contact.";
     }
-    if (!route.firstServicePerformed) {
+    if (!FirstServicePerformed(profile)) {
         return "Take a first service/rest stop before pushing the recovery node.";
     }
-    if (!route.firstRecoveryNodeActivated) {
+    if (!FirstRecoveryNodeActivated(profile)) {
         return "Sync the first recovery node and prove the route changed the world.";
     }
-    if (!route.debriefSummaryViewed) {
+    if (!DebriefSummaryViewed(profile)) {
         return "Return for debrief, summarize the route, and pull the next recovery hook.";
     }
     const auto* worldState = SelectedWorldState(profile);
@@ -221,7 +297,7 @@ std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEra
         return "Wake from the cryo capsule and stabilize the bunker route.";
     }
     if (!profile.story.pipPadRecovered) {
-        if (!route.accessCardRecovered) {
+        if (!HasAccessCardRecovered(profile)) {
             return "Recover a bunker access card and unlock the route toward the missing Pip-Pad.";
         }
         if (route.prePipPadClueCount < 2) {
@@ -235,7 +311,7 @@ std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEra
     if (!profile.story.archiveRecovered) {
         return "Read the archive terminal and reconstruct what happened in Shelter 17.";
     }
-    if (!route.bt72Restored) {
+    if (!Bt72Restored(profile)) {
         if (!HasBt72RestorationPrerequisites(profile)) {
             return "Survey the BT-72 hull, recover the starter core, and decode the service notes.";
         }
@@ -247,19 +323,19 @@ std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEra
     if (!profile.story.tankLinked) {
         return "Reach the garage anchor and establish the BT-72 cockpit link.";
     }
-    if (!route.clearanceBlueprintRecovered) {
+    if (!ClearanceBlueprintRecovered(profile)) {
         return "Recover the clearance module blueprint from the maintenance echo.";
     }
-    if (!route.clearanceMaterialsRecovered) {
+    if (!ClearanceMaterialsRecovered(profile)) {
         return "Recover the clearance-module parts from the bucket rack.";
     }
-    if (!route.clearanceModuleInstalled) {
+    if (!ClearanceModuleInstalled(profile)) {
         return "Install the BT-72 clearance module before opening the outer route.";
     }
     if (!profile.story.exitedBunker) {
         return "Open the outer bulkhead and move BT-72 into the blocked recovery corridor.";
     }
-    if (!route.surfaceArrivalReached) {
+    if (!SurfaceArrivalReached(profile)) {
         return "Advance through the lift route and secure the first surface arrival point.";
     }
     if (!profile.story.outerRoadCleared) {
@@ -268,13 +344,13 @@ std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEra
     if (!FirstTankCombatResolved(profile, staticEraser)) {
         return "Destroy the hostile contact guarding the first recovery node.";
     }
-    if (!route.firstServicePerformed) {
+    if (!FirstServicePerformed(profile)) {
         return "Run a first service cycle before pushing the relay node.";
     }
-    if (!route.firstRecoveryNodeActivated) {
+    if (!FirstRecoveryNodeActivated(profile)) {
         return "Sync the relay terminal and recover the reconstruction schematics.";
     }
-    if (!route.debriefSummaryViewed) {
+    if (!DebriefSummaryViewed(profile)) {
         return "Return to the debrief console inside Shelter 17.";
     }
     const auto* worldState = SelectedWorldState(profile);
@@ -285,38 +361,37 @@ std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEra
 }
 
 std::vector<StoryRouteEntry> BuildBt72RestorationRoute(const SessionProfile& profile) {
-    const auto& route = profile.firstPlayableRoute;
     return {
-        {"Inspect the BT-72 hull berth.", route.bt72HullInspected},
-        {"Recover the starter core from the bunker rack.", route.bt72CoreRecovered},
-        {"Decode BT-72 service notes and holo-records.", route.bt72ServiceNotesRecovered},
-        {"Gather a power cell, repair patch, and hull plate.", route.bt72Restored || HasBt72RestorationMaterials(profile)},
-        {"Restore BT-72 to partial operating condition.", route.bt72Restored},
+        {"Inspect the BT-72 hull berth.", Bt72HullInspected(profile)},
+        {"Recover the starter core from the bunker rack.", Bt72CoreRecovered(profile)},
+        {"Decode BT-72 service notes and holo-records.", Bt72ServiceNotesRecovered(profile)},
+        {"Gather a power cell, repair patch, and hull plate.", Bt72Restored(profile) || HasBt72RestorationMaterials(profile)},
+        {"Restore BT-72 to partial operating condition.", Bt72Restored(profile)},
         {"Complete the first cockpit sync link.", profile.story.tankLinked},
-        {"Recover the clearance-module blueprint.", route.clearanceBlueprintRecovered},
-        {"Recover bucket-rack parts for the clearance module.", route.clearanceMaterialsRecovered},
-        {"Install the BT-72 clearance module.", route.clearanceModuleInstalled},
+        {"Recover the clearance-module blueprint.", ClearanceBlueprintRecovered(profile)},
+        {"Recover bucket-rack parts for the clearance module.", ClearanceMaterialsRecovered(profile)},
+        {"Install the BT-72 clearance module.", ClearanceModuleInstalled(profile)},
     };
 }
 
 std::vector<StoryRouteEntry> BuildFirstPlayableRouteSlice(const SessionProfile& profile) {
     return {
         {"Wake from cryostasis.", profile.story.awakenedFromCryo},
-        {"Recover the bunker access card and paper trail.", profile.firstPlayableRoute.accessCardRecovered &&
+        {"Recover the bunker access card and paper trail.", HasAccessCardRecovered(profile) &&
                 profile.firstPlayableRoute.prePipPadClueCount >= 2},
         {"Recover the missing Pip-Pad.", profile.story.pipPadRecovered},
         {"Sync the archive corridor and clear the first vermin gate.", profile.story.archiveRecovered &&
-                profile.firstPlayableRoute.earlyVerminEncounterResolved},
-        {"Restore BT-72 from bunker salvage.", profile.firstPlayableRoute.bt72Restored},
+                ArchiveCorridorCleared(profile)},
+        {"Restore BT-72 from bunker salvage.", Bt72Restored(profile)},
         {"Establish the first BT-72 sync link.", profile.story.tankLinked},
-        {"Install the BT-72 clearance module.", profile.firstPlayableRoute.clearanceModuleInstalled},
+        {"Install the BT-72 clearance module.", ClearanceModuleInstalled(profile)},
         {"Open the outer bulkhead.", profile.story.exitedBunker},
-        {"Reach the first surface arrival foothold.", profile.firstPlayableRoute.surfaceArrivalReached},
+        {"Reach the first surface arrival foothold.", SurfaceArrivalReached(profile)},
         {"Clear the outer debris barrier.", profile.story.outerRoadCleared},
-        {"Resolve the first BT-72 combat contact.", profile.firstPlayableRoute.firstTankCombatResolved},
-        {"Take the first service/rest halt.", profile.firstPlayableRoute.firstServicePerformed},
-        {"Sync the first recovery node.", profile.firstPlayableRoute.firstRecoveryNodeActivated},
-        {"Upload the debrief summary.", profile.firstPlayableRoute.debriefSummaryViewed},
+        {"Resolve the first BT-72 combat contact.", FirstTankCombatResolved(profile)},
+        {"Take the first service/rest halt.", FirstServicePerformed(profile)},
+        {"Sync the first recovery node.", FirstRecoveryNodeActivated(profile)},
+        {"Upload the debrief summary.", DebriefSummaryViewed(profile)},
     };
 }
 

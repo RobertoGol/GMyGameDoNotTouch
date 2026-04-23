@@ -319,6 +319,18 @@
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /Zm300 /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\GameRuntime.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\GameRuntime.cpp",
+  "file": "D:/Projects/Game_Project/src/GameRuntime.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/GameRuntime.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /Zm300 /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\GameRuntimePipPad.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\GameRuntimePipPad.cpp",
+  "file": "D:/Projects/Game_Project/src/GameRuntimePipPad.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/GameRuntimePipPad.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
   "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /Zm300 /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\PrefabLibrary.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\PrefabLibrary.cpp",
   "file": "D:/Projects/Game_Project/src/PrefabLibrary.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/PrefabLibrary.cpp.obj"
@@ -349,9 +361,27 @@
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /Zm300 /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\Progression.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\Progression.cpp",
+  "file": "D:/Projects/Game_Project/src/Progression.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/Progression.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /Zm300 /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\Renderer.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\Renderer.cpp",
+  "file": "D:/Projects/Game_Project/src/Renderer.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/Renderer.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
   "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /Zm300 /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\SessionProfiles.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\SessionProfiles.cpp",
   "file": "D:/Projects/Game_Project/src/SessionProfiles.cpp",
   "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/SessionProfiles.cpp.obj"
+},
+{
+  "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",
+  "command": "D:\\Programm\\MICROS~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -ID:\\Projects\\Game_Project\\include -ID:\\Projects\\Game_Project\\external -ID:\\Projects\\Game_Project\\external\\glfw\\include -ID:\\Projects\\Game_Project\\external\\imgui -ID:\\Projects\\Game_Project\\external\\imgui\\backends /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /Zm300 /FoCMakeFiles\\BunkerSmokeChecks.dir\\src\\SkillSystem.cpp.obj /FdCMakeFiles\\BunkerSmokeChecks.dir\\ /FS -c D:\\Projects\\Game_Project\\src\\SkillSystem.cpp",
+  "file": "D:/Projects/Game_Project/src/SkillSystem.cpp",
+  "output": "D:/Projects/Game_Project/build_verify_ninja_fresh/CMakeFiles/BunkerSmokeChecks.dir/src/SkillSystem.cpp.obj"
 },
 {
   "directory": "D:/Projects/Game_Project/build_verify_ninja_fresh",

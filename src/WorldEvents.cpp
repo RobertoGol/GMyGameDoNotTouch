@@ -19,6 +19,13 @@ bool IsAtSurfaceArrivalAnchor(const World& world, const PlayerState& player) {
     return player.x >= 18.0f;
 }
 
+bool IsAtFirstCombatAnchor(const World& world, const PlayerState& player) {
+    if (const auto* firstContact = world.FindObjectByRegistryId("[%enemy_ghoul_0001]"); firstContact != nullptr) {
+        return IsNear(player, firstContact->x, firstContact->y, 6.5f);
+    }
+    return player.x >= 17.0f;
+}
+
 }  // namespace
 
 void ProcessScriptedWorldEvents(const World& world, const PlayerState& player, SessionProfile& profile, GameState& gameState) {
@@ -55,6 +62,17 @@ void ProcessScriptedWorldEvents(const World& world, const PlayerState& player, S
         profile.firstPlayableRoute.surfaceArrivalReached = true;
         gameState.zoneEventExterior = true;
         gameState.lastEvent = "SURFACE ARRIVAL: 'BT-72 reached the first exterior foothold. Skyline active, debris barrier ahead, and the first hostile contact is forming beyond the lift route.'";
+        return;
+    }
+
+    if (profile.story.outerRoadCleared &&
+        !profile.firstPlayableRoute.firstTankCombatResolved &&
+        !gameState.zoneEventFirstCombat &&
+        IsAtFirstCombatAnchor(world, player)) {
+        gameState.zoneEventFirstCombat = true;
+        gameState.lastEvent = player.insideTank
+            ? "CONTACT: 'Outer Ghoul charging the cleared lane. Hold BT-72 through the rush, then take one service halt before syncing the relay.'"
+            : "CONTACT: 'Outer Ghoul detected beyond the cleared debris lane. BT-72 is the intended answer for the first surface contact.'";
         return;
     }
 

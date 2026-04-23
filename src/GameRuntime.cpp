@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -44,6 +45,204 @@ const TankModuleSlot* FindTankModule(const SessionProfile& profile, TankModuleSl
         }
     }
     return nullptr;
+}
+
+std::string AsciiLower(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+
+void AppendObjectiveHint(std::string& message, const std::string& objective) {
+    if (!objective.empty() && message.find(objective) == std::string::npos) {
+        message += " Next: " + objective;
+    }
+}
+
+void AppendObjectivePreviewHint(std::string& message, const SessionProfile& profile) {
+    AppendObjectiveHint(message, CurrentStoryObjectivePreview(profile));
+}
+
+void AppendObjectiveRuntimeHint(std::string& message, const SessionProfile& profile, const StaticEraser& staticEraser) {
+    AppendObjectiveHint(message, CurrentStoryObjective(profile, staticEraser));
+}
+
+enum class HostileRole {
+    VerminRush,
+    GhoulRush,
+    HumanTactical,
+    RobotControl,
+    Unknown
+};
+
+HostileRole ClassifyHostileRole(const MapObject& object) {
+    const std::string normalizedTag = std::string(NormalizeGameplayDescriptorTag(object.scriptTag));
+    const std::string registryIdLower = AsciiLower(object.registryId);
+    const std::string displayNameLower = AsciiLower(object.displayName);
+    if (normalizedTag == "vermin_rush" || registryIdLower.find("laska") != std::string::npos) {
+        return HostileRole::VerminRush;
+    }
+    if (normalizedTag == "ghoul_rush" ||
+        registryIdLower.find("ghoul") != std::string::npos ||
+        displayNameLower.find("ghoul") != std::string::npos) {
+        return HostileRole::GhoulRush;
+    }
+    if (normalizedTag == "human_tactical" ||
+        registryIdLower.find("raider") != std::string::npos ||
+        registryIdLower.find("bandit") != std::string::npos ||
+        displayNameLower.find("rifleman") != std::string::npos ||
+        displayNameLower.find("raider") != std::string::npos) {
+        return HostileRole::HumanTactical;
+    }
+    if (normalizedTag == "robot_control" ||
+        registryIdLower.find("robot") != std::string::npos ||
+        registryIdLower.find("drone") != std::string::npos ||
+        registryIdLower.find("sentinel") != std::string::npos ||
+        displayNameLower.find("robot") != std::string::npos ||
+        displayNameLower.find("drone") != std::string::npos ||
+        displayNameLower.find("sentinel") != std::string::npos) {
+        return HostileRole::RobotControl;
+    }
+    return HostileRole::Unknown;
+}
+
+float HostileAlertRadius(HostileRole role, bool insideTank) {
+    switch (role) {
+        case HostileRole::VerminRush: return insideTank ? 6.0f : 4.8f;
+        case HostileRole::GhoulRush: return insideTank ? 8.2f : 6.6f;
+        case HostileRole::HumanTactical: return insideTank ? 9.0f : 7.4f;
+        case HostileRole::RobotControl: return insideTank ? 10.0f : 8.6f;
+        case HostileRole::Unknown:
+        default: return insideTank ? 7.5f : 6.0f;
+    }
+}
+
+float HostileAdvanceSpeed(HostileRole role) {
+    switch (role) {
+        case HostileRole::VerminRush: return 2.2f;
+        case HostileRole::GhoulRush: return 1.6f;
+        case HostileRole::HumanTactical: return 1.15f;
+        case HostileRole::RobotControl: return 0.95f;
+        case HostileRole::Unknown:
+        default: return 1.5f;
+    }
+}
+
+float HostileAttackRange(HostileRole role, bool insideTank) {
+    switch (role) {
+        case HostileRole::VerminRush: return insideTank ? 1.1f : 0.95f;
+        case HostileRole::GhoulRush: return insideTank ? 1.55f : 1.35f;
+        case HostileRole::HumanTactical: return insideTank ? 3.2f : 2.8f;
+        case HostileRole::RobotControl: return insideTank ? 4.2f : 3.6f;
+        case HostileRole::Unknown:
+        default: return insideTank ? 1.4f : 1.2f;
+    }
+}
+
+float HostilePreferredMinRange(HostileRole role) {
+    switch (role) {
+        case HostileRole::HumanTactical: return 2.6f;
+        case HostileRole::RobotControl: return 3.4f;
+        default: return 0.0f;
+    }
+}
+
+float HostilePreferredMaxRange(HostileRole role) {
+    switch (role) {
+        case HostileRole::HumanTactical: return 3.8f;
+        case HostileRole::RobotControl: return 5.4f;
+        default: return 0.0f;
+    }
+}
+
+float HostileAttackCooldown(HostileRole role) {
+    switch (role) {
+        case HostileRole::VerminRush: return 0.9f;
+        case HostileRole::GhoulRush: return 1.2f;
+        case HostileRole::HumanTactical: return 1.4f;
+        case HostileRole::RobotControl: return 1.6f;
+        case HostileRole::Unknown:
+        default: return 1.1f;
+    }
+}
+
+float HostileTankDamage(HostileRole role) {
+    switch (role) {
+        case HostileRole::VerminRush: return 5.0f;
+        case HostileRole::GhoulRush: return 8.0f;
+        case HostileRole::HumanTactical: return 6.5f;
+        case HostileRole::RobotControl: return 7.0f;
+        case HostileRole::Unknown:
+        default: return 5.5f;
+    }
+}
+
+float HostileFootDamage(HostileRole role, const SessionProfile& profile, const GameState& gameState) {
+    const float endurance = static_cast<float>(EffectiveStatValue(profile, gameState, 'E'));
+    switch (role) {
+        case HostileRole::VerminRush: return std::max(3.5f, 9.5f - endurance * 0.55f);
+        case HostileRole::GhoulRush: return std::max(4.5f, 11.5f - endurance * 0.55f);
+        case HostileRole::HumanTactical: return std::max(5.0f, 10.0f - endurance * 0.45f);
+        case HostileRole::RobotControl: return std::max(5.5f, 10.5f - endurance * 0.35f);
+        case HostileRole::Unknown:
+        default: return std::max(4.0f, 10.5f - endurance * 0.5f);
+    }
+}
+
+float HostileMaxHealthHint(HostileRole role) {
+    switch (role) {
+        case HostileRole::VerminRush: return 35.0f;
+        case HostileRole::GhoulRush: return 55.0f;
+        case HostileRole::HumanTactical: return 48.0f;
+        case HostileRole::RobotControl: return 72.0f;
+        case HostileRole::Unknown:
+        default: return 50.0f;
+    }
+}
+
+float HostileLateralBias(const MapObject& object) {
+    if (!object.registryId.empty() && (static_cast<unsigned char>(object.registryId.back()) % 2 == 0)) {
+        return 1.0f;
+    }
+    return -1.0f;
+}
+
+std::string DescribeHostileImpact(const MapObject& object, HostileRole role, bool insideTank, bool guarded) {
+    if (insideTank) {
+        switch (role) {
+            case HostileRole::VerminRush:
+                return guarded
+                    ? object.displayName + " clawed across the armor, but BT-72 shed most of the impact."
+                    : object.displayName + " clawed across BT-72's hull.";
+            case HostileRole::GhoulRush:
+                return guarded
+                    ? object.displayName + " slammed the hull, but BT-72 bled the impact through armor."
+                    : object.displayName + " slammed into BT-72's hull.";
+            case HostileRole::HumanTactical:
+                return guarded
+                    ? object.displayName + " peppered the hull, but the armor package held the burst."
+                    : object.displayName + " peppered BT-72 with suppressive fire.";
+            case HostileRole::RobotControl:
+                return guarded
+                    ? object.displayName + " scored the hull with control-zone fire, but the armor package held."
+                    : object.displayName + " raked BT-72 with control-zone fire.";
+            case HostileRole::Unknown:
+            default:
+                return guarded
+                    ? object.displayName + " clipped the tank, but the armor package absorbed most of it."
+                    : object.displayName + " scraped the tank hull.";
+        }
+    }
+
+    switch (role) {
+        case HostileRole::VerminRush: return object.displayName + " lunged at the operator.";
+        case HostileRole::GhoulRush: return object.displayName + " crashed into the operator.";
+        case HostileRole::HumanTactical: return object.displayName + " tagged the operator with a close burst.";
+        case HostileRole::RobotControl: return object.displayName + " burned across the operator's cover line.";
+        case HostileRole::Unknown:
+        default: return object.displayName + " hit the operator.";
+    }
 }
 
 bool TankUsesRamShield(const SessionProfile& profile) {
@@ -633,6 +832,7 @@ bool TryRunFieldWorkbench(PlayerState& player,
     if (profile.firstPlayableRoute.firstTankCombatResolved && !profile.firstPlayableRoute.firstServicePerformed) {
         profile.firstPlayableRoute.firstServicePerformed = true;
         gameState.lastEvent += " First service halt logged for the route.";
+        AppendObjectivePreviewHint(gameState.lastEvent, profile);
     }
     if (!recipeEvent.empty()) {
         gameState.lastEvent += " " + recipeEvent;
@@ -2055,7 +2255,8 @@ void UpdateRouteContamination(World& world,
                 true,
                 true,
                 false,
-                {}
+                {},
+                "ghoul_rush"
             });
         }
         gameState.lastEvent = "Outer route contamination surged. Ether barricades and fresh nests are reforming beyond the bulkhead.";
@@ -2751,15 +2952,33 @@ void UpdateHostiles(World& world,
         const float distanceSq = (dx * dx) + (dy * dy);
         const float distance = std::sqrt(distanceSq);
 
-        if (distance > 0.2f && distance < 8.0f) {
-            const float step = dt * (object.registryId == "[%enemy_ghoul_0001]" ? 1.4f : 2.0f);
-            object.x += (dx / distance) * step;
-            object.y += (dy / distance) * step;
+        const HostileRole role = ClassifyHostileRole(object);
+        const float alertRadius = HostileAlertRadius(role, player.insideTank);
+        if (distance > 0.2f && distance < alertRadius) {
+            const float step = dt * HostileAdvanceSpeed(role);
+            const float preferredMinRange = HostilePreferredMinRange(role);
+            const float preferredMaxRange = HostilePreferredMaxRange(role);
+            const bool usesStandoffMovement = preferredMaxRange > preferredMinRange;
+            const bool shouldRetreat =
+                role == HostileRole::HumanTactical &&
+                object.health <= HostileMaxHealthHint(role) * 0.4f &&
+                distance < preferredMaxRange + 0.5f;
+            if (usesStandoffMovement && (distance < preferredMinRange || shouldRetreat)) {
+                object.x -= (dx / distance) * step;
+                object.y -= (dy / distance) * step;
+            } else if (usesStandoffMovement && distance <= preferredMaxRange) {
+                const float bias = HostileLateralBias(object);
+                object.x += (-dy / distance) * step * 0.7f * bias;
+                object.y += (dx / distance) * step * 0.7f * bias;
+            } else {
+                object.x += (dx / distance) * step;
+                object.y += (dy / distance) * step;
+            }
         }
 
-        if (distance < 1.4f && gameState.damageCooldown <= 0.0f && profile.character.hp > 0.0f) {
+        if (distance < HostileAttackRange(role, player.insideTank) && gameState.damageCooldown <= 0.0f && profile.character.hp > 0.0f) {
             if (player.insideTank) {
-                float tankDamage = object.registryId == "[%enemy_ghoul_0001]" ? 8.0f : 5.0f;
+                float tankDamage = HostileTankDamage(role);
                 if (TankHasBulwarkSync(profile)) {
                     tankDamage *= 0.82f;
                 }
@@ -2769,15 +2988,17 @@ void UpdateHostiles(World& world,
                 profile.partnerTank.damage.hull = std::max(0.0f, profile.partnerTank.damage.hull - tankDamage);
                 profile.partnerTank.damage.sensors = std::max(0.0f, profile.partnerTank.damage.sensors - (tankDamage * 0.35f));
                 profile.partnerTank.damage.cockpit = std::max(0.0f, profile.partnerTank.damage.cockpit - (tankDamage * 0.2f));
-                gameState.lastEvent = TankHasBulwarkSync(profile) || TankUsesRamShield(profile)
-                    ? object.displayName + " scraped the tank hull, but Bulwark Sync absorbed part of the impact."
-                    : object.displayName + " scraped the tank hull.";
+                gameState.lastEvent = DescribeHostileImpact(
+                    object,
+                    role,
+                    true,
+                    TankHasBulwarkSync(profile) || TankUsesRamShield(profile));
             } else {
-                const float incomingDamage = std::max(4.0f, 11.0f - static_cast<float>(EffectiveStatValue(profile, gameState, 'E')) * 0.6f);
+                const float incomingDamage = HostileFootDamage(role, profile, gameState);
                 profile.character.hp = std::max(0.0f, profile.character.hp - incomingDamage);
-                gameState.lastEvent = object.displayName + " hit the operator.";
+                gameState.lastEvent = DescribeHostileImpact(object, role, false, false);
             }
-            gameState.damageCooldown = 1.2f;
+            gameState.damageCooldown = HostileAttackCooldown(role);
             gameState.damageFlashTimer = 0.45f;
         }
     }
@@ -3266,6 +3487,7 @@ void HandleInteraction(const MapObject* nearest,
             if (!skillEvent.empty()) {
                 gameState.lastEvent += " " + skillEvent;
             }
+            AppendObjectiveRuntimeHint(gameState.lastEvent, profile, staticEraser);
         } else {
             gameState.lastEvent = "Relay packet already copied to the Pip-Pad.";
         }
@@ -3293,6 +3515,7 @@ void HandleInteraction(const MapObject* nearest,
             if (!skillEvent.empty()) {
                 gameState.lastEvent += " " + skillEvent;
             }
+            AppendObjectiveRuntimeHint(gameState.lastEvent, profile, staticEraser);
         } else {
             gameState.lastEvent = "Debrief log already archived. Shelter 17 recovery planning remains on file.";
         }
@@ -3412,6 +3635,7 @@ void HandleInteraction(const MapObject* nearest,
                 if (profile.firstPlayableRoute.firstTankCombatResolved && !profile.firstPlayableRoute.firstServicePerformed) {
                     profile.firstPlayableRoute.firstServicePerformed = true;
                     gameState.lastEvent += " First service halt logged for the route.";
+                    AppendObjectivePreviewHint(gameState.lastEvent, profile);
                 }
                 if (profile.doctrine == ShelterDoctrine::Industry) {
                     gameState.lastEvent += " Industry doctrine amplified service throughput.";

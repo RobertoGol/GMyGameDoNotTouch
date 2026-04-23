@@ -104,6 +104,5 @@
 
 ## 5. Следующий рабочий пакет
 
-1. first combat / first service / debrief presentation pass
-2. `BT-72` combat feel / enemy role readability pass
-3. recovery-node-to-midgame handoff pass
+1. `BT-72` combat feel / enemy role readability pass
+2. recovery-node-to-midgame handoff pass
