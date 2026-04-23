@@ -262,6 +262,7 @@ Legacy reactive tech stack не является отдельной игрой �
 - `tank_service` как реальный `BT-72` payoff;
 - relay-credit progression helpers;
 - post-debrief recovery handoff summary в одном состоянии истины для story/runtime/launcher;
+- post-debrief backbone readability больше не висит как разрозненный текстовый hint: shared `RecoveryBackboneStatus` слой теперь отдает stage/status/payoff в runtime, Pip-Pad и launcher, а debrief/route-event copy подхватывает ту же стадию backbone;
 - lightweight route-event layer поверх route/recovery state с persistence, cooldown и smoke coverage;
 - lightweight route-event layer больше не висит как "почти готово": он теперь живет как offered/active/success/failed/expired/cooldown state machine, остается locked до завершения onboarding и route handoff, и включает редкий merchant-window incident через Pip-Pad/service glue без постоянных торговых точек на карте;
 - early `BT-72 / RPG` weight pass: `SPECIAL`, passive skills, crew coordination и service doctrine теперь реально влияют на first combat / gunner loop / first service;

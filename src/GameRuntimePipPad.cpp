@@ -900,6 +900,7 @@ void DrawPipPadServicesTab(const World& world, const PlayerState& player, Sessio
     const bool hasSessionState = LoadLanlineSessionState(sessionState);
     const auto nowUnix = static_cast<std::int64_t>(std::time(nullptr));
     const auto servicesUnlock = BuildServicesUnlockState(profile, currentWorldFieldState);
+    const auto backboneStatus = CurrentRecoveryBackboneStatus(profile);
     SyncLanlineServicesPresence(lanlineServices, hasSessionState ? &sessionState : nullptr, servicesUnlock);
     AdvanceLanlineSupportOrders(lanlineServices, nowUnix);
     gameState.supportTerminalNearby = IsNearTaggedObject(world, player.x, player.y, "lanline_service_hub", 4.0f);
@@ -913,6 +914,9 @@ void DrawPipPadServicesTab(const World& world, const PlayerState& player, Sessio
     ImGui::BulletText("Medical support nearby: %s", gameState.medicalSupportNearby ? "yes" : "no");
     ImGui::BulletText("Fey schedule visible: %s", gameState.feyRingScheduleVisible ? "yes" : "no");
     ImGui::BulletText("Route event layer: %s", ActiveRouteEventSummary(profile).c_str());
+    ImGui::BulletText("Industrial backbone: %s", backboneStatus.stage.c_str());
+    ImGui::TextWrapped("Backbone status: %s", backboneStatus.status.c_str());
+    ImGui::TextWrapped("Backbone payoff: %s", backboneStatus.payoff.c_str());
     const int deliveredOrders = CountSupportOrdersInState(lanlineServices, SupportOrderState::Delivered);
     const bool canClaimDeliveredOrders =
         deliveredOrders > 0 &&

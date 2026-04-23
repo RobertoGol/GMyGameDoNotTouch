@@ -203,6 +203,213 @@ std::string CurrentIndustrialObjective(const SessionProfile& profile, const Worl
     return "Water reclaimer online. Shelter 17 now has a stable recovery backbone; expand deeper into the inner spur and wider factory belt.";
 }
 
+void AppendBackboneNodeLabel(std::vector<std::string>& labels, bool active, std::string_view label) {
+    if (active) {
+        labels.emplace_back(label);
+    }
+}
+
+std::string CompactBackboneNodeList(const std::vector<std::string>& labels) {
+    if (labels.empty()) {
+        return "none";
+    }
+    if (labels.size() == 1) {
+        return labels.front();
+    }
+    if (labels.size() == 2) {
+        return labels[0] + ", " + labels[1];
+    }
+    if (labels.size() == 3) {
+        return labels[0] + ", " + labels[1] + ", " + labels[2];
+    }
+    return labels[0] + ", " + labels[1] + ", " + labels[2] + " +" + std::to_string(labels.size() - 3) + " more";
+}
+
+std::string CurrentBackboneNextNodeLabel(const SessionProfile& profile, const WorldFieldState& worldState) {
+    if (!IsRailFreightOperational(profile, worldState)) {
+        return "rail freight";
+    }
+    if (!IsOrbitalUplinkOperational(profile, worldState)) {
+        return "orbital uplink";
+    }
+    if (!IsRailFortressOperational(profile, worldState)) {
+        return "Rail Fortress";
+    }
+    if (!IsRecoveryFabricatorOperational(profile, worldState)) {
+        return "Recovery Fabricator";
+    }
+    if (!worldState.industrialGateUnlocked) {
+        return "industrial gate";
+    }
+    if (!IsIndustrialSurveyOperational(worldState)) {
+        return "industrial survey";
+    }
+    if (!IsIndustrialOutpostOperational(worldState)) {
+        return "inner spur outpost";
+    }
+    if (!IsAssemblyCellOperational(worldState)) {
+        return "assembly cell";
+    }
+    if (!IsFoundryLineOperational(worldState)) {
+        return "foundry line";
+    }
+    if (!IsReactorYardOperational(worldState)) {
+        return "reactor yard";
+    }
+    if (!IsCapacitorBankOperational(worldState)) {
+        return "capacitor bank";
+    }
+    if (!IsRelaySubstationOperational(worldState)) {
+        return "relay substation";
+    }
+    if (!IsServiceBayOperational(worldState)) {
+        return "service bay";
+    }
+    if (!IsWaterReclaimerOperational(worldState)) {
+        return "water reclaimer";
+    }
+    return "deeper factory belt";
+}
+
+std::string CurrentBackbonePayoff(const SessionProfile& profile, const WorldFieldState& worldState) {
+    if (!IsRailFreightOperational(profile, worldState)) {
+        return "Shelter 17 is still living off the first-route salvage and has no heavy logistics flow yet.";
+    }
+    if (!IsOrbitalUplinkOperational(profile, worldState)) {
+        return "Heavy salvage is moving, but long-range recovery scans still end at the starter corridor.";
+    }
+    if (!IsRailFortressOperational(profile, worldState)) {
+        return "Long-range scans are live, but the restored spur still lacks hardened control.";
+    }
+    if (!IsRecoveryFabricatorOperational(profile, worldState)) {
+        return "The rail spur is secured, but salvage is not yet turning into field stock.";
+    }
+    if (!worldState.industrialGateUnlocked) {
+        return "Shelter 17 can refine salvage into supplies, but the inner spur is still sealed.";
+    }
+    if (!IsIndustrialSurveyOperational(worldState)) {
+        return "The inner spur is open, but it is still unmapped and risky to push.";
+    }
+    if (!IsIndustrialOutpostOperational(worldState)) {
+        return "Survey coverage is live, but there is no forward logistics foothold beyond the gate.";
+    }
+    if (!IsAssemblyCellOperational(worldState)) {
+        return "Forward logistics are live, but local industrial output has not started.";
+    }
+    if (!IsFoundryLineOperational(worldState)) {
+        return "Local assembly is online, but heavy plate output is still dark.";
+    }
+    if (!IsReactorYardOperational(worldState)) {
+        return "Heavy fabrication is back, but deep power remains unstable.";
+    }
+    if (!IsCapacitorBankOperational(worldState)) {
+        return "Deep power is online, but it still needs buffered stability.";
+    }
+    if (!IsRelaySubstationOperational(worldState)) {
+        return "The heavy grid is charged, but Shelter 17 is not yet receiving the return flow.";
+    }
+    if (!IsServiceBayOperational(worldState)) {
+        return "Inner spur power is flowing home, but deep BT-72 support is still missing.";
+    }
+    if (!IsWaterReclaimerOperational(worldState)) {
+        return "Deep BT-72 service is online, but frontier recovery still lacks long-range water support.";
+    }
+    return "Relay, service, and water loops are all online; Shelter 17 can now sustain a stable recovery backbone.";
+}
+
+RecoveryBackboneStatus CurrentRecoveryBackboneStatusForProfile(const SessionProfile& profile) {
+    if (!FirstRecoveryNodeActivated(profile)) {
+        return {
+            "Route Locked",
+            "First recovery sync is not online yet.",
+            "The first route still needs its relay payoff before industrial recovery can start."
+        };
+    }
+    if (!DebriefSummaryViewed(profile)) {
+        return {
+            "Debrief Pending",
+            "Recovery payoff is captured, but Shelter 17 has not archived the debrief yet.",
+            "Upload the debrief to turn the route payoff into honest rail, service, and industrial work."
+        };
+    }
+
+    const auto* worldState = SelectedWorldState(profile);
+    if (worldState == nullptr) {
+        return {
+            "Awaiting World State",
+            "Selected-world industrial state is not loaded yet.",
+            "Load the selected world to continue the post-debrief recovery backbone."
+        };
+    }
+
+    const bool railOperational = IsRailFreightOperational(profile, *worldState);
+    const bool orbitalOperational = IsOrbitalUplinkOperational(profile, *worldState);
+    const bool fortressOperational = IsRailFortressOperational(profile, *worldState);
+    const bool fabricatorOperational = IsRecoveryFabricatorOperational(profile, *worldState);
+    const bool surveyOperational = IsIndustrialSurveyOperational(*worldState);
+    const bool outpostOperational = IsIndustrialOutpostOperational(*worldState);
+    const bool assemblyOperational = IsAssemblyCellOperational(*worldState);
+    const bool foundryOperational = IsFoundryLineOperational(*worldState);
+    const bool reactorOperational = IsReactorYardOperational(*worldState);
+    const bool capacitorOperational = IsCapacitorBankOperational(*worldState);
+    const bool relayOperational = IsRelaySubstationOperational(*worldState);
+    const bool serviceOperational = IsServiceBayOperational(*worldState);
+    const bool waterOperational = IsWaterReclaimerOperational(*worldState);
+
+    std::vector<std::string> activeNodes;
+    AppendBackboneNodeLabel(activeNodes, railOperational, "rail freight");
+    AppendBackboneNodeLabel(activeNodes, orbitalOperational, "orbital uplink");
+    AppendBackboneNodeLabel(activeNodes, fortressOperational, "Rail Fortress");
+    AppendBackboneNodeLabel(activeNodes, fabricatorOperational, "Recovery Fabricator");
+    AppendBackboneNodeLabel(activeNodes, worldState->industrialGateUnlocked, "industrial gate");
+    AppendBackboneNodeLabel(activeNodes, surveyOperational, "industrial survey");
+    AppendBackboneNodeLabel(activeNodes, outpostOperational, "inner spur outpost");
+    AppendBackboneNodeLabel(activeNodes, assemblyOperational, "assembly cell");
+    AppendBackboneNodeLabel(activeNodes, foundryOperational, "foundry line");
+    AppendBackboneNodeLabel(activeNodes, reactorOperational, "reactor yard");
+    AppendBackboneNodeLabel(activeNodes, capacitorOperational, "capacitor bank");
+    AppendBackboneNodeLabel(activeNodes, relayOperational, "relay substation");
+    AppendBackboneNodeLabel(activeNodes, serviceOperational, "service bay");
+    AppendBackboneNodeLabel(activeNodes, waterOperational, "water reclaimer");
+
+    const int starterOnline =
+        (railOperational ? 1 : 0) +
+        (orbitalOperational ? 1 : 0) +
+        (fortressOperational ? 1 : 0) +
+        (fabricatorOperational ? 1 : 0);
+    const int innerOnline =
+        (worldState->industrialGateUnlocked ? 1 : 0) +
+        (surveyOperational ? 1 : 0) +
+        (outpostOperational ? 1 : 0) +
+        (assemblyOperational ? 1 : 0) +
+        (foundryOperational ? 1 : 0) +
+        (reactorOperational ? 1 : 0) +
+        (capacitorOperational ? 1 : 0) +
+        (relayOperational ? 1 : 0) +
+        (serviceOperational ? 1 : 0) +
+        (waterOperational ? 1 : 0);
+
+    RecoveryBackboneStatus status{};
+    if (IsStableRecoveryBackbone(profile, *worldState)) {
+        status.stage = "Backbone Stable";
+        status.status = "Recovery backbone " + std::to_string(starterOnline + innerOnline) +
+            "/14 online // live: " + CompactBackboneNodeList(activeNodes) +
+            " // next: deeper factory belt.";
+    } else if (worldState->industrialGateUnlocked || innerOnline > 0) {
+        status.stage = "Inner Spur Expansion";
+        status.status = "Inner spur " + std::to_string(innerOnline) +
+            "/10 online // live: " + CompactBackboneNodeList(activeNodes) +
+            " // next: " + CurrentBackboneNextNodeLabel(profile, *worldState) + ".";
+    } else {
+        status.stage = "Starter Backbone";
+        status.status = "Starter backbone " + std::to_string(starterOnline) +
+            "/4 online // live: " + CompactBackboneNodeList(activeNodes) +
+            " // next: " + CurrentBackboneNextNodeLabel(profile, *worldState) + ".";
+    }
+    status.payoff = CurrentBackbonePayoff(profile, *worldState);
+    return status;
+}
+
 }  // namespace
 
 bool HasLanlineServicesObjective(const SessionProfile& profile) {
@@ -623,6 +830,14 @@ std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile) {
 
 std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile, std::string_view worldReference) {
     return CurrentRecoveryHandoffSummaryForProfile(BuildWorldScopedProfile(profile, worldReference));
+}
+
+RecoveryBackboneStatus CurrentRecoveryBackboneStatus(const SessionProfile& profile) {
+    return CurrentRecoveryBackboneStatusForProfile(profile);
+}
+
+RecoveryBackboneStatus CurrentRecoveryBackboneStatus(const SessionProfile& profile, std::string_view worldReference) {
+    return CurrentRecoveryBackboneStatusForProfile(BuildWorldScopedProfile(profile, worldReference));
 }
 
 std::string ActiveRouteEventSummary(const SessionProfile& profile) {

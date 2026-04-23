@@ -103,5 +103,5 @@
 
 ## 5. Следующий рабочий пакет
 
-1. усиление `recovery / industry / logistics` readability после debrief, только как честное продолжение первого маршрута
-2. только точечный follow-up по `BT-72 / combat / RPG depth`, если он исправляет реальный vertical-slice blocker, а не открывает новую ветку
+1. только точечный follow-up по `BT-72 / combat / RPG depth`, если он исправляет реальный vertical-slice blocker, а не открывает новую ветку
+2. только smoke/build-driven hardening вокруг `recovery / industry / logistics` и `runtime / launcher / profile`, если всплывет реальный регресс, а не новая ветка

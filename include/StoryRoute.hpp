@@ -20,12 +20,20 @@ struct FirstPlayableRouteBeat {
     std::string payoff;
 };
 
+struct RecoveryBackboneStatus {
+    std::string stage;
+    std::string status;
+    std::string payoff;
+};
+
 std::string CurrentStoryCheckpointLabel(const SessionProfile& profile);
 std::string CurrentStoryObjectivePreview(const SessionProfile& profile);
 std::string CurrentStoryObjectivePreview(const SessionProfile& profile, std::string_view worldReference);
 std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEraser& staticEraser);
 std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile);
 std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile, std::string_view worldReference);
+RecoveryBackboneStatus CurrentRecoveryBackboneStatus(const SessionProfile& profile);
+RecoveryBackboneStatus CurrentRecoveryBackboneStatus(const SessionProfile& profile, std::string_view worldReference);
 std::string ActiveRouteEventSummary(const SessionProfile& profile);
 std::string ActiveRouteEventSummary(const SessionProfile& profile, std::string_view worldReference);
 FirstPlayableRouteBeat CurrentFirstPlayableRouteBeat(const SessionProfile& profile);

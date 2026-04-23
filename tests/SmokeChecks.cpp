@@ -550,6 +550,8 @@ bool RunDebriefIndustrialHandoffSmoke() {
             "debrief handoff smoke expected explicit next-objective cue") &&
         Check(gameState.lastEvent.find("rail depot") != std::string::npos,
             "debrief handoff smoke expected industrial rail-depot handoff") &&
+        Check(gameState.lastEvent.find("Backbone stage: Starter Backbone") != std::string::npos,
+            "debrief handoff smoke expected starter-backbone readability cue") &&
         Check(gameState.lastEvent.find("Route beat: Industrial Handoff") != std::string::npos,
             "debrief handoff smoke expected industrial-handoff beat cue");
 }
@@ -608,6 +610,121 @@ bool RunRecoveryHandoffSummarySmoke() {
     worldState->railFortressActive = true;
     return Check(bunker::CurrentRecoveryHandoffSummary(profile).find("Recovery Fabricator") != std::string::npos,
         "recovery handoff smoke expected fabricator after Rail Fortress");
+}
+
+bool RunRecoveryBackboneStatusSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.selectedWorld = "recovery_backbone_status_smoke.bwld";
+
+    const auto lockedStatus = bunker::CurrentRecoveryBackboneStatus(profile);
+    if (!Check(lockedStatus.stage == "Route Locked",
+            "recovery backbone smoke expected locked stage before relay sync")) {
+        return false;
+    }
+
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    profile.story.outerRoadCleared = true;
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+    profile.firstPlayableRoute.firstServicePerformed = true;
+    profile.story.relayRecovered = true;
+    profile.firstPlayableRoute.firstRecoveryNodeActivated = true;
+
+    const auto pendingStatus = bunker::CurrentRecoveryBackboneStatus(profile);
+    if (!Check(pendingStatus.stage == "Debrief Pending",
+            "recovery backbone smoke expected debrief-pending stage before debrief")) {
+        return false;
+    }
+
+    profile.story.returnedToBase = true;
+    profile.firstPlayableRoute.debriefSummaryViewed = true;
+    profile.fieldCheckpointKnown = true;
+    profile.fieldCheckpointWorld = profile.selectedWorld;
+    auto* worldState = bunker::FindWorldFieldState(profile, profile.selectedWorld, true);
+    if (!Check(worldState != nullptr, "recovery backbone smoke expected world field state")) {
+        return false;
+    }
+
+    const auto starterStatus = bunker::CurrentRecoveryBackboneStatus(profile);
+    if (!Check(starterStatus.stage == "Starter Backbone",
+            "recovery backbone smoke expected starter stage after debrief")) {
+        return false;
+    }
+    if (!Check(starterStatus.status.find("0/4") != std::string::npos &&
+               starterStatus.status.find("rail freight") != std::string::npos,
+            "recovery backbone smoke expected starter status to point at rail freight: " + starterStatus.status)) {
+        return false;
+    }
+
+    worldState->towerSyncRecovered = true;
+    worldState->localRelayAvailable = true;
+    worldState->regionalGridOnline = true;
+    worldState->caravanRouteActive = true;
+    worldState->railFreightActive = true;
+    profile.character.collectedTapes.push_back({"grid_pylon_01", "Pylon 01", false, false, false});
+    worldState->tradeNetworkActive = true;
+    worldState->orbitalUplinkActive = true;
+    profile.character.collectedTapes.push_back({"grid_pylon_02", "Pylon 02", false, false, false});
+
+    const auto freightStatus = bunker::CurrentRecoveryBackboneStatus(profile);
+    if (!Check(freightStatus.stage == "Starter Backbone",
+            "recovery backbone smoke expected starter stage during starter logistics")) {
+        return false;
+    }
+    if (!Check(freightStatus.status.find("2/4") != std::string::npos &&
+               freightStatus.status.find("Rail Fortress") != std::string::npos,
+            "recovery backbone smoke expected starter status to point at Rail Fortress: " + freightStatus.status)) {
+        return false;
+    }
+    if (!Check(freightStatus.payoff.find("restored spur still lacks hardened control") != std::string::npos,
+            "recovery backbone smoke expected starter payoff to explain missing hardened control: " + freightStatus.payoff)) {
+        return false;
+    }
+
+    worldState->railFortressActive = true;
+    worldState->recoveryFabricatorActive = true;
+    worldState->industrialGateUnlocked = true;
+    worldState->industrialSurveyActive = true;
+    worldState->industrialOutpostActive = true;
+    worldState->assemblyCellActive = true;
+
+    const auto innerSpurStatus = bunker::CurrentRecoveryBackboneStatus(profile);
+    if (!Check(innerSpurStatus.stage == "Inner Spur Expansion",
+            "recovery backbone smoke expected inner-spur stage after gate unlock")) {
+        return false;
+    }
+    if (!Check(innerSpurStatus.status.find("4/10") != std::string::npos &&
+               innerSpurStatus.status.find("foundry line") != std::string::npos,
+            "recovery backbone smoke expected inner-spur status to point at foundry line: " + innerSpurStatus.status)) {
+        return false;
+    }
+    if (!Check(innerSpurStatus.payoff.find("heavy plate output is still dark") != std::string::npos,
+            "recovery backbone smoke expected inner-spur payoff to explain foundry gap: " + innerSpurStatus.payoff)) {
+        return false;
+    }
+
+    worldState->foundryLineActive = true;
+    worldState->reactorYardActive = true;
+    worldState->capacitorBankActive = true;
+    worldState->relaySubstationActive = true;
+    worldState->serviceBayActive = true;
+    worldState->waterReclaimerActive = true;
+
+    const auto stableStatus = bunker::CurrentRecoveryBackboneStatus(profile);
+    return Check(stableStatus.stage == "Backbone Stable",
+            "recovery backbone smoke expected stable stage after full backbone") &&
+        Check(stableStatus.status.find("14/14") != std::string::npos,
+            "recovery backbone smoke expected stable status count after full backbone: " + stableStatus.status) &&
+        Check(stableStatus.payoff.find("stable recovery backbone") != std::string::npos,
+            "recovery backbone smoke expected stable payoff after full backbone: " + stableStatus.payoff);
 }
 
 bool RunRouteEventLifecycleSmoke() {
@@ -837,6 +954,8 @@ bool RunWorldScopedRouteSummarySmoke() {
     const std::string betaObjective = bunker::CurrentStoryObjectivePreview(profile, "route_summary_beta.bwld");
     const std::string alphaHandoff = bunker::CurrentRecoveryHandoffSummary(profile);
     const std::string betaHandoff = bunker::CurrentRecoveryHandoffSummary(profile, "route_summary_beta.bwld");
+    const auto alphaBackbone = bunker::CurrentRecoveryBackboneStatus(profile);
+    const auto betaBackbone = bunker::CurrentRecoveryBackboneStatus(profile, "route_summary_beta.bwld");
     const std::string alphaEvent = bunker::ActiveRouteEventSummary(profile);
     const std::string betaEvent = bunker::ActiveRouteEventSummary(profile, "route_summary_beta.bwld");
 
@@ -848,6 +967,12 @@ bool RunWorldScopedRouteSummarySmoke() {
             "world-scoped route summary smoke expected selected-world handoff to reflect completed backbone: " + alphaHandoff) &&
         Check(betaHandoff.find("rail freight") != std::string::npos,
             "world-scoped route summary smoke expected beta handoff to point at rail freight: " + betaHandoff) &&
+        Check(alphaBackbone.stage == "Backbone Stable" &&
+                alphaBackbone.payoff.find("stable recovery backbone") != std::string::npos,
+            "world-scoped route summary smoke expected selected-world backbone status to reflect stable backbone") &&
+        Check(betaBackbone.stage == "Starter Backbone" &&
+                betaBackbone.status.find("rail freight") != std::string::npos,
+            "world-scoped route summary smoke expected beta backbone status to stay on rail freight: " + betaBackbone.status) &&
         Check(alphaEvent.find("unlocked") != std::string::npos &&
                 alphaEvent.find("rare field prompt") != std::string::npos,
             "world-scoped route summary smoke expected selected-world event layer to be idle: " + alphaEvent) &&
@@ -3494,6 +3619,7 @@ int main() {
         RunWorkshopServiceRouteHandoffSmoke() &&
         RunDebriefIndustrialHandoffSmoke() &&
         RunRecoveryHandoffSummarySmoke() &&
+        RunRecoveryBackboneStatusSmoke() &&
         RunRouteEventLifecycleSmoke() &&
         RunMerchantRouteEventSmoke() &&
         RunWorldScopedRouteSummarySmoke() &&

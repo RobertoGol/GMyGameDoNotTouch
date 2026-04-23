@@ -16,5 +16,6 @@
 - `hangar -> bunker exit -> surface arrival` presentation/readability pass закрыт: route-beat layer теперь дает единые beat/cue/payoff в runtime, Pip-Pad, launcher и ключевых route events без authored layout work;
 - `BT-72 / combat` modular-damage pass закрыт для первого маршрута: robot contacts теперь теряют sensors / weapon / mobility от тяжелых BT-72 ударов, threat/readability cues живут в prompt/HUD/Pip-Pad и smoke-checks это проверяют;
 - random-event hardening закрыт для базового слоя: route-event lifecycle теперь читает offered/active/success/failed/expired/cooldown состояния, остается locked до завершения onboarding и debrief handoff, а редкий `merchant_window` живет как один merchant incident через Pip-Pad/service glue без постоянного рынка на карте;
+- post-debrief `recovery / industry / logistics` readability pass закрыт: shared backbone stage/status/payoff теперь читается одинаково в runtime, Pip-Pad и launcher, а debrief и route-event copy подтягивают ту же industrial-backbone стадию;
 - Debug build для `BunkerGame`, `BunkerLauncher`, `BunkerEditor` и `BunkerSmokeChecks` снова проходит под MSVC;
-- активный следующий фронт: усиление `recovery / industry / logistics` readability после debrief, затем только точечный `BT-72 / combat / RPG` follow-up если всплывет реальный vertical-slice blocker.
+- активный следующий фронт: только точечный `BT-72 / combat / RPG` follow-up, если всплывет реальный vertical-slice blocker; остальное — только smoke/build-driven hardening без открытия новой ветки.

@@ -78,6 +78,16 @@ void AppendRouteBeatReadabilityHint(std::string& message, const SessionProfile& 
     }
 }
 
+void AppendRecoveryBackboneReadabilityHint(std::string& message, const SessionProfile& profile) {
+    const auto backbone = CurrentRecoveryBackboneStatus(profile);
+    if (!backbone.stage.empty() && message.find("Backbone stage: " + backbone.stage) == std::string::npos) {
+        message += " Backbone stage: " + backbone.stage + ".";
+    }
+    if (!backbone.payoff.empty() && message.find(backbone.payoff) == std::string::npos) {
+        message += " Backbone payoff: " + backbone.payoff;
+    }
+}
+
 enum class HostileRole {
     VerminRush,
     GhoulRush,
@@ -3791,6 +3801,7 @@ void ApplyRouteEventSuccess(SessionProfile& profile, WorldFieldState& worldState
 
     worldState.routeEventsResolved += 1;
     gameState.lastEvent += " " + CurrentRecoveryHandoffSummary(profile);
+    AppendRecoveryBackboneReadabilityHint(gameState.lastEvent, profile);
 }
 
 void ApplyRouteEventFailure(SessionProfile& profile, WorldFieldState& worldState, GameState& gameState, bool expired) {
@@ -3842,6 +3853,7 @@ void ApplyRouteEventFailure(SessionProfile& profile, WorldFieldState& worldState
     } else {
         worldState.routeEventsFailed += 1;
     }
+    AppendRecoveryBackboneReadabilityHint(gameState.lastEvent, profile);
 }
 
 struct RouteEventCandidate {
@@ -4768,6 +4780,7 @@ void HandleInteraction(const MapObject* nearest,
             }
             AppendObjectiveRuntimeHint(gameState.lastEvent, profile, staticEraser);
             AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
+            AppendRecoveryBackboneReadabilityHint(gameState.lastEvent, profile);
         } else {
             gameState.lastEvent = "Relay packet already copied to the Pip-Pad.";
         }
@@ -4797,6 +4810,7 @@ void HandleInteraction(const MapObject* nearest,
                 }
                 AppendObjectiveRuntimeHint(gameState.lastEvent, profile, staticEraser);
                 AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
+                AppendRecoveryBackboneReadabilityHint(gameState.lastEvent, profile);
             } else {
                 gameState.lastEvent = "Debrief log already archived. Shelter 17 recovery planning remains on file.";
             }
@@ -5415,6 +5429,7 @@ void DrawPipPad(const World& world,
         const bool stableRecoveryBackbone = worldFieldState != nullptr &&
             IsStableRecoveryBackbone(profile, *worldFieldState);
         const auto routeBeat = CurrentFirstPlayableRouteBeat(profile);
+        const auto backboneStatus = CurrentRecoveryBackboneStatus(profile);
         ImGui::Text("Mission Log");
         ImGui::BulletText("Checkpoint: %s", CurrentStoryCheckpointLabel(profile).c_str());
         ImGui::BulletText("%s", CurrentStoryObjective(profile, staticEraser).c_str());
@@ -5430,6 +5445,9 @@ void DrawPipPad(const World& world,
                 ? "secured"
                 : (profile.story.exitedBunker ? "approach unlocked" : "locked"));
         ImGui::TextWrapped("Recovery Handoff: %s", CurrentRecoveryHandoffSummary(profile).c_str());
+        ImGui::BulletText("Industrial Backbone: %s", backboneStatus.stage.c_str());
+        ImGui::TextWrapped("Backbone status: %s", backboneStatus.status.c_str());
+        ImGui::TextWrapped("Backbone payoff: %s", backboneStatus.payoff.c_str());
         ImGui::TextWrapped("Route Event Layer: %s", ActiveRouteEventSummary(profile).c_str());
         ImGui::TextWrapped("Beat Cue: %s", routeBeat.cue.c_str());
         ImGui::TextWrapped("Readable Payoff: %s", routeBeat.payoff.c_str());

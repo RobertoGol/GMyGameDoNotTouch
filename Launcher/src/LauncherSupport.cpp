@@ -598,6 +598,7 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
         sessionProfile,
         selectedWorldReference.empty() ? sessionProfile.selectedWorld : selectedWorldReference);
     const auto routeBeat = bunker::CurrentFirstPlayableRouteBeat(sessionProfile, selectedWorldReference);
+    const auto backboneStatus = bunker::CurrentRecoveryBackboneStatus(sessionProfile, selectedWorldReference);
     const auto verticalSliceRoute = bunker::BuildFirstPlayableRouteSlice(sessionProfile);
     const int completedSliceSteps = static_cast<int>(std::count_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
         [](const bunker::StoryRouteEntry& entry) { return entry.completed; }));
@@ -626,6 +627,9 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
             : "sealed");
     ImGui::TextWrapped("Recovery handoff: %s",
         bunker::CurrentRecoveryHandoffSummary(sessionProfile, selectedWorldReference).c_str());
+    ImGui::BulletText("Industrial backbone: %s", backboneStatus.stage.c_str());
+    ImGui::TextWrapped("Backbone status: %s", backboneStatus.status.c_str());
+    ImGui::TextWrapped("Backbone payoff: %s", backboneStatus.payoff.c_str());
     ImGui::TextWrapped("Route event layer: %s",
         bunker::ActiveRouteEventSummary(sessionProfile, selectedWorldReference).c_str());
     ImGui::TextWrapped("Beat cue: %s", routeBeat.cue.c_str());
