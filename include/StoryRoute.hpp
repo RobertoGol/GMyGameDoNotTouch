@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "SessionProfiles.hpp"
@@ -15,9 +16,12 @@ struct StoryRouteEntry {
 
 std::string CurrentStoryCheckpointLabel(const SessionProfile& profile);
 std::string CurrentStoryObjectivePreview(const SessionProfile& profile);
+std::string CurrentStoryObjectivePreview(const SessionProfile& profile, std::string_view worldReference);
 std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEraser& staticEraser);
 std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile);
+std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile, std::string_view worldReference);
 std::string ActiveRouteEventSummary(const SessionProfile& profile);
+std::string ActiveRouteEventSummary(const SessionProfile& profile, std::string_view worldReference);
 std::vector<StoryRouteEntry> BuildBt72RestorationRoute(const SessionProfile& profile);
 std::vector<StoryRouteEntry> BuildFirstPlayableRouteSlice(const SessionProfile& profile);
 std::vector<StoryRouteEntry> BuildStarterRoute(const SessionProfile& profile, const StaticEraser& staticEraser);

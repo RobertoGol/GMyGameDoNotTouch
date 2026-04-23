@@ -104,5 +104,5 @@
 
 ## 5. Следующий рабочий пакет
 
-1. save/load и `runtime / launcher / profile` hardening вокруг recovery / route-event state
-2. `hangar -> bunker exit -> surface arrival` presentation/readability polish без authored layout work
+1. `hangar -> bunker exit -> surface arrival` presentation/readability polish без authored layout work
+2. точечный follow-up по `BT-72 / combat / RPG depth`, только если он напрямую усиливает first playable route

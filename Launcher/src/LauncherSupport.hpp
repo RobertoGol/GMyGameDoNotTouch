@@ -74,7 +74,10 @@ bool SetLanlineMatchStartArmed(bunker::LanlineSessionState& session, bool armed)
 std::vector<std::filesystem::path> DiscoverWorlds();
 bool TryLaunchSiblingExecutable(const char* executableName, std::string& statusText);
 void PrepareSelectedCharacter(bunker::SessionProfile& sessionProfile, const LauncherState& launcherState, const char* const* characters, int characterCount);
-std::string BuildLauncherObjectivePreview(const bunker::SessionProfile& sessionProfile, const bunker::WorldFieldState* worldState);
+std::string BuildLauncherObjectivePreview(
+    const bunker::SessionProfile& sessionProfile,
+    const bunker::WorldFieldState* worldState,
+    std::string_view worldReference);
 const bunker::LanlineDiagnostics& CachedLanlineDiagnostics(const bunker::LanlineSessionState& session, std::string_view runtimeWorldName);
 float DrawLauncherAnnouncementWidget(
     bunker::SessionProfile& sessionProfile,

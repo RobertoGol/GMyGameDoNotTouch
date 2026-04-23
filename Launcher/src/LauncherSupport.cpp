@@ -507,11 +507,14 @@ void PrepareSelectedCharacter(bunker::SessionProfile& sessionProfile,
     }
 }
 
-std::string BuildLauncherObjectivePreview(const bunker::SessionProfile& sessionProfile, const bunker::WorldFieldState* worldState) {
-    std::string preview = bunker::CurrentStoryObjectivePreview(sessionProfile);
+std::string BuildLauncherObjectivePreview(
+    const bunker::SessionProfile& sessionProfile,
+    const bunker::WorldFieldState* worldState,
+    std::string_view worldReference) {
+    std::string preview = bunker::CurrentStoryObjectivePreview(sessionProfile, worldReference);
     preview += " | " + bunker::CurrentStoryCheckpointLabel(sessionProfile);
-    preview += " | " + bunker::CurrentRecoveryHandoffSummary(sessionProfile);
-    preview += " | " + bunker::ActiveRouteEventSummary(sessionProfile);
+    preview += " | " + bunker::CurrentRecoveryHandoffSummary(sessionProfile, worldReference);
+    preview += " | " + bunker::ActiveRouteEventSummary(sessionProfile, worldReference);
     if (worldState != nullptr && worldState->industrialGateUnlocked) {
         preview += " | Industrial gate open";
     }
@@ -619,8 +622,10 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
         bunker::Bt72SecondSeatUnlocked(sessionProfile)
             ? bunker::Bt72SecondSeatPolicyLabel(sessionProfile.partnerTank.secondSeatPolicy)
             : "sealed");
-    ImGui::TextWrapped("Recovery handoff: %s", bunker::CurrentRecoveryHandoffSummary(sessionProfile).c_str());
-    ImGui::TextWrapped("Route event layer: %s", bunker::ActiveRouteEventSummary(sessionProfile).c_str());
+    ImGui::TextWrapped("Recovery handoff: %s",
+        bunker::CurrentRecoveryHandoffSummary(sessionProfile, selectedWorldReference).c_str());
+    ImGui::TextWrapped("Route event layer: %s",
+        bunker::ActiveRouteEventSummary(sessionProfile, selectedWorldReference).c_str());
     if (worldState != nullptr) {
         ImGui::BulletText("Route events resolved/failed: %d / %d",
             worldState->routeEventsResolved,
@@ -629,7 +634,7 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
     if (nextSliceStep != verticalSliceRoute.end()) {
         ImGui::TextWrapped("Next payoff: %s", nextSliceStep->text.c_str());
     }
-    const std::string objective = BuildLauncherObjectivePreview(sessionProfile, worldState);
+    const std::string objective = BuildLauncherObjectivePreview(sessionProfile, worldState, selectedWorldReference);
     ImGui::TextWrapped("Objective: %s", objective.c_str());
 }
 

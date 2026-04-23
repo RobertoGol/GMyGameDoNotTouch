@@ -574,6 +574,86 @@ bool RunRouteEventLifecycleSmoke() {
             "route event smoke expected cooldown summary after resolution");
 }
 
+bool RunWorldScopedRouteSummarySmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.selectedWorld = "route_summary_alpha.bwld";
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    profile.story.outerRoadCleared = true;
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+    profile.firstPlayableRoute.firstServicePerformed = true;
+    profile.story.relayRecovered = true;
+    profile.firstPlayableRoute.firstRecoveryNodeActivated = true;
+    profile.story.returnedToBase = true;
+    profile.firstPlayableRoute.debriefSummaryViewed = true;
+    profile.fieldCheckpointKnown = true;
+    profile.fieldCheckpointWorld = profile.selectedWorld;
+    profile.character.collectedTapes.push_back({"grid_pylon_alpha", "Grid Pylon Alpha", false, false, false});
+    profile.character.collectedTapes.push_back({"grid_pylon_beta", "Grid Pylon Beta", false, false, false});
+
+    auto* alphaWorld = bunker::FindWorldFieldState(profile, profile.selectedWorld, true);
+    auto* betaWorld = bunker::FindWorldFieldState(profile, "route_summary_beta.bwld", true);
+    alphaWorld = bunker::FindWorldFieldState(profile, profile.selectedWorld, true);
+    betaWorld = bunker::FindWorldFieldState(profile, "route_summary_beta.bwld", true);
+    if (!Check(alphaWorld != nullptr && betaWorld != nullptr,
+            "world-scoped route summary smoke expected both world field states")) {
+        return false;
+    }
+
+    alphaWorld->towerSyncRecovered = true;
+    alphaWorld->localRelayAvailable = true;
+    alphaWorld->regionalGridOnline = true;
+    alphaWorld->caravanRouteActive = true;
+    alphaWorld->tradeNetworkActive = true;
+    alphaWorld->railFreightActive = true;
+    alphaWorld->orbitalUplinkActive = true;
+    alphaWorld->railFortressActive = true;
+    alphaWorld->recoveryFabricatorActive = true;
+    alphaWorld->industrialGateUnlocked = true;
+    alphaWorld->industrialSurveyActive = true;
+    alphaWorld->industrialOutpostActive = true;
+    alphaWorld->assemblyCellActive = true;
+    alphaWorld->foundryLineActive = true;
+    alphaWorld->reactorYardActive = true;
+    alphaWorld->capacitorBankActive = true;
+    alphaWorld->relaySubstationActive = true;
+    alphaWorld->serviceBayActive = true;
+    alphaWorld->waterReclaimerActive = true;
+
+    betaWorld->activeRouteEventType = "blocked_route";
+    betaWorld->routeEventTimeRemaining = 33.0f;
+    betaWorld->routeEventProgress = 1;
+    betaWorld->routeEventStage = 1;
+
+    const std::string alphaObjective = bunker::CurrentStoryObjectivePreview(profile);
+    const std::string betaObjective = bunker::CurrentStoryObjectivePreview(profile, "route_summary_beta.bwld");
+    const std::string alphaHandoff = bunker::CurrentRecoveryHandoffSummary(profile);
+    const std::string betaHandoff = bunker::CurrentRecoveryHandoffSummary(profile, "route_summary_beta.bwld");
+    const std::string alphaEvent = bunker::ActiveRouteEventSummary(profile);
+    const std::string betaEvent = bunker::ActiveRouteEventSummary(profile, "route_summary_beta.bwld");
+
+    return Check(alphaObjective.find("Water reclaimer online") != std::string::npos,
+            "world-scoped route summary smoke expected selected-world objective to reflect deep industrial progress: " + alphaObjective) &&
+        Check(betaObjective.find("rail depot") != std::string::npos,
+            "world-scoped route summary smoke expected beta preview objective to stay at rail depot: " + betaObjective) &&
+        Check(alphaHandoff.find("Handoff complete") != std::string::npos,
+            "world-scoped route summary smoke expected selected-world handoff to reflect completed backbone: " + alphaHandoff) &&
+        Check(betaHandoff.find("rail freight") != std::string::npos,
+            "world-scoped route summary smoke expected beta handoff to point at rail freight: " + betaHandoff) &&
+        Check(alphaEvent.find("ready") != std::string::npos,
+            "world-scoped route summary smoke expected selected-world event layer to be idle: " + alphaEvent) &&
+        Check(betaEvent.find("Blocked route escalating") != std::string::npos,
+            "world-scoped route summary smoke expected beta preview to show its blocked-route event");
+}
+
 bool RunHostileAwarenessSmoke() {
     auto almostEqual = [](float lhs, float rhs) {
         return std::fabs(lhs - rhs) < 0.001f;
@@ -3129,6 +3209,7 @@ int main() {
         RunDebriefIndustrialHandoffSmoke() &&
         RunRecoveryHandoffSummarySmoke() &&
         RunRouteEventLifecycleSmoke() &&
+        RunWorldScopedRouteSummarySmoke() &&
         RunHostileAwarenessSmoke() &&
         RunHumanTriggerDisciplineSmoke() &&
         RunBt72CombatFeedbackSmoke() &&

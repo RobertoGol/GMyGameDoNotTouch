@@ -12,5 +12,6 @@
 - post-debrief `recovery -> mid-game` handoff теперь читается одинаково в story/runtime/launcher/Pip-Pad;
 - lightweight route-event layer теперь живет в world/profile persistence: weighted incidents, cooldown, resolve/fail state, rewards и smoke-check coverage без ломания authored route;
 - ранний `BT-72 / RPG` weight pass закрыт: `SPECIAL`, passive skills, crew-support и doctrine/service choices теперь реально меняют first combat, gunner burst и first service;
+- launcher selected-world summary hardening закрыт: story objective, recovery handoff, route-event layer и Lanline Services preview больше не расходятся с выбранным в UI миром; world-scoped preview путь покрыт smoke-checks;
 - Debug build для `BunkerGame`, `BunkerLauncher`, `BunkerEditor` и `BunkerSmokeChecks` снова проходит под MSVC;
-- активный следующий фронт: save/load и launcher/runtime/profile hardening вокруг recovery + route-event state, затем `hangar -> bunker exit -> surface arrival` readability/presentation polish.
+- активный следующий фронт: `hangar -> bunker exit -> surface arrival` readability/presentation polish без authored layout work, затем точечный `BT-72 / combat / RPG` follow-up для первого маршрута.

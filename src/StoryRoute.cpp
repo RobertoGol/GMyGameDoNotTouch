@@ -143,6 +143,17 @@ const WorldFieldState* SelectedWorldState(const SessionProfile& profile) {
     return FindWorldFieldState(profile, profile.selectedWorld);
 }
 
+SessionProfile BuildWorldScopedProfile(const SessionProfile& profile, std::string_view worldReference) {
+    const std::string normalizedWorld = NormalizeWorldReference(std::string(worldReference));
+    if (normalizedWorld.empty() || normalizedWorld == profile.selectedWorld) {
+        return profile;
+    }
+
+    SessionProfile scopedProfile = profile;
+    scopedProfile.selectedWorld = normalizedWorld;
+    return scopedProfile;
+}
+
 std::string CurrentIndustrialObjective(const SessionProfile& profile, const WorldFieldState& worldState) {
     if (!IsRailFreightOperational(profile, worldState)) {
         return "Restore the industrial rail depot and bring heavy freight back to Shelter 17.";
@@ -253,7 +264,9 @@ std::string CurrentStoryCheckpointLabel(const SessionProfile& profile) {
     return "Industrial Expansion";
 }
 
-std::string CurrentStoryObjectivePreview(const SessionProfile& profile) {
+namespace {
+
+std::string CurrentStoryObjectivePreviewForProfile(const SessionProfile& profile) {
     const auto& route = profile.firstPlayableRoute;
     if (!profile.story.awakenedFromCryo) {
         return "Wake from the cryo capsule and stabilize your first bunker route.";
@@ -319,6 +332,16 @@ std::string CurrentStoryObjectivePreview(const SessionProfile& profile) {
         return "Recovery buildout active. Runtime world state not loaded yet.";
     }
     return CurrentIndustrialObjective(profile, *worldState);
+}
+
+}  // namespace
+
+std::string CurrentStoryObjectivePreview(const SessionProfile& profile) {
+    return CurrentStoryObjectivePreviewForProfile(profile);
+}
+
+std::string CurrentStoryObjectivePreview(const SessionProfile& profile, std::string_view worldReference) {
+    return CurrentStoryObjectivePreviewForProfile(BuildWorldScopedProfile(profile, worldReference));
 }
 
 std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEraser& staticEraser) {
@@ -390,7 +413,9 @@ std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEra
     return CurrentIndustrialObjective(profile, *worldState);
 }
 
-std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile) {
+namespace {
+
+std::string CurrentRecoveryHandoffSummaryForProfile(const SessionProfile& profile) {
     if (!FirstRecoveryNodeActivated(profile)) {
         return "Recovery handoff locked until the first relay node comes online.";
     }
@@ -448,7 +473,7 @@ std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile) {
     return "Handoff complete: Shelter 17 has a stable recovery backbone and can push deeper into the inner spur.";
 }
 
-std::string ActiveRouteEventSummary(const SessionProfile& profile) {
+std::string ActiveRouteEventSummaryForProfile(const SessionProfile& profile) {
     const auto* worldState = SelectedWorldState(profile);
     if (worldState == nullptr) {
         return "Route event layer waiting for selected-world state.";
@@ -475,6 +500,24 @@ std::string ActiveRouteEventSummary(const SessionProfile& profile) {
     }
 
     return "Route event layer ready for the next field incident window.";
+}
+
+}  // namespace
+
+std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile) {
+    return CurrentRecoveryHandoffSummaryForProfile(profile);
+}
+
+std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile, std::string_view worldReference) {
+    return CurrentRecoveryHandoffSummaryForProfile(BuildWorldScopedProfile(profile, worldReference));
+}
+
+std::string ActiveRouteEventSummary(const SessionProfile& profile) {
+    return ActiveRouteEventSummaryForProfile(profile);
+}
+
+std::string ActiveRouteEventSummary(const SessionProfile& profile, std::string_view worldReference) {
+    return ActiveRouteEventSummaryForProfile(BuildWorldScopedProfile(profile, worldReference));
 }
 
 std::vector<StoryRouteEntry> BuildBt72RestorationRoute(const SessionProfile& profile) {
