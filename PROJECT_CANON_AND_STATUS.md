@@ -1,65 +1,33 @@
 # PROJECT_CANON_AND_STATUS.md
 
-## 0. Роль этого файла
+## 0. Роль файла
 
-Этот файл объединяет смысл и полезное содержимое из:
-- `ROADMAP.md`
-- `MASTER_PROMPT.md`
-- `KOROTKOE_TZ_CLEAN.md`
-- `HUMAN_READING_NOTES_CLEAN.md`
-- `SOURCE_EXTRACTION_REPORT.md`
-- `Editor_TZ_short.md`
-
-Его задача — держать в одном месте:
+Этот файл хранит только:
 - канон проекта;
-- текущий статус;
-- архитектурные правила;
-- происхождение идей и допустимые источники;
-- роль редактора;
-- краткий активный фокус.
+- архитектурные границы;
+- жесткие правила мира;
+- роли `BT-72`, `Camp / AIMP`, мастерских и редактора;
+- проверенный текущий статус;
+- что из старых материалов и веток остается валидным;
+- общий вектор до завершения базовой игры.
 
-Это **не** архив старых заметок и не backlog.  
-Рабочие активные задачи остаются в `Next.md` и `Next_split/*`.
+Он не хранит активный todo-список и не является backlog-файлом.
 
----
+## 1. Источники правды
 
-## 1. Проект
+Приоритет истины:
+1. текущий код;
+2. smoke-checks и тесты;
+3. этот файл;
+4. `Next.md`;
+5. `trash.md`.
+
+`Next_split/*` и `Next_compact.md` считать только legacy-выжимками и справочным слоем. Они не должны спорить с кодом и этими тремя основными файлами.
+
+## 2. Форма проекта
 
 ### Название
-**Bunker Protocol**
-
-### Общая форма игры
-- solo + LAN first
-- launcher — обязательная точка входа
-- editor — отдельный production tool
-- game runtime — отдельное приложение
-
-### Основные pillars
-- BT-72
-- recovery
-- heavy-tech
-- industry
-- logistics
-- persistence
-- authored world
-- bunker-to-surface progression
-- service / support loops
-- world states instead of freeform player editing
-
-### Базовая цель
-Довести проект до **первой цельной играбельной версии**, где:
-- есть интро и пробуждение;
-- есть bunker-start;
-- есть ранний progression через доступы, Pip-Pad и технические следы;
-- есть восстановление BT-72;
-- есть sync/link;
-- есть выход через ангар и выезд на поверхность;
-- есть первый бой, первый сервис и первый recovery payoff;
-- есть дальнейший хук в recovery / industry / logistics loop.
-
----
-
-## 2. Архитектура проекта
+`Bunker Protocol`
 
 ### Приложения
 - `BunkerLauncher`
@@ -67,363 +35,288 @@
 - `BunkerEditor`
 - `BunkerSmokeChecks`
 
-### Жесткие правила
-- `Launcher`, `Game`, `Editor` остаются отдельными приложениями.
-- `Launcher` обязателен как пользовательская точка входа.
-- `Editor` не является runtime-зависимостью игрока и может не входить в пользовательскую сборку.
-- Новые функции сначала встраиваются в код и тесты, а не в новые `.md`.
+### Базовая форма
+- `solo + LAN first`
+- `launcher` обязателен как пользовательская точка входа
+- `editor` остается отдельным production tool
+- `runtime` остается отдельным игровым приложением
 
-### Роль launcher
-Launcher отвечает за:
-- вход;
-- выбор мира / профиля / персонажа;
-- системные уведомления;
-- старт игрового runtime;
-- shell-layer для `Lanline - optime`, `Lanline Services`, `Fey Ring Network`.
+### Основные pillars
+- `BT-72`
+- `authored world`
+- `bunker-to-surface progression`
+- `recovery`
+- `industry`
+- `logistics`
+- `persistence`
+- `service / support loops`
+- `Pip-Pad` как основной системный интерфейс
 
-### Роль runtime
-Runtime отвечает за:
-- actual gameplay;
-- progression;
-- BT-72;
-- combat / RPG;
-- recovery / industry / logistics;
-- world state transitions;
-- authored-world interaction.
+### Базовая цель
+Довести проект до первой цельной базовой игры, где уже есть:
+- пробуждение и bunker-start;
+- ранний доступ через карты/допуски, а не только через `Pip-Pad`;
+- получение `Pip-Pad` и ранний archive/data trail;
+- восстановление `BT-72`;
+- `sync / link`;
+- выход через ангар и surface approach;
+- первый бой, первый сервис и первый recovery payoff;
+- честный переход в `recovery / industry / logistics` backbone.
 
-### Роль editor
-Editor отвечает за:
-- authored world creation;
-- object placement;
-- semantic authoring;
-- prefab/library workflow;
-- export;
-- validation;
-- preview;
-- content authoring for the developer, not the player.
-
----
-
-## 3. Что считать каноном мира
+## 3. Жесткий канон мира
 
 ### Authored world
-Карту и authored мир собирает разработчик в редакторе.
+Мир и карту собирает разработчик в `BunkerEditor`.
 
 Игрок:
 - не редактирует карту как редактором;
 - не рисует карту;
-- не меняет authored геометрию свободно;
-- взаимодействует с authored миром только через игровые механики и world states.
+- не перестраивает authored геометрию по всей карте;
+- меняет мир только через игровые механики и world states.
 
 ### Camp / AIMP
-Отдельная игровая система:
+`Camp / AIMP` - отдельная игровая система:
 - переносимая;
 - разворачиваемая;
 - позволяет свободное строительство только внутри своего радиуса;
 - не заменяет editor;
-- не равна мастерским;
-- не равна BT-72.
+- не равна мастерской;
+- не равна `BT-72`.
 
 ### Мастерские
-Это authored world nodes:
-- их можно найти;
-- зачистить;
-- захватить;
-- восстановить;
-- использовать;
-- включить в recovery / industry / service loop.
+Мастерские - это authored world nodes:
+- заранее расставленные разработчиком;
+- находимые и зачищаемые;
+- захватываемые и восстанавливаемые;
+- используемые в `recovery / industry / service` loop.
+
+Мастерская - не `Camp / AIMP` и не `BT-72`.
 
 ### BT-72
-Отдельная центральная система:
-- не Camp;
+`BT-72` - центральная напарник-платформа:
+- не `Camp / AIMP`;
 - не мастерская;
-- титаноподобная напарник-платформа;
+- не просто "готовый танк";
 - боевая и инженерная платформа;
+- часть раннего маршрута;
 - часть progression;
 - часть service/modification loop;
 - часть recovery backbone.
 
----
+### State of Decay 2 rule
+`State of Decay 2` использовать только как пример того, как authored мир живет через игровые механики:
+- вылазка;
+- риск;
+- добыча;
+- возврат;
+- изменение состояния базы и мира.
 
-## 4. Сетевой и сервисный слой
+Не использовать как шаблон player-side world editing.
 
-### Канон
-- `solo + LAN first`
-- `Lanline - optime`
-- `Lanline Services`
-- `Fey Ring Network`
+### Что игрок может и не может
 
-### Границы
-Это не fully authoritative online MMO stack.  
-Это:
-- session shell;
-- launcher/runtime glue;
-- service/support UI layer;
-- world/profile/service consistency.
+Игрок может:
+- зачищать объекты;
+- открывать маршруты;
+- восстанавливать узлы;
+- использовать мастерские;
+- разворачивать `Camp / AIMP`;
+- строить внутри радиуса `Camp / AIMP`;
+- обслуживать и модифицировать `BT-72`.
 
----
+Игрок не может:
+- редактировать всю карту;
+- двигать authored здания как в editor;
+- превращать игру в sandbox editor mode.
 
-## 5. Экономика и ограничения
+## 4. Архитектура и границы систем
 
-### За игровые деньги
-- ресурсы
-- repair kits
-- medical
-- service items
-- recovery-support items
+### Роль launcher
+`BunkerLauncher` отвечает за:
+- вход в проект;
+- выбор мира и профиля;
+- shell-layer для `Lanline`, `Lanline Services`, `Fey Ring`;
+- запуск runtime;
+- системные уведомления и route summary.
 
-### За реальные деньги
-- только cosmetics / symbolic support
+### Роль runtime
+`BunkerGame` отвечает за:
+- actual gameplay;
+- progression;
+- `BT-72`;
+- combat / RPG;
+- recovery / industry / logistics;
+- world-state transitions;
+- authored-world interaction.
 
-### Нельзя
-- оружие за реальные деньги
-- готовые танки
-- боевые преимущества
-- pay-to-win
-
----
-
-## 6. Источники канона и что из них брать
-
-### `Новая папка`
-Полезно брать:
-- образ игры;
-- UX мира;
-- раннее мышление редактора;
-- account / character separation;
-- camera/avatar logic;
-- chat/log importance;
-- world/resource layering.
-
-Не переносить как код бездумно.
-
-### `Project_M`
-Главный зрелый источник для:
-- runtime behavior;
-- LAN contour;
-- техника;
-- persistence;
-- world logic;
-- BT-72 / tank thinking;
-- weather;
-- world-mode / interact loop;
-- data-card style systems.
-
-### `Aegis-9300`
-Полезно как:
-- launcher mood;
-- terminal feel;
-- dry system UI references.
-
-### `void-project`
-Полезно только как:
-- tonal reference для системного языка;
-- не как архитектурная база.
-
----
-
-## 7. Роль редактора
-
-### Что редактор уже должен значить
-Editor — это не toy map tool, а production authoring tool.
-
-Его смысл:
-- world authoring;
+### Роль editor
+`BunkerEditor` отвечает за:
+- authored world creation;
+- object placement;
 - semantic authoring;
-- object authoring;
-- prefab/library reuse;
+- prefab/library workflow;
 - validation;
 - export;
 - developer-facing content pipeline.
 
-### Что он не должен быть
-- player-facing world editor;
-- generic engine IDE;
-- direct clone of Creation Kit.
+Editor не является player-facing world editor.
 
-### Что из анализа Creation Kit допустимо брать
-По смыслу:
-- registry / typed IDs;
-- weak refs / XREF;
-- property inspector;
-- layer logic;
-- object windows / palette;
-- gizmos / raycast / snap;
-- validation / warnings;
-- structured world serialization;
-- asset/provider layer.
+### Lanline / service boundary
+`Lanline`, `Lanline Services` и `Fey Ring` - это не полноценный MMO/backend слой.
 
-Что нельзя брать буквально:
-- MFC shell;
-- Papyrus VM;
-- ESM/ESP exact pipeline;
-- Fallout-specific production core;
-- прямое копирование узнаваемых решений.
+Это:
+- launcher/runtime/session shell;
+- profile/world/service consistency;
+- support/service UI layer;
+- solo + LAN first glue.
 
----
+### Экономика
 
-## 8. Текущий статус проекта
+За игровые деньги:
+- ресурсы;
+- repair kits;
+- medical;
+- service items;
+- recovery-support items.
 
-### Статус этапов
-- `Этап 1. Стабилизация основы` — завершен
-- `Этап 2. Каркас архитектуры` — в работе
-- `Этап 3. Вертикальный срез старта` — начат
-- `Этап 4. Базовый боевой и RPG-слой` — в работе
-- `Launcher v1` — завершен
+За реальные деньги:
+- только cosmetics / symbolic support.
 
-### Что уже считать сильно продвинутым
-- editor/toolchain spine;
-- export / validation / history;
-- semantic contracts;
-- weak refs / XREF;
-- layer manager / inspector / viewport hardening;
-- prefab/library v1;
-- import assistant;
-- tightened export discipline;
-- Lanline Services profile/runtime sync;
-- launcher announcement widget;
-- BT-72 service-kit payoff;
-- first playable route как отдельный persistence/objective/runtime layer;
-- access-card gated start route и `BT-72` second-seat / gunner permission flow.
+Запрещено:
+- оружие за реальные деньги;
+- готовые танки;
+- боевые преимущества;
+- pay-to-win.
 
-### Что теперь главное
-Главная незакрытая работа уже не в инструментах, а в самой игре:
-1. start vertical slice polish
-2. BT-72 / combat / RPG depth
-3. recovery / industry / logistics как плотный mid-game backbone
+### Reactive tech stack boundary
+Legacy reactive tech stack не является отдельной игрой внутри игры.
 
----
-
-## 9. Первый играбельный маршрут — только как system sequence
-
-Это **не** карта.  
-Это **не** layout.  
-Это системный канон первого маршрута.
-
-### Последовательность
-интро  
--> пробуждение в многоместной криозоне  
--> ранний жилой/служебный проход по убежищу  
--> первые вредители / радтараканы  
--> первая дубинка / ранний melee  
--> ранний доступ через карты/допуски  
--> предвосхищение Pip-Pad через бумажные чертежи, старые версии и техдокументы  
--> получение Pip-Pad  
--> углубление в инженерный слой комплекса  
--> выход в ангар  
--> обнаружение корпуса BT-72 и отдельно ядра  
--> поиск голозаписей / схем / сервисных подсказок / материалов  
--> staged restoration BT-72  
--> sync/link  
--> учебный отрезок внутри ангара  
--> открытие bunker exit / hangar gate / lift route  
--> выезд на BT-72 на поверхность  
--> первый surface arrival  
--> тяжелая расчистка  
--> первый бой  
--> первый сервис / передышка  
--> tower / recovery payoff  
--> возврат / дебриф / следующий хук
-
-### Что реализовывать для этого
-- hangar tutorial support;
-- bunker exit unlock logic;
-- lift/gate transition support;
-- first surface arrival hooks;
-
----
-
-## 10. Legacy Reactive Tech Stack — практический смысл
-
-Это не отдельная технодемка.  
-Это слой качества поверх:
+Это только quality-layer поверх:
 - start route;
-- BT-72;
+- `BT-72`;
 - first combat;
 - first service/rest;
 - recovery payoff.
 
-### Обязательно
-- honest AI perception without wallhack;
-- Awareness;
-- Trigger Discipline;
-- Pathfinding;
-- Interactables;
-- Shatterable Glass;
-- Projectile Effects;
-- Muzzle Fire / Gun Fire;
-- Shock Wave;
-- Animation Cycles;
-- Foliage Interaction;
-- Breakable light vegetation;
-- Rain splatter / water ripples / limited reflections;
-- role-separated enemy logic:
-  - люди = тактика + self-preservation;
-  - гули = rush melee;
-  - роботы = паттерны и зоны контроля.
+## 5. Что из старых материалов остается валидным
 
-### Ограниченно
-- modular mechanical damage;
-- limited momentum damage for clearance;
-- limited debris;
-- limited light destruction;
-- limited water response;
-- limited mirrors/reflections;
-- crowds only minimally.
+Брать из старых веток и заметок только то, что совместимо с текущим кодом и каноном:
 
-### Не делать core-фичами
-- Stalker behavior
-- Levolution
-- Igniting Foliage
-- Fire Propagation
-- full fluid sim
-- total destruction sandbox
-- always-on friendly fire
+### `Project_M`
+Остается валидным как источник для:
+- runtime behavior;
+- LAN contour;
+- техники;
+- persistence;
+- world logic;
+- BT-72 / tank thinking;
+- recovery/service flow.
 
-### Friendly fire
-Допустим только как режим/настройка:
-- PvE
-- PvP
-- PvW
+### `Aegis-9300`
+Остается валидным как:
+- launcher mood;
+- terminal feel;
+- dry system UI reference.
 
----
+### `Новая папка`
+Остается валидной как ранний источник для:
+- account / character / world layering;
+- authored world thinking;
+- world/resource layering;
+- общей UX-логики мира.
 
-## 11. Как использовать backlog
+### `void-project`
+Допустим только как tonal reference. Не как архитектурная база.
 
-`trash.md` — это backlog идей.
-Правила:
-- учитывать идеи как backlog;
-- если идея реально внедрена, задокументировать это в рабочих файлах состояния;
-- удалить идею из `trash.md`, чтобы backlog отражал только невнедренное.
+### Из старых текстов сохраняется по смыслу
+- `Pip-Pad` + archive/data trail;
+- launcher-first entry flow;
+- authored recovery backbone;
+- `BT-72` как центральная механическая ось;
+- service/logistics/recovery как ядро mid-game.
 
----
+### Что не считать базовым обязательством
+Старые ответвления про:
+- музыку как системный слой;
+- assistant / Nerv direction;
+- consciousness / resonance;
+- расширенный streaming/region prep;
+- большой asset-pipeline R&D
 
-## 12. Что делать дальше
+считать valid later-ideas, но не blockers базовой игры.
 
-Активный рабочий буфер — `Next.md` и `Next_split/*`.
+## 6. Проверенный текущий статус
 
-Этот файл не должен снова превращаться в todo dump.
+Ниже - не wish-list, а то, что уже подтверждается текущим кодом и smoke-checks.
 
-### Следующий пакет
-1. Launcher / Lanline Services / runtime return
-2. start vertical slice polish
-3. BT-72 / combat / RPG depth
-4. recovery / industry / logistics
+### Уже сильно продвинуто и реально живет в проекте
+- split `Launcher / Game / Editor / SmokeChecks`;
+- launcher gate через launch ticket;
+- atomic save flow для мира и профиля;
+- editor spine: validation, export history, compare presets, XREF/weak refs, layers, unified inspector, undo/redo, viewport authoring;
+- prefab/library `v1`;
+- import assistant;
+- world-format tightening и export discipline;
+- `Lanline Services` save/load и profile/runtime/launcher sync;
+- launcher announcement widget с локальным persisted read-state;
+- `tank_service` как реальный `BT-72` payoff;
+- relay-credit progression helpers;
+- shared world semantic/descriptor/validation contracts.
 
----
+### Первый маршрут уже поддержан системно
+По коду и smoke-checks уже есть route-layer для:
+- cryo wake;
+- emergency melee pickup;
+- bunker access card;
+- `Pip-Pad` acquisition;
+- archive corridor / first vermin gate;
+- `BT-72` hull/core/service notes;
+- staged `BT-72` restoration;
+- `sync / link`;
+- clearance blueprint/materials/install;
+- outer bulkhead unlock;
+- heavy debris clearance;
+- first tank combat;
+- first service/rest step;
+- first recovery node;
+- debrief;
+- handoff в industrial follow-up.
 
-## 13. Финальное правило
+### Что больше не должно висеть как активный todo
+Следующие слои уже нельзя держать в `Next.md` как "делать сейчас":
+- editor hardening прошлого прохода;
+- `Lanline Services` persistence/glue базового уровня;
+- launcher announcement widget;
+- first-route persistence/objective layer;
+- access-card gated bunker start;
+- `BT-72` second-seat / trusted gunner flow;
+- `tank_service` service-kit basics;
+- relay-credit helper layer.
 
-Этот файл — единый:
-- канон проекта;
-- краткий статус;
-- происхождение идей;
-- роль редактора;
-- роль старых веток;
-- роль первого маршрута;
-- общий вектор до базовой завершенной игры.
+### Главный текущий незакрытый фронт
+Основная незавершенная работа уже не в toolchain, а в самой игре:
+1. start vertical slice polish;
+2. `BT-72 / combat / RPG depth`;
+3. `recovery / industry / logistics` как плотный mid-game backbone;
+4. runtime / launcher / profile / service glue hardening только там, где это поддерживает базовую игру.
 
-Рабочие задачи — не сюда, а в:
-- `Next.md`
-- `Next_split/*`
-- `Use_this_One.md`
+## 7. Вектор до завершения базовой игры
+
+Правильный порядок:
+1. дожать первый маршрут до showable vertical slice;
+2. углубить `BT-72 / combat / RPG`;
+3. сделать первый recovery payoff началом устойчивого mid-game loop;
+4. держать launcher/runtime/profile/world/service state в синке;
+5. использовать reactive tech stack только как слой качества поверх уже работающей игры.
+
+Неправильный порядок:
+- уходить в новый большой editor-R&D;
+- строить DLC/expansion ветки раньше базы;
+- превращать `Lanline` в отдельный интернет-продукт;
+- разворачивать player-side world editor.
+
+## 8. Роли трех файлов
+
+- `PROJECT_CANON_AND_STATUS.md` - канон и статус.
+- `Next.md` - только активная незавершенная работа к базовой игре.
+- `trash.md` - backlog / later / не-блокирующие идеи.
