@@ -588,7 +588,15 @@ float DrawLauncherAnnouncementWidget(
 }
 
 void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char* selectedCharacterLabel, const char* selectedModeLabel, const std::filesystem::path& selectedWorld) {
-    const auto* worldState = bunker::FindWorldFieldState(sessionProfile, sessionProfile.selectedWorld);
+    const std::string selectedWorldReference = bunker::NormalizeWorldReference(selectedWorld.string());
+    const auto* worldState = bunker::FindWorldFieldState(
+        sessionProfile,
+        selectedWorldReference.empty() ? sessionProfile.selectedWorld : selectedWorldReference);
+    const auto verticalSliceRoute = bunker::BuildFirstPlayableRouteSlice(sessionProfile);
+    const int completedSliceSteps = static_cast<int>(std::count_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
+        [](const bunker::StoryRouteEntry& entry) { return entry.completed; }));
+    const auto nextSliceStep = std::find_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
+        [](const bunker::StoryRouteEntry& entry) { return !entry.completed; });
     ImGui::Text("Session Summary");
     ImGui::BulletText("Operator: %s", selectedCharacterLabel);
     ImGui::BulletText("Mode: %s", selectedModeLabel);
@@ -596,6 +604,11 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
     ImGui::BulletText("Level %d | XP %d", sessionProfile.character.level, sessionProfile.character.experience);
     ImGui::BulletText("Relay Credits: %d", sessionProfile.lanlineServices.relayCredits);
     ImGui::BulletText("Route checkpoint: %s", bunker::CurrentStoryCheckpointLabel(sessionProfile).c_str());
+    ImGui::BulletText("Vertical slice progress: %d / %d", completedSliceSteps, static_cast<int>(verticalSliceRoute.size()));
+    ImGui::BulletText("Surface arrival: %s",
+        sessionProfile.firstPlayableRoute.surfaceArrivalReached
+            ? "secured"
+            : (sessionProfile.story.exitedBunker ? "approach unlocked" : "locked"));
     ImGui::BulletText("BT-72 restore: %d / 3",
         (sessionProfile.firstPlayableRoute.bt72HullInspected ? 1 : 0) +
             (sessionProfile.firstPlayableRoute.bt72CoreRecovered ? 1 : 0) +
@@ -604,6 +617,9 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
         bunker::Bt72SecondSeatUnlocked(sessionProfile)
             ? bunker::Bt72SecondSeatPolicyLabel(sessionProfile.partnerTank.secondSeatPolicy)
             : "sealed");
+    if (nextSliceStep != verticalSliceRoute.end()) {
+        ImGui::TextWrapped("Next payoff: %s", nextSliceStep->text.c_str());
+    }
     const std::string objective = BuildLauncherObjectivePreview(sessionProfile, worldState);
     ImGui::TextWrapped("Objective: %s", objective.c_str());
 }

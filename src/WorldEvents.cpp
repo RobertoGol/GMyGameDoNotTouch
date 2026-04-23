@@ -12,9 +12,16 @@ bool IsNear(const PlayerState& player, float x, float y, float radius) {
     return (dx * dx) + (dy * dy) <= radius * radius;
 }
 
+bool IsAtSurfaceArrivalAnchor(const World& world, const PlayerState& player) {
+    if (const auto* campMarker = world.FindObjectByRegistryId("[%camp_0001]"); campMarker != nullptr) {
+        return IsNear(player, campMarker->x, campMarker->y, 5.0f);
+    }
+    return player.x >= 18.0f;
+}
+
 }  // namespace
 
-void ProcessScriptedWorldEvents(const World& world, const PlayerState& player, const SessionProfile& profile, GameState& gameState) {
+void ProcessScriptedWorldEvents(const World& world, const PlayerState& player, SessionProfile& profile, GameState& gameState) {
     if (!world.IsStarterScenarioWorld()) {
         return;
     }
@@ -42,9 +49,12 @@ void ProcessScriptedWorldEvents(const World& world, const PlayerState& player, c
         return;
     }
 
-    if (profile.story.exitedBunker && !gameState.zoneEventExterior) {
+    if (profile.story.exitedBunker &&
+        !profile.firstPlayableRoute.surfaceArrivalReached &&
+        IsAtSurfaceArrivalAnchor(world, player)) {
+        profile.firstPlayableRoute.surfaceArrivalReached = true;
         gameState.zoneEventExterior = true;
-        gameState.lastEvent = "SURFACE APPROACH: 'Lift route reached. Radiation low, debris high, skyline active ahead. Clear the route, survive first contact in BT-72, then push a service stop before the relay node.'";
+        gameState.lastEvent = "SURFACE ARRIVAL: 'BT-72 reached the first exterior foothold. Skyline active, debris barrier ahead, and the first hostile contact is forming beyond the lift route.'";
         return;
     }
 

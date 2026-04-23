@@ -36,7 +36,7 @@ function(configure_bunker_target target_name)
     target_include_directories(${target_name} PRIVATE ${COMMON_INCLUDE_DIRS})
     target_link_libraries(${target_name} PRIVATE glfw OpenGL::GL)
     if(MSVC)
-        target_compile_options(${target_name} PRIVATE /W4 /permissive-)
+        target_compile_options(${target_name} PRIVATE /W4 /permissive- /Zm300)
     else()
         target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic)
     endif()
@@ -102,6 +102,7 @@ add_executable(BunkerSmokeChecks
     src/StoryRoute.cpp
     src/World.cpp
     src/WorldEditorUndo.cpp
+    src/WorldEvents.cpp
     src/WorldExport.cpp
     src/WorldSemanticAuthoring.cpp
     src/WorldValidation.cpp

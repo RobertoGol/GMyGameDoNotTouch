@@ -10,6 +10,7 @@
 #include "../include/StoryRoute.hpp"
 #include "../include/World.hpp"
 #include "../include/WorldEditorUndo.hpp"
+#include "../include/WorldEvents.hpp"
 #include "../include/WorldExport.hpp"
 #include "../include/WorldSemanticAuthoring.hpp"
 #include "../include/WorldValidation.hpp"
@@ -119,6 +120,7 @@ bool RunProfileRoundtrip() {
     savedProfile.firstPlayableRoute.bt72Restored = true;
     savedProfile.firstPlayableRoute.clearanceBlueprintRecovered = true;
     savedProfile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    savedProfile.firstPlayableRoute.surfaceArrivalReached = true;
     savedProfile.partnerTank.secondSeatUnlocked = true;
     savedProfile.partnerTank.secondSeatPolicy = "trusted_only";
     savedProfile.partnerTank.trustedGunnerHandle = "Lan Buddy";
@@ -147,6 +149,7 @@ bool RunProfileRoundtrip() {
         Check(loadedProfile.firstPlayableRoute.prePipPadClueCount == 2, "profile first route clue count mismatch") &&
         Check(loadedProfile.firstPlayableRoute.bt72Restored, "profile first route restore flag mismatch") &&
         Check(loadedProfile.firstPlayableRoute.clearanceMaterialsRecovered, "profile first route clearance material flag mismatch") &&
+        Check(loadedProfile.firstPlayableRoute.surfaceArrivalReached, "profile first route surface arrival flag mismatch") &&
         Check(loadedProfile.partnerTank.secondSeatUnlocked, "profile second seat unlock mismatch") &&
         Check(loadedProfile.partnerTank.secondSeatPolicy == "trusted_only", "profile second seat policy mismatch") &&
         Check(loadedProfile.partnerTank.trustedGunnerHandle == "Lan Buddy", "profile trusted gunner mismatch");
@@ -191,6 +194,14 @@ bool RunFirstPlayableRouteStorySmoke() {
             "first route smoke expected restore objective preview")) {
         return false;
     }
+    const auto initialSliceRoute = bunker::BuildFirstPlayableRouteSlice(profile);
+    if (!Check(initialSliceRoute.size() == 14, "first route smoke expected vertical slice checklist to have fourteen entries")) {
+        return false;
+    }
+    if (!Check(!initialSliceRoute[4].completed && initialSliceRoute[3].completed,
+            "first route smoke expected BT-72 restoration to be the next incomplete slice step")) {
+        return false;
+    }
 
     profile.firstPlayableRoute.bt72Restored = true;
     profile.story.tankLinked = true;
@@ -198,6 +209,20 @@ bool RunFirstPlayableRouteStorySmoke() {
     profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
     profile.firstPlayableRoute.clearanceModuleInstalled = true;
     profile.story.exitedBunker = true;
+    if (!Check(bunker::CurrentStoryCheckpointLabel(profile) == "Surface Arrival",
+            "first route smoke expected surface arrival checkpoint label")) {
+        return false;
+    }
+    if (!Check(bunker::CurrentStoryObjectivePreview(profile).find("exterior foothold") != std::string::npos,
+            "first route smoke expected surface arrival objective preview")) {
+        return false;
+    }
+    const auto surfaceArrivalSliceRoute = bunker::BuildFirstPlayableRouteSlice(profile);
+    if (!Check(surfaceArrivalSliceRoute[7].completed && !surfaceArrivalSliceRoute[8].completed,
+            "first route smoke expected surface arrival to gate the post-bulkhead payoff")) {
+        return false;
+    }
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
     profile.story.outerRoadCleared = true;
     profile.firstPlayableRoute.firstTankCombatResolved = true;
     profile.firstPlayableRoute.firstServicePerformed = true;
@@ -221,6 +246,66 @@ bool RunFirstPlayableRouteStorySmoke() {
             "first route smoke expected industrial expansion checkpoint label") &&
         Check(bunker::CurrentStoryObjectivePreview(profile).find("rail depot") != std::string::npos,
             "first route smoke expected industrial follow-up objective preview");
+}
+
+bool RunSurfaceArrivalWorldEventSmoke() {
+    bunker::World world;
+
+    bunker::MapObject cryo;
+    cryo.registryId = "[%cryo_0001]";
+    cryo.displayName = "Cryo Bay";
+    world.AddObject(cryo);
+
+    bunker::MapObject pipPad;
+    pipPad.registryId = "[%pip_0001]";
+    pipPad.displayName = "Pip-Pad Locker";
+    world.AddObject(pipPad);
+
+    bunker::MapObject archive;
+    archive.registryId = "[%archive_0001]";
+    archive.displayName = "Archive Terminal";
+    world.AddObject(archive);
+
+    bunker::MapObject hull;
+    hull.registryId = "[#tr_hull_0001]";
+    hull.displayName = "BT-72 Hull";
+    world.AddObject(hull);
+
+    bunker::MapObject camp;
+    camp.registryId = "[%camp_0001]";
+    camp.displayName = "Forward Camp";
+    camp.x = 20.0f;
+    camp.y = 4.0f;
+    world.AddObject(camp);
+
+    if (!Check(world.IsStarterScenarioWorld(), "surface arrival smoke expected starter scenario world")) {
+        return false;
+    }
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+
+    bunker::PlayerState player;
+    player.x = camp.x;
+    player.y = camp.y;
+
+    bunker::GameState gameState;
+    bunker::ProcessScriptedWorldEvents(world, player, profile, gameState);
+
+    return Check(profile.firstPlayableRoute.surfaceArrivalReached, "surface arrival smoke expected route flag to flip at camp anchor") &&
+        Check(gameState.zoneEventExterior, "surface arrival smoke expected exterior world event to trigger") &&
+        Check(gameState.lastEvent.find("SURFACE ARRIVAL") != std::string::npos,
+            "surface arrival smoke expected exterior event copy") &&
+        Check(gameState.lastEvent.find("first exterior foothold") != std::string::npos,
+            "surface arrival smoke expected foothold payoff text");
 }
 
 bool RunLauncherAnnouncementSmoke() {
@@ -2411,6 +2496,7 @@ int main() {
     const bool ok = RunWorldRoundtrip() &&
         RunProfileRoundtrip() &&
         RunFirstPlayableRouteStorySmoke() &&
+        RunSurfaceArrivalWorldEventSmoke() &&
         RunLauncherAnnouncementSmoke() &&
         RunLanlineServicesRoundtripSmoke() &&
         RunTankServiceKitSmoke() &&

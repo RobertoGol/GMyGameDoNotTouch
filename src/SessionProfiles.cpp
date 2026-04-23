@@ -7,7 +7,7 @@ namespace bunker {
 namespace {
 
 constexpr char kSessionProfileFormat[] = "BPF1";
-constexpr int kCurrentSessionProfileVersion = 5;
+constexpr int kCurrentSessionProfileVersion = 6;
 
 bool HasInventoryEntry(const SessionProfile& profile, const std::string& itemId) {
     return std::any_of(
@@ -39,6 +39,10 @@ void NormalizeFirstPlayableRouteProgress(SessionProfile& profile) {
         HasCollectedTapeId(profile, "bt72_clearance_blueprint");
     route.clearanceMaterialsRecovered = route.clearanceMaterialsRecovered || profile.story.bucketRecovered;
     route.clearanceModuleInstalled = route.clearanceModuleInstalled || profile.story.bucketRecovered;
+    route.surfaceArrivalReached = route.surfaceArrivalReached ||
+        profile.story.outerRoadCleared ||
+        profile.story.relayRecovered ||
+        profile.story.returnedToBase;
     route.firstTankCombatResolved = route.firstTankCombatResolved || profile.story.relayRecovered || profile.story.returnedToBase;
     route.firstServicePerformed = route.firstServicePerformed ||
         profile.story.relayRecovered ||
@@ -82,6 +86,7 @@ void MigrateSessionProfile(SessionProfile& profile, int loadedVersion) {
         route.clearanceBlueprintRecovered = profile.story.bucketRecovered;
         route.clearanceMaterialsRecovered = profile.story.bucketRecovered;
         route.clearanceModuleInstalled = profile.story.bucketRecovered;
+        route.surfaceArrivalReached = profile.story.outerRoadCleared || profile.story.relayRecovered || profile.story.returnedToBase;
         route.firstTankCombatResolved = profile.story.relayRecovered || profile.story.returnedToBase;
         route.firstServicePerformed = profile.story.relayRecovered ||
             profile.story.returnedToBase ||
@@ -98,6 +103,12 @@ void MigrateSessionProfile(SessionProfile& profile, int loadedVersion) {
         if (profile.story.pipPadRecovered) {
             profile.firstPlayableRoute.accessCardRecovered = true;
         }
+    }
+    if (loadedVersion < 6) {
+        profile.firstPlayableRoute.surfaceArrivalReached =
+            profile.story.outerRoadCleared ||
+            profile.story.relayRecovered ||
+            profile.story.returnedToBase;
     }
 }
 
@@ -284,6 +295,7 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
     out << "route_clearance_blueprint=" << (profile.firstPlayableRoute.clearanceBlueprintRecovered ? 1 : 0) << '\n';
     out << "route_clearance_materials=" << (profile.firstPlayableRoute.clearanceMaterialsRecovered ? 1 : 0) << '\n';
     out << "route_clearance_installed=" << (profile.firstPlayableRoute.clearanceModuleInstalled ? 1 : 0) << '\n';
+    out << "route_surface_arrival=" << (profile.firstPlayableRoute.surfaceArrivalReached ? 1 : 0) << '\n';
     out << "route_first_tank_combat=" << (profile.firstPlayableRoute.firstTankCombatResolved ? 1 : 0) << '\n';
     out << "route_first_service=" << (profile.firstPlayableRoute.firstServicePerformed ? 1 : 0) << '\n';
     out << "route_first_recovery=" << (profile.firstPlayableRoute.firstRecoveryNodeActivated ? 1 : 0) << '\n';
@@ -473,6 +485,7 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         else if (key == "route_clearance_blueprint") outProfile.firstPlayableRoute.clearanceBlueprintRecovered = (std::stoi(value) != 0);
         else if (key == "route_clearance_materials") outProfile.firstPlayableRoute.clearanceMaterialsRecovered = (std::stoi(value) != 0);
         else if (key == "route_clearance_installed") outProfile.firstPlayableRoute.clearanceModuleInstalled = (std::stoi(value) != 0);
+        else if (key == "route_surface_arrival") outProfile.firstPlayableRoute.surfaceArrivalReached = (std::stoi(value) != 0);
         else if (key == "route_first_tank_combat") outProfile.firstPlayableRoute.firstTankCombatResolved = (std::stoi(value) != 0);
         else if (key == "route_first_service") outProfile.firstPlayableRoute.firstServicePerformed = (std::stoi(value) != 0);
         else if (key == "route_first_recovery") outProfile.firstPlayableRoute.firstRecoveryNodeActivated = (std::stoi(value) != 0);

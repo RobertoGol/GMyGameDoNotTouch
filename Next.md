@@ -50,8 +50,7 @@
 ## 3. Active Gameplay / System Priorities
 
 ### Start route / vertical slice polish
-- сделать `hangar -> bunker exit -> surface arrival` одним читаемым payoff, а не набором отдельных триггеров;
-- дожать route readability в runtime и launcher: `BT-72 restore -> sync -> clearance -> surface -> combat -> service -> debrief`;
+- дожать presentation/feedback для `hangar -> bunker exit -> surface arrival`, чтобы payoff читался как цельный vertical slice;
 - улучшить ощущение первого маршрута как showable slice, а не только checklist-а;
 - держать authored-world работу только на уровне системных support hooks.
 
@@ -105,7 +104,6 @@
 
 ## 5. Следующий рабочий пакет
 
-1. polish `bunker exit / hangar / surface arrival`
-2. cleanup route cues в launcher/runtime
-3. first combat / first service / debrief presentation pass
-4. recovery-node-to-midgame handoff pass
+1. first combat / first service / debrief presentation pass
+2. `BT-72` combat feel / enemy role readability pass
+3. recovery-node-to-midgame handoff pass

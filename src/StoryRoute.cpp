@@ -126,6 +126,9 @@ std::string CurrentStoryCheckpointLabel(const SessionProfile& profile) {
     if (!profile.story.exitedBunker) {
         return "Outer Bulkhead";
     }
+    if (!route.surfaceArrivalReached) {
+        return "Surface Arrival";
+    }
     if (!profile.story.outerRoadCleared) {
         return "Heavy Clearance";
     }
@@ -186,6 +189,9 @@ std::string CurrentStoryObjectivePreview(const SessionProfile& profile) {
     }
     if (!profile.story.exitedBunker) {
         return "Cycle the outer bulkhead and push BT-72 into the blocked corridor.";
+    }
+    if (!route.surfaceArrivalReached) {
+        return "Push BT-72 through the lift route and establish the first exterior foothold.";
     }
     if (!profile.story.outerRoadCleared) {
         return "Use the clearance module to break the outer debris barrier.";
@@ -253,6 +259,9 @@ std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEra
     if (!profile.story.exitedBunker) {
         return "Open the outer bulkhead and move BT-72 into the blocked recovery corridor.";
     }
+    if (!route.surfaceArrivalReached) {
+        return "Advance through the lift route and secure the first surface arrival point.";
+    }
     if (!profile.story.outerRoadCleared) {
         return "Raise the clearance module and break the outer debris barrier.";
     }
@@ -290,6 +299,27 @@ std::vector<StoryRouteEntry> BuildBt72RestorationRoute(const SessionProfile& pro
     };
 }
 
+std::vector<StoryRouteEntry> BuildFirstPlayableRouteSlice(const SessionProfile& profile) {
+    return {
+        {"Wake from cryostasis.", profile.story.awakenedFromCryo},
+        {"Recover the bunker access card and paper trail.", profile.firstPlayableRoute.accessCardRecovered &&
+                profile.firstPlayableRoute.prePipPadClueCount >= 2},
+        {"Recover the missing Pip-Pad.", profile.story.pipPadRecovered},
+        {"Sync the archive corridor and clear the first vermin gate.", profile.story.archiveRecovered &&
+                profile.firstPlayableRoute.earlyVerminEncounterResolved},
+        {"Restore BT-72 from bunker salvage.", profile.firstPlayableRoute.bt72Restored},
+        {"Establish the first BT-72 sync link.", profile.story.tankLinked},
+        {"Install the BT-72 clearance module.", profile.firstPlayableRoute.clearanceModuleInstalled},
+        {"Open the outer bulkhead.", profile.story.exitedBunker},
+        {"Reach the first surface arrival foothold.", profile.firstPlayableRoute.surfaceArrivalReached},
+        {"Clear the outer debris barrier.", profile.story.outerRoadCleared},
+        {"Resolve the first BT-72 combat contact.", profile.firstPlayableRoute.firstTankCombatResolved},
+        {"Take the first service/rest halt.", profile.firstPlayableRoute.firstServicePerformed},
+        {"Sync the first recovery node.", profile.firstPlayableRoute.firstRecoveryNodeActivated},
+        {"Upload the debrief summary.", profile.firstPlayableRoute.debriefSummaryViewed},
+    };
+}
+
 std::vector<StoryRouteEntry> BuildStarterRoute(const SessionProfile& profile, const StaticEraser& staticEraser) {
     const auto* worldState = SelectedWorldState(profile);
     const bool railOperational = worldState != nullptr && IsRailFreightOperational(profile, *worldState);
@@ -323,6 +353,7 @@ std::vector<StoryRouteEntry> BuildStarterRoute(const SessionProfile& profile, co
         {"Recover the clearance module materials.", profile.firstPlayableRoute.clearanceMaterialsRecovered},
         {"Install the clearance module.", profile.firstPlayableRoute.clearanceModuleInstalled},
         {"Open the outer bulkhead.", profile.story.exitedBunker},
+        {"Reach the first surface arrival foothold.", profile.firstPlayableRoute.surfaceArrivalReached},
         {"Clear the outer debris barrier.", profile.story.outerRoadCleared || staticEraser.IsErased("#%res_scrap_0001")},
         {"Resolve the first tank combat contact.", FirstTankCombatResolved(profile, staticEraser)},
         {"Take a first service/rest cycle.", profile.firstPlayableRoute.firstServicePerformed},

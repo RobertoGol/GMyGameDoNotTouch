@@ -139,6 +139,7 @@ struct FirstPlayableRouteProgress {
     bool clearanceBlueprintRecovered = false;
     bool clearanceMaterialsRecovered = false;
     bool clearanceModuleInstalled = false;
+    bool surfaceArrivalReached = false;
     bool firstTankCombatResolved = false;
     bool firstServicePerformed = false;
     bool firstRecoveryNodeActivated = false;

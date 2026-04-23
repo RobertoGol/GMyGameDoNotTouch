@@ -1705,6 +1705,8 @@ void SyncStoryFlagsFromWorld(SessionProfile& profile, const StaticEraser& static
         profile.firstPlayableRoute.clearanceMaterialsRecovered || staticEraser.IsErased("#%it_bucket_0001");
     profile.firstPlayableRoute.clearanceModuleInstalled =
         profile.firstPlayableRoute.clearanceModuleInstalled || profile.story.bucketRecovered;
+    profile.firstPlayableRoute.surfaceArrivalReached =
+        profile.firstPlayableRoute.surfaceArrivalReached || profile.story.outerRoadCleared;
     profile.firstPlayableRoute.firstTankCombatResolved =
         profile.firstPlayableRoute.firstTankCombatResolved || staticEraser.IsErased("[%enemy_ghoul_0001]");
     profile.firstPlayableRoute.firstRecoveryNodeActivated =
@@ -3298,6 +3300,10 @@ void HandleInteraction(const MapObject* nearest,
     }
 
     if (nearest->registryId == "[%camp_0001]") {
+        const bool firstSurfaceArrival = profile.story.exitedBunker && !profile.firstPlayableRoute.surfaceArrivalReached;
+        if (profile.story.exitedBunker) {
+            profile.firstPlayableRoute.surfaceArrivalReached = true;
+        }
         ActivateFieldCheckpoint(*nearest, profile, profile.selectedWorld);
         const bool gridOnline = IsRegionalGridOnline(profile);
         const int erosionCleared = static_cast<int>(std::round(ReduceSelectedWorldEtherErosion(profile, gridOnline ? 10.0f : 3.0f, gridOnline)));
@@ -3316,6 +3322,9 @@ void HandleInteraction(const MapObject* nearest,
         gameState.lastEvent = gridOnline
             ? "Forward camp anchored. Regional grid online: checkpoint, recovery, and recharge cycle complete. Shelter 17 status: " + std::string(recoveryStatus) + "."
             : "Forward camp anchored. Checkpoint and recovery cycle complete, but the regional grid is still unstable. Shelter 17 status: " + std::string(recoveryStatus) + ".";
+        if (firstSurfaceArrival) {
+            gameState.lastEvent = "Surface foothold secured. " + gameState.lastEvent;
+        }
         if (erosionCleared > 0) {
             gameState.lastEvent += " Ether bloom reduced by " + std::to_string(erosionCleared) + "%.";
         }
@@ -3907,6 +3916,19 @@ void DrawPipPad(const World& world,
         ImGui::Text("Mission Log");
         ImGui::BulletText("Checkpoint: %s", CurrentStoryCheckpointLabel(profile).c_str());
         ImGui::BulletText("%s", CurrentStoryObjective(profile, staticEraser).c_str());
+        const auto verticalSliceRoute = BuildFirstPlayableRouteSlice(profile);
+        const int completedSliceSteps = static_cast<int>(std::count_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
+            [](const StoryRouteEntry& entry) { return entry.completed; }));
+        const auto nextSliceStep = std::find_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
+            [](const StoryRouteEntry& entry) { return !entry.completed; });
+        ImGui::BulletText("Vertical Slice: %d / %d", completedSliceSteps, static_cast<int>(verticalSliceRoute.size()));
+        ImGui::BulletText("Surface Arrival: %s",
+            profile.firstPlayableRoute.surfaceArrivalReached
+                ? "secured"
+                : (profile.story.exitedBunker ? "approach unlocked" : "locked"));
+        if (nextSliceStep != verticalSliceRoute.end()) {
+            ImGui::TextWrapped("Next Payoff: %s", nextSliceStep->text.c_str());
+        }
         if (!profile.firstPlayableRoute.bt72Restored || !profile.firstPlayableRoute.clearanceModuleInstalled) {
             ImGui::Separator();
             ImGui::Text("BT-72 Restore Route");
