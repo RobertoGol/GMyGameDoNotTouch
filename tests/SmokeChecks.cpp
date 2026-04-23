@@ -894,6 +894,90 @@ bool RunBt72CombatFeedbackSmoke() {
             "bt72 combat feedback smoke expected heavy-shot feedback copy");
 }
 
+bool RunMechanicalHostileDamageSmoke() {
+    auto makeWorld = []() {
+        bunker::World world;
+        bunker::MapObject robot;
+        robot.registryId = "[%enemy_robot_modular_0001]";
+        robot.displayName = "Sentinel Drone";
+        robot.interaction = bunker::InteractionType::Hostile;
+        robot.category = bunker::ObjectCategory::Hostile;
+        robot.x = 4.0f;
+        robot.y = 0.0f;
+        robot.width = 1.1f;
+        robot.depth = 1.1f;
+        robot.health = 260.0f;
+        robot.scriptTag = "robot_control";
+        world.AddObject(robot);
+        return world;
+    };
+
+    auto makeProfile = []() {
+        bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+        profile.story.tankLinked = true;
+        profile.firstPlayableRoute.bt72Restored = true;
+        profile.partnerTank.secondSeatUnlocked = true;
+        return profile;
+    };
+
+    bunker::StaticEraser staticEraser;
+
+    bunker::SessionProfile baselineProfile = makeProfile();
+    bunker::World baselineWorld = makeWorld();
+    bunker::PlayerState baselinePlayer;
+    baselinePlayer.insideTank = true;
+    baselinePlayer.bt72GunnerSeat = true;
+    baselinePlayer.x = 0.0f;
+    baselinePlayer.y = 0.0f;
+    baselinePlayer.facingRadians = 0.0f;
+    bunker::GameState baselineState;
+    baselineState.hostileAwareness.push_back({"[%enemy_robot_modular_0001]", 80.0f, 0.0f});
+    const float baselineHullBefore = baselineProfile.partnerTank.damage.hull;
+    bunker::UpdateHostiles(baselineWorld, baselinePlayer, baselineProfile, staticEraser, baselineState, 0.1f);
+    const float baselineHullLoss = baselineHullBefore - baselineProfile.partnerTank.damage.hull;
+
+    bunker::SessionProfile damagedProfile = makeProfile();
+    bunker::World damagedWorld = makeWorld();
+    bunker::PlayerState damagedPlayer = baselinePlayer;
+    bunker::GameState damagedState;
+    bunker::HandleSpecialAttack(damagedWorld, damagedPlayer, damagedProfile, staticEraser, damagedState);
+    const auto* damagedRobot = damagedWorld.FindObjectByRegistryId("[%enemy_robot_modular_0001]");
+    if (!Check(damagedRobot != nullptr, "mechanical damage smoke expected robot after special attack")) {
+        return false;
+    }
+
+    const auto damagedIt = std::find_if(
+        damagedState.mechanicalHostileDamage.begin(),
+        damagedState.mechanicalHostileDamage.end(),
+        [](const bunker::MechanicalHostileDamageState& state) {
+            return state.registryId == "[%enemy_robot_modular_0001]";
+        });
+    if (!Check(damagedIt != damagedState.mechanicalHostileDamage.end(),
+            "mechanical damage smoke expected robot modular state after special attack")) {
+        return false;
+    }
+
+    const std::string impactEvent = damagedState.lastEvent;
+    const std::string readability = bunker::DescribeHostileReadability(*damagedRobot, damagedState);
+    damagedState.hostileAwareness.push_back({"[%enemy_robot_modular_0001]", 80.0f, 0.0f});
+    const float damagedHullBefore = damagedProfile.partnerTank.damage.hull;
+    bunker::UpdateHostiles(damagedWorld, damagedPlayer, damagedProfile, staticEraser, damagedState, 0.1f);
+    const float damagedHullLoss = damagedHullBefore - damagedProfile.partnerTank.damage.hull;
+
+    return Check(baselineHullLoss > 0.1f,
+            "mechanical damage smoke expected intact robot to pressure BT-72 at baseline range") &&
+        Check(damagedIt->sensorDamage >= 40.0f && damagedIt->weaponDamage >= 40.0f,
+            "mechanical damage smoke expected heavy BT-72 hit to damage robot sensors and weapons") &&
+        Check(impactEvent.find("Sensor mast") != std::string::npos || impactEvent.find("Weapon arm") != std::string::npos,
+            "mechanical damage smoke expected readable subsystem-hit feedback") &&
+        Check(readability.find("Control robot") != std::string::npos &&
+                readability.find("weapon") != std::string::npos &&
+                readability.find("sensor") != std::string::npos,
+            "mechanical damage smoke expected hostile readability to expose robot subsystem damage") &&
+        Check(damagedHullLoss < baselineHullLoss,
+            "mechanical damage smoke expected damaged robot modules to reduce immediate BT-72 pressure");
+}
+
 bool RunFieldReflexRpgWeightSmoke() {
     auto makeWorld = []() {
         bunker::World world;
@@ -3292,6 +3376,7 @@ int main() {
         RunHostileAwarenessSmoke() &&
         RunHumanTriggerDisciplineSmoke() &&
         RunBt72CombatFeedbackSmoke() &&
+        RunMechanicalHostileDamageSmoke() &&
         RunFieldReflexRpgWeightSmoke() &&
         RunBt72CrewCoordinationWeightSmoke() &&
         RunServiceChoiceWeightSmoke() &&

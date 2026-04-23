@@ -613,6 +613,12 @@ void DrawPipPadDataTab(PlayerState& player, SessionProfile& profile, GameState& 
         ImGui::Separator();
     }
     ImGui::Text("Tank Integrity");
+    ImGui::BulletText("Hull: %s", TankIntegrityBand(profile.partnerTank.damage.hull));
+    ImGui::BulletText("Turret: %s", TankIntegrityBand(profile.partnerTank.damage.turret));
+    ImGui::BulletText("Bucket: %s", TankIntegrityBand(profile.partnerTank.damage.bucket));
+    ImGui::BulletText("Sensors: %s", TankIntegrityBand(profile.partnerTank.damage.sensors));
+    ImGui::BulletText("Cockpit: %s", TankIntegrityBand(profile.partnerTank.damage.cockpit));
+    ImGui::BulletText("Power Core: %s", TankIntegrityBand(profile.partnerTank.damage.powerCore));
     ImGui::ProgressBar(profile.partnerTank.damage.hull / 100.0f, ImVec2(-1.0f, 16.0f), "Hull");
     ImGui::ProgressBar(profile.partnerTank.damage.bucket / 100.0f, ImVec2(-1.0f, 16.0f), "Bucket");
     ImGui::ProgressBar(profile.partnerTank.damage.sensors / 100.0f, ImVec2(-1.0f, 16.0f), "Sensors");

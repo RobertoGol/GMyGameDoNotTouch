@@ -267,6 +267,173 @@ HostileAwarenessState& EnsureHostileAwarenessState(GameState& gameState, const s
     return gameState.hostileAwareness.back();
 }
 
+const MechanicalHostileDamageState* FindMechanicalHostileDamageState(const GameState& gameState, std::string_view registryId) {
+    const auto existing = std::find_if(
+        gameState.mechanicalHostileDamage.begin(),
+        gameState.mechanicalHostileDamage.end(),
+        [&](const MechanicalHostileDamageState& state) { return state.registryId == registryId; });
+    return existing != gameState.mechanicalHostileDamage.end() ? &(*existing) : nullptr;
+}
+
+MechanicalHostileDamageState& EnsureMechanicalHostileDamageState(GameState& gameState, const std::string& registryId) {
+    auto existing = std::find_if(
+        gameState.mechanicalHostileDamage.begin(),
+        gameState.mechanicalHostileDamage.end(),
+        [&](const MechanicalHostileDamageState& state) { return state.registryId == registryId; });
+    if (existing != gameState.mechanicalHostileDamage.end()) {
+        return *existing;
+    }
+    gameState.mechanicalHostileDamage.push_back({registryId, 0.0f, 0.0f, 0.0f});
+    return gameState.mechanicalHostileDamage.back();
+}
+
+bool SupportsMechanicalDamage(HostileRole role) {
+    return role == HostileRole::RobotControl;
+}
+
+float MechanicalThresholdScale(float damage, float wornScale, float brokenScale) {
+    if (damage >= 75.0f) {
+        return brokenScale;
+    }
+    if (damage >= 40.0f) {
+        return wornScale;
+    }
+    return 1.0f;
+}
+
+float HostileVisualScale(HostileRole role, const MechanicalHostileDamageState* damageState) {
+    if (!SupportsMechanicalDamage(role) || damageState == nullptr) {
+        return 1.0f;
+    }
+    return MechanicalThresholdScale(damageState->sensorDamage, 0.8f, 0.58f);
+}
+
+float HostileWeaponRangeScale(HostileRole role, const MechanicalHostileDamageState* damageState) {
+    if (!SupportsMechanicalDamage(role) || damageState == nullptr) {
+        return 1.0f;
+    }
+    return MechanicalThresholdScale(damageState->weaponDamage, 0.78f, 0.54f);
+}
+
+float HostileWeaponDamageScale(HostileRole role, const MechanicalHostileDamageState* damageState) {
+    if (!SupportsMechanicalDamage(role) || damageState == nullptr) {
+        return 1.0f;
+    }
+    return MechanicalThresholdScale(damageState->weaponDamage, 0.76f, 0.52f);
+}
+
+float HostileMovementScale(HostileRole role, const MechanicalHostileDamageState* damageState) {
+    if (!SupportsMechanicalDamage(role) || damageState == nullptr) {
+        return 1.0f;
+    }
+    return MechanicalThresholdScale(damageState->mobilityDamage, 0.72f, 0.46f);
+}
+
+std::string MechanicalDamageDescriptor(const MechanicalHostileDamageState* damageState) {
+    if (damageState == nullptr) {
+        return {};
+    }
+
+    std::string descriptor;
+    if (damageState->sensorDamage >= 75.0f) {
+        descriptor += " | sensors crippled";
+    } else if (damageState->sensorDamage >= 40.0f) {
+        descriptor += " | sensors clipped";
+    }
+
+    if (damageState->weaponDamage >= 75.0f) {
+        descriptor += " | weapon crippled";
+    } else if (damageState->weaponDamage >= 40.0f) {
+        descriptor += " | weapon unstable";
+    }
+
+    if (damageState->mobilityDamage >= 75.0f) {
+        descriptor += " | drive crippled";
+    } else if (damageState->mobilityDamage >= 40.0f) {
+        descriptor += " | drive staggered";
+    }
+
+    return descriptor;
+}
+
+void AppendSubsystemThresholdFeedback(std::string& feedback, float before, float after, const char* wornText, const char* brokenText) {
+    if (before < 75.0f && after >= 75.0f) {
+        feedback += brokenText;
+        return;
+    }
+    if (before < 40.0f && after >= 40.0f) {
+        feedback += wornText;
+    }
+}
+
+std::string ApplyMechanicalHostileDamage(MapObject& object,
+    HostileRole role,
+    const PlayerState& player,
+    const SessionProfile& profile,
+    GameState& gameState,
+    bool specialAttack,
+    float momentum) {
+    if (!SupportsMechanicalDamage(role)) {
+        return {};
+    }
+
+    MechanicalHostileDamageState& damageState = EnsureMechanicalHostileDamageState(gameState, object.registryId);
+    const float sensorBefore = damageState.sensorDamage;
+    const float weaponBefore = damageState.weaponDamage;
+    const float mobilityBefore = damageState.mobilityDamage;
+
+    if (player.insideTank) {
+        if (player.bt72GunnerSeat) {
+            damageState.sensorDamage += specialAttack ? 58.0f : 24.0f;
+            damageState.weaponDamage += specialAttack ? 52.0f : 18.0f;
+            damageState.mobilityDamage += specialAttack ? 18.0f : 6.0f;
+        } else if (specialAttack) {
+            damageState.weaponDamage += 48.0f;
+            damageState.mobilityDamage += 32.0f;
+            damageState.sensorDamage += 18.0f;
+        } else {
+            bool ramShieldMounted = false;
+            for (const auto& module : profile.partnerTank.loadout.modules) {
+                if (module.type == TankModuleSlotType::Bucket && module.moduleId == "ram_shield_mk1") {
+                    ramShieldMounted = true;
+                    break;
+                }
+            }
+            damageState.mobilityDamage += 18.0f + std::min(38.0f, momentum * (ramShieldMounted ? 22.0f : 16.0f));
+            damageState.weaponDamage += ramShieldMounted ? 22.0f : 10.0f;
+            damageState.sensorDamage += momentum >= 1.2f ? 10.0f : 4.0f;
+        }
+    } else if (specialAttack) {
+        damageState.sensorDamage += 16.0f;
+        damageState.weaponDamage += 12.0f;
+    }
+
+    damageState.sensorDamage = std::clamp(damageState.sensorDamage, 0.0f, 100.0f);
+    damageState.weaponDamage = std::clamp(damageState.weaponDamage, 0.0f, 100.0f);
+    damageState.mobilityDamage = std::clamp(damageState.mobilityDamage, 0.0f, 100.0f);
+
+    std::string feedback;
+    AppendSubsystemThresholdFeedback(
+        feedback,
+        sensorBefore,
+        damageState.sensorDamage,
+        " Sensor mast clipped; the control zone is narrowing.",
+        " Sensor mast shattered; target lock is collapsing.");
+    AppendSubsystemThresholdFeedback(
+        feedback,
+        weaponBefore,
+        damageState.weaponDamage,
+        " Weapon arm destabilized.",
+        " Weapon arm crippled; the fire pattern is breaking up.");
+    AppendSubsystemThresholdFeedback(
+        feedback,
+        mobilityBefore,
+        damageState.mobilityDamage,
+        " Drive ring staggered.",
+        " Drive section crippled; the chassis is dragging.");
+    return feedback;
+}
+
 float PlayerMotionNoise(const PlayerState& player) {
     const float movementSpeed = std::sqrt((player.velocityX * player.velocityX) + (player.velocityY * player.velocityY));
     return player.insideTank ? movementSpeed * 1.3f : movementSpeed;
@@ -2139,6 +2306,40 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
 
 }  // namespace
 
+const char* TankIntegrityBand(float integrity) {
+    if (integrity >= 85.0f) {
+        return "Ready";
+    }
+    if (integrity >= 65.0f) {
+        return "Scuffed";
+    }
+    if (integrity >= 40.0f) {
+        return "Strained";
+    }
+    if (integrity >= 20.0f) {
+        return "Critical";
+    }
+    return "Failing";
+}
+
+std::string DescribeHostileReadability(const MapObject& object, const GameState& gameState) {
+    const HostileRole role = ClassifyHostileRole(object);
+    switch (role) {
+        case HostileRole::VerminRush:
+            return "Vermin rush | fast swarm, no meaningful self-preservation";
+        case HostileRole::GhoulRush:
+            return "Ghoul rush | melee pressure, low self-preservation";
+        case HostileRole::HumanTactical:
+            return "Human tactical | standoff bursts, line-of-fire discipline, will retreat";
+        case HostileRole::RobotControl:
+            return "Control robot | lane pressure, standoff fire" +
+                MechanicalDamageDescriptor(FindMechanicalHostileDamageState(gameState, object.registryId));
+        case HostileRole::Unknown:
+        default:
+            return "Unknown contact | behavior unresolved";
+    }
+}
+
 void AddInventoryItem(SessionProfile& profile, const std::string& itemId, int count, float weight) {
     if (itemId.empty() || count <= 0) {
         return;
@@ -3706,8 +3907,9 @@ void UpdateHostiles(World& world,
         const float distance = std::sqrt(distanceSq);
 
         const HostileRole role = ClassifyHostileRole(object);
+        const MechanicalHostileDamageState* mechanicalDamage = FindMechanicalHostileDamageState(gameState, object.registryId);
         HostileAwarenessState& awareness = EnsureHostileAwarenessState(gameState, object.registryId);
-        const float visualRadius = HostileVisualRadius(role, player, gameState);
+        const float visualRadius = HostileVisualRadius(role, player, gameState) * HostileVisualScale(role, mechanicalDamage);
         const float hearingRadius = HostileHearingRadius(role, player, gameState, playerNoise);
         const bool visualContact = distance > 0.2f &&
             distance <= visualRadius &&
@@ -3719,8 +3921,8 @@ void UpdateHostiles(World& world,
 
         const bool suspicious = awareness.awareness >= 18.0f;
         const bool engaged = awareness.awareness >= 55.0f;
-        const float preferredMinRange = HostilePreferredMinRange(role);
-        const float preferredMaxRange = HostilePreferredMaxRange(role);
+        const float preferredMinRange = HostilePreferredMinRange(role) * HostileWeaponRangeScale(role, mechanicalDamage);
+        const float preferredMaxRange = HostilePreferredMaxRange(role) * HostileWeaponRangeScale(role, mechanicalDamage);
         const bool usesStandoffMovement = preferredMaxRange > preferredMinRange;
         const bool rangedDiscipline = IsRangedDisciplineRole(role);
         bool shotLineBlocked = rangedDiscipline && HasBlockingGeometryOnLine(world, object, player.x, player.y);
@@ -3730,7 +3932,7 @@ void UpdateHostiles(World& world,
             (object.health <= HostileMaxHealthHint(role) * 0.45f ||
                 (player.insideTank && distance < preferredMaxRange + 0.35f));
         if (suspicious && distance > 0.2f) {
-            const float step = dt * HostileAdvanceSpeed(role) * (engaged ? 1.0f : 0.72f);
+            const float step = dt * HostileAdvanceSpeed(role) * HostileMovementScale(role, mechanicalDamage) * (engaged ? 1.0f : 0.72f);
             float moveX = 0.0f;
             float moveY = 0.0f;
 
@@ -3756,9 +3958,10 @@ void UpdateHostiles(World& world,
         const float updatedDx = player.x - object.x;
         const float updatedDy = player.y - object.y;
         const float updatedDistance = std::sqrt((updatedDx * updatedDx) + (updatedDy * updatedDy));
+        const float attackRange = HostileAttackRange(role, player.insideTank) * HostileWeaponRangeScale(role, mechanicalDamage);
         shotLineBlocked = rangedDiscipline && HasBlockingGeometryOnLine(world, object, player.x, player.y);
         friendlyInLine = rangedDiscipline && HasFriendlyOnShotLine(world, object, player.x, player.y);
-        if (updatedDistance < HostileAttackRange(role, player.insideTank) &&
+        if (updatedDistance < attackRange &&
             engaged &&
             gameState.damageCooldown <= 0.0f &&
             profile.character.hp > 0.0f) {
@@ -3766,7 +3969,7 @@ void UpdateHostiles(World& world,
                 continue;
             }
             if (player.insideTank) {
-                float tankDamage = HostileTankDamage(role);
+                float tankDamage = HostileTankDamage(role) * HostileWeaponDamageScale(role, mechanicalDamage);
                 if (TankHasBulwarkSync(profile)) {
                     tankDamage *= 0.82f;
                 }
@@ -3782,7 +3985,7 @@ void UpdateHostiles(World& world,
                     true,
                     TankHasBulwarkSync(profile) || TankUsesRamShield(profile));
             } else {
-                const float incomingDamage = HostileFootDamage(role, profile, gameState);
+                const float incomingDamage = HostileFootDamage(role, profile, gameState) * HostileWeaponDamageScale(role, mechanicalDamage);
                 profile.character.hp = std::max(0.0f, profile.character.hp - incomingDamage);
                 gameState.lastEvent = DescribeHostileImpact(object, role, false, false);
             }
@@ -3805,6 +4008,10 @@ void UpdateHostiles(World& world,
         std::remove_if(gameState.hostileAwareness.begin(), gameState.hostileAwareness.end(),
             [&](const HostileAwarenessState& state) { return !world.HasObject(state.registryId); }),
         gameState.hostileAwareness.end());
+    gameState.mechanicalHostileDamage.erase(
+        std::remove_if(gameState.mechanicalHostileDamage.begin(), gameState.mechanicalHostileDamage.end(),
+            [&](const MechanicalHostileDamageState& state) { return !world.HasObject(state.registryId); }),
+        gameState.mechanicalHostileDamage.end());
 }
 
 void HandleAttack(World& world,
@@ -3866,6 +4073,14 @@ void HandleAttack(World& world,
         } else if (player.insideTank && !gunnerSeat && role == HostileRole::GhoulRush) {
             damage += 5.0f;
         }
+        const std::string mechanicalFeedback = ApplyMechanicalHostileDamage(
+            *mutableObject,
+            role,
+            player,
+            profile,
+            gameState,
+            false,
+            momentum);
         mutableObject->health -= damage;
         if (player.insideTank) {
             RegisterTankSyncStyle(profile, !gunnerSeat);
@@ -3905,6 +4120,7 @@ void HandleAttack(World& world,
                         ? "Emergency baton strike landed. Field Reflex kept the operator tight on the opening exchange."
                         : "Strike landed cleanly. Field Reflex kept the operator tight on the opening exchange.")
                     : (hasEmergencyMeleeTool ? "Emergency baton strike landed." : "Strike landed on hostile target.")));
+            gameState.lastEvent += mechanicalFeedback;
         }
     }
 }
@@ -3990,6 +4206,14 @@ void HandleSpecialAttack(World& world,
         if (player.insideTank && role == HostileRole::RobotControl) {
             damage += gunnerSeat ? 6.0f : 9.0f;
         }
+        const std::string mechanicalFeedback = ApplyMechanicalHostileDamage(
+            *mutableObject,
+            role,
+            player,
+            profile,
+            gameState,
+            true,
+            0.0f);
         mutableObject->health -= damage;
         if (player.insideTank) {
             RegisterTankSyncStyle(profile, false);
@@ -4027,10 +4251,11 @@ void HandleSpecialAttack(World& world,
                     ? (crewSupportReadable
                         ? "BT-72 gunner cannon strike landed. Pilot Sync and crew discipline kept the support flash tight across the lane."
                         : "BT-72 gunner cannon strike landed. Support flash and shock rippled through the lane.")
-                    : "Cannon strike landed. Heavy muzzle flash and shock wave rolled off the hull.")
+                        : "Cannon strike landed. Heavy muzzle flash and shock wave rolled off the hull.")
                 : (fieldReflexEquipped
                     ? "Precision shot landed. Field Reflex steadied the opening shot."
                     : "Precision shot landed.");
+            gameState.lastEvent += mechanicalFeedback;
         }
     }
 }

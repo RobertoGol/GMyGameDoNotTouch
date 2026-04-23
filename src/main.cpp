@@ -840,6 +840,8 @@ int main() {
             ImGui::Begin("Field Prompt", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize);
             ImGui::Text("Nearest: %s", nearest->displayName.c_str());
             if (nearest->interaction == bunker::InteractionType::Hostile) {
+                const std::string hostileReadability = bunker::DescribeHostileReadability(*nearest, gameState);
+                ImGui::TextWrapped("%s", hostileReadability.c_str());
                 ImGui::Text("SPACE attack | R reload | G special");
             } else if (bunker::WantsContextKey(nearest)) {
                 ImGui::Text("Press F to enter or open");
@@ -880,12 +882,12 @@ int main() {
             ImGui::SetNextWindowPos(ImVec2(static_cast<float>(width - 320), 20.0f), ImGuiCond_Always);
             ImGui::Begin("Tank HUD", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize);
             ImGui::Text("BT-72 // %s", bunker::ToString(player.viewMode));
-            ImGui::Text("Hull %.0f%%", sessionProfile.partnerTank.damage.hull);
-            ImGui::Text("Turret %.0f%%", sessionProfile.partnerTank.damage.turret);
-            ImGui::Text("Bucket %.0f%%", sessionProfile.partnerTank.damage.bucket);
-            ImGui::Text("Sensors %.0f%%", sessionProfile.partnerTank.damage.sensors);
-            ImGui::Text("Cockpit %.0f%%", sessionProfile.partnerTank.damage.cockpit);
-            ImGui::Text("Power Core %.0f%%", sessionProfile.partnerTank.damage.powerCore);
+            ImGui::Text("Hull %.0f%% [%s]", sessionProfile.partnerTank.damage.hull, bunker::TankIntegrityBand(sessionProfile.partnerTank.damage.hull));
+            ImGui::Text("Turret %.0f%% [%s]", sessionProfile.partnerTank.damage.turret, bunker::TankIntegrityBand(sessionProfile.partnerTank.damage.turret));
+            ImGui::Text("Bucket %.0f%% [%s]", sessionProfile.partnerTank.damage.bucket, bunker::TankIntegrityBand(sessionProfile.partnerTank.damage.bucket));
+            ImGui::Text("Sensors %.0f%% [%s]", sessionProfile.partnerTank.damage.sensors, bunker::TankIntegrityBand(sessionProfile.partnerTank.damage.sensors));
+            ImGui::Text("Cockpit %.0f%% [%s]", sessionProfile.partnerTank.damage.cockpit, bunker::TankIntegrityBand(sessionProfile.partnerTank.damage.cockpit));
+            ImGui::Text("Power Core %.0f%% [%s]", sessionProfile.partnerTank.damage.powerCore, bunker::TankIntegrityBand(sessionProfile.partnerTank.damage.powerCore));
             ImGui::Text("Energy %.0f%%", sessionProfile.partnerTank.energyReserve);
             ImGui::Text("Ammo %.0f%%", sessionProfile.partnerTank.ammoReserve);
             ImGui::Text("Sync %s", bunker::CurrentTankSyncMode(sessionProfile.partnerTank).c_str());
@@ -923,6 +925,11 @@ int main() {
             }
             if (player.shockWaveTimer > 0.0f) {
                 ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.30f, 1.0f), "Shock wave rolling off the hull");
+            }
+            if (nearest != nullptr && nearest->interaction == bunker::InteractionType::Hostile) {
+                const std::string hostileReadability = bunker::DescribeHostileReadability(*nearest, gameState);
+                ImGui::Separator();
+                ImGui::TextWrapped("Threat: %s", hostileReadability.c_str());
             }
             ImGui::End();
         }

@@ -57,7 +57,6 @@
 ### BT-72 / combat / RPG depth
 - углубить pilot/gunner loop поверх уже работающего second-seat flow;
 - усилить различие между пешим и `BT-72` боем;
-- сделать enemy behavior более читаемым по ролям: люди, гули, роботы;
 - улучшить feel боя: impact, muzzle/shock, damage readability, combat pacing;
 - дать `SPECIAL`/skills/service choices более ранний реальный вес в первом срезе.
 
@@ -104,5 +103,5 @@
 
 ## 5. Следующий рабочий пакет
 
-1. точечный follow-up по `BT-72 / combat / RPG depth`, только если он напрямую усиливает first playable route
-2. усиление `recovery / industry / logistics` readability после debrief, только как честное продолжение первого маршрута
+1. усиление `recovery / industry / logistics` readability после debrief, только как честное продолжение первого маршрута
+2. только точечный follow-up по `BT-72 / combat / RPG depth`, если он исправляет реальный vertical-slice blocker, а не открывает новую ветку
