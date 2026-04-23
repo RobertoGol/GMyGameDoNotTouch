@@ -104,5 +104,5 @@
 
 ## 5. Следующий рабочий пакет
 
-1. recovery-node-to-midgame handoff pass
-2. lightweight random-event layer over route/recovery state
+1. save/load и `runtime / launcher / profile` hardening вокруг recovery / route-event state
+2. `hangar -> bunker exit -> surface arrival` presentation/readability polish без authored layout work

@@ -7,7 +7,7 @@ namespace bunker {
 namespace {
 
 constexpr char kSessionProfileFormat[] = "BPF1";
-constexpr int kCurrentSessionProfileVersion = 6;
+constexpr int kCurrentSessionProfileVersion = 7;
 
 bool HasInventoryEntry(const SessionProfile& profile, const std::string& itemId) {
     return std::any_of(
@@ -110,6 +110,18 @@ void MigrateSessionProfile(SessionProfile& profile, int loadedVersion) {
             profile.story.relayRecovered ||
             profile.story.returnedToBase;
     }
+    if (loadedVersion < 7) {
+        for (auto& worldState : profile.worldFieldStates) {
+            worldState.activeRouteEventType.clear();
+            worldState.routeEventTimeRemaining = 0.0f;
+            worldState.routeEventCooldown = 0.0f;
+            worldState.routeEventProgress = 0;
+            worldState.routeEventStage = 0;
+            worldState.routeEventSerial = 0;
+            worldState.routeEventsResolved = 0;
+            worldState.routeEventsFailed = 0;
+        }
+    }
 }
 
 }  // namespace
@@ -141,6 +153,20 @@ void NormalizeWorldFieldState(WorldFieldState& state) {
     if (!state.regionalGridOnline && !state.towerSyncRecovered) {
         state.feyRingIntercityUnlocked = false;
         state.feyRingInterserverUnlocked = false;
+    }
+
+    state.routeEventTimeRemaining = std::max(0.0f, state.routeEventTimeRemaining);
+    state.routeEventCooldown = std::max(0.0f, state.routeEventCooldown);
+    state.routeEventProgress = std::max(0, state.routeEventProgress);
+    state.routeEventStage = std::max(0, state.routeEventStage);
+    state.routeEventSerial = std::max(0, state.routeEventSerial);
+    state.routeEventsResolved = std::max(0, state.routeEventsResolved);
+    state.routeEventsFailed = std::max(0, state.routeEventsFailed);
+    if (state.activeRouteEventType.empty() || state.routeEventTimeRemaining <= 0.0f) {
+        state.activeRouteEventType.clear();
+        state.routeEventTimeRemaining = 0.0f;
+        state.routeEventProgress = 0;
+        state.routeEventStage = 0;
     }
 }
 
@@ -373,7 +399,15 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
             << (worldState.feyRingIntercityUnlocked ? 1 : 0) << ','
             << (worldState.feyRingInterserverUnlocked ? 1 : 0) << ','
             << worldState.relayCreditsEarned << ','
-            << worldState.relayCreditsSpent << '\n';
+            << worldState.relayCreditsSpent << ','
+            << worldState.activeRouteEventType << ','
+            << worldState.routeEventTimeRemaining << ','
+            << worldState.routeEventCooldown << ','
+            << worldState.routeEventProgress << ','
+            << worldState.routeEventStage << ','
+            << worldState.routeEventSerial << ','
+            << worldState.routeEventsResolved << ','
+            << worldState.routeEventsFailed << '\n';
     }
     out << "active_tape_index=" << profile.character.activeTapeIndex << '\n';
     for (const auto& vehicle : profile.ownedVehicles) {
@@ -656,6 +690,14 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
                                 state.feyRingInterserverUnlocked = parts.size() >= baseIndex + 32 ? (std::stoi(parts[baseIndex + 31]) != 0) : false;
                                 state.relayCreditsEarned = parts.size() >= baseIndex + 33 ? std::stoi(parts[baseIndex + 32]) : 0;
                                 state.relayCreditsSpent = parts.size() >= baseIndex + 34 ? std::stoi(parts[baseIndex + 33]) : 0;
+                                state.activeRouteEventType = parts.size() >= baseIndex + 35 ? parts[baseIndex + 34] : std::string();
+                                state.routeEventTimeRemaining = parts.size() >= baseIndex + 36 ? std::stof(parts[baseIndex + 35]) : 0.0f;
+                                state.routeEventCooldown = parts.size() >= baseIndex + 37 ? std::stof(parts[baseIndex + 36]) : 0.0f;
+                                state.routeEventProgress = parts.size() >= baseIndex + 38 ? std::stoi(parts[baseIndex + 37]) : 0;
+                                state.routeEventStage = parts.size() >= baseIndex + 39 ? std::stoi(parts[baseIndex + 38]) : 0;
+                                state.routeEventSerial = parts.size() >= baseIndex + 40 ? std::stoi(parts[baseIndex + 39]) : 0;
+                                state.routeEventsResolved = parts.size() >= baseIndex + 41 ? std::stoi(parts[baseIndex + 40]) : 0;
+                                state.routeEventsFailed = parts.size() >= baseIndex + 42 ? std::stoi(parts[baseIndex + 41]) : 0;
                             } else if (parts.size() >= 18) {
                                 state.railFreightActive = std::stoi(parts[baseOffset + 3]) != 0;
                                 state.orbitalUplinkActive = std::stoi(parts[baseOffset + 4]) != 0;

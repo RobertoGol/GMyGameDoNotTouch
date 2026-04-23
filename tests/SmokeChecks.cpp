@@ -57,6 +57,16 @@ void WriteRawString(std::ofstream& file, const std::string& value) {
     file.write(value.data(), static_cast<std::streamsize>(value.size()));
 }
 
+void UnlockAndEquipSkill(bunker::SessionProfile& profile, const std::string& skillId) {
+    for (auto& skill : profile.character.passiveSkills) {
+        if (skill.skillId == skillId) {
+            skill.unlocked = true;
+            skill.equipped = true;
+            return;
+        }
+    }
+}
+
 bool RunWorldRoundtrip() {
     bunker::World savedWorld;
     savedWorld.GeneratePrototypeZone();
@@ -127,6 +137,18 @@ bool RunProfileRoundtrip() {
     savedProfile.partnerTank.trustedGunnerHandle = "Lan Buddy";
     savedProfile.partnerTank.assignedGunnerHandle = "Lan Buddy";
     savedProfile.partnerTank.gunnerDrillSeen = true;
+    auto* savedWorldState = bunker::FindWorldFieldState(savedProfile, savedProfile.selectedWorld, true);
+    if (!Check(savedWorldState != nullptr, "profile roundtrip expected selected world state")) {
+        return false;
+    }
+    savedWorldState->activeRouteEventType = "service_call";
+    savedWorldState->routeEventTimeRemaining = 92.0f;
+    savedWorldState->routeEventCooldown = 17.0f;
+    savedWorldState->routeEventProgress = 1;
+    savedWorldState->routeEventStage = 1;
+    savedWorldState->routeEventSerial = 3;
+    savedWorldState->routeEventsResolved = 2;
+    savedWorldState->routeEventsFailed = 1;
 
     const auto saveStatus = bunker::SaveProfileAtomically(savedProfile, bunker::DefaultSessionProfilePath());
     if (!Check(saveStatus.ok, "profile save failed: " + saveStatus.message)) {
@@ -153,7 +175,19 @@ bool RunProfileRoundtrip() {
         Check(loadedProfile.firstPlayableRoute.surfaceArrivalReached, "profile first route surface arrival flag mismatch") &&
         Check(loadedProfile.partnerTank.secondSeatUnlocked, "profile second seat unlock mismatch") &&
         Check(loadedProfile.partnerTank.secondSeatPolicy == "trusted_only", "profile second seat policy mismatch") &&
-        Check(loadedProfile.partnerTank.trustedGunnerHandle == "Lan Buddy", "profile trusted gunner mismatch");
+        Check(loadedProfile.partnerTank.trustedGunnerHandle == "Lan Buddy", "profile trusted gunner mismatch") &&
+        Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld) != nullptr,
+            "profile roundtrip expected loaded selected world state") &&
+        Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->activeRouteEventType == "service_call",
+            "profile roundtrip active route event mismatch") &&
+        Check(std::abs(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->routeEventTimeRemaining - 92.0f) < 0.01f,
+            "profile roundtrip active route event timer mismatch") &&
+        Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->routeEventProgress == 1,
+            "profile roundtrip route event progress mismatch") &&
+        Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->routeEventsResolved == 2,
+            "profile roundtrip resolved route-event count mismatch") &&
+        Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->routeEventsFailed == 1,
+            "profile roundtrip failed route-event count mismatch");
 }
 
 bool RunFirstPlayableRouteStorySmoke() {
@@ -430,6 +464,116 @@ bool RunDebriefIndustrialHandoffSmoke() {
             "debrief handoff smoke expected industrial rail-depot handoff");
 }
 
+bool RunRecoveryHandoffSummarySmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.selectedWorld = "recovery_handoff_summary_smoke.bwld";
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    profile.story.outerRoadCleared = true;
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+    profile.firstPlayableRoute.firstServicePerformed = true;
+    profile.story.relayRecovered = true;
+    profile.firstPlayableRoute.firstRecoveryNodeActivated = true;
+    profile.story.returnedToBase = true;
+    profile.firstPlayableRoute.debriefSummaryViewed = true;
+    profile.fieldCheckpointKnown = true;
+    profile.fieldCheckpointWorld = profile.selectedWorld;
+    auto* worldState = bunker::FindWorldFieldState(profile, profile.selectedWorld, true);
+    if (!Check(worldState != nullptr, "recovery handoff smoke expected world field state")) {
+        return false;
+    }
+
+    if (!Check(bunker::CurrentRecoveryHandoffSummary(profile).find("rail freight") != std::string::npos,
+            "recovery handoff smoke expected rail-freight first step")) {
+        return false;
+    }
+
+    worldState->towerSyncRecovered = true;
+    worldState->localRelayAvailable = true;
+    worldState->regionalGridOnline = true;
+    worldState->caravanRouteActive = true;
+    worldState->railFreightActive = true;
+    profile.character.collectedTapes.push_back({"grid_pylon_01", "Pylon 01", false, false, false});
+    if (!Check(bunker::CurrentRecoveryHandoffSummary(profile).find("orbital uplink") != std::string::npos,
+            "recovery handoff smoke expected orbital uplink after freight")) {
+        return false;
+    }
+
+    worldState->tradeNetworkActive = true;
+    worldState->orbitalUplinkActive = true;
+    profile.character.collectedTapes.push_back({"grid_pylon_02", "Pylon 02", false, false, false});
+    if (!Check(bunker::CurrentRecoveryHandoffSummary(profile).find("Rail Fortress") != std::string::npos,
+            "recovery handoff smoke expected Rail Fortress after orbital uplink")) {
+        return false;
+    }
+
+    worldState->railFortressActive = true;
+    return Check(bunker::CurrentRecoveryHandoffSummary(profile).find("Recovery Fabricator") != std::string::npos,
+        "recovery handoff smoke expected fabricator after Rail Fortress");
+}
+
+bool RunRouteEventLifecycleSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.selectedWorld = "route_event_lifecycle_smoke.bwld";
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    profile.story.outerRoadCleared = true;
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+    profile.firstPlayableRoute.firstServicePerformed = true;
+    profile.story.relayRecovered = true;
+    profile.firstPlayableRoute.firstRecoveryNodeActivated = true;
+    profile.story.returnedToBase = true;
+    profile.firstPlayableRoute.debriefSummaryViewed = true;
+    profile.partnerTank.damage.hull = 58.0f;
+    profile.partnerTank.energyReserve = 78.0f;
+    profile.partnerTank.ammoReserve = 72.0f;
+    auto* worldState = bunker::FindWorldFieldState(profile, profile.selectedWorld, true);
+    if (!Check(worldState != nullptr, "route event smoke expected world field state")) {
+        return false;
+    }
+
+    bunker::GameState gameState;
+    bunker::UpdateRouteRandomEvents(profile, gameState, 1.0f);
+    if (!Check(worldState->activeRouteEventType == "service_call",
+            "route event smoke expected deterministic service-call spawn")) {
+        return false;
+    }
+    if (!Check(bunker::ActiveRouteEventSummary(profile).find("Service call") != std::string::npos,
+            "route event smoke expected active route-event summary")) {
+        return false;
+    }
+
+    profile.character.awakening.fieldServiceUses = 1;
+    profile.partnerTank.damage.hull = 84.0f;
+    profile.partnerTank.energyReserve = 81.0f;
+    profile.partnerTank.ammoReserve = 77.0f;
+    bunker::UpdateRouteRandomEvents(profile, gameState, 1.0f);
+
+    return Check(!bunker::HasActiveRouteEvent(*worldState), "route event smoke expected service-call resolution") &&
+        Check(worldState->routeEventsResolved == 1, "route event smoke expected resolved counter increment") &&
+        Check(worldState->routeEventCooldown > 0.0f, "route event smoke expected post-resolution cooldown") &&
+        Check(gameState.lastEvent.find("ROUTE EVENT RESOLVED") != std::string::npos,
+            "route event smoke expected resolution event copy") &&
+        Check(bunker::ActiveRouteEventSummary(profile).find("cooldown") != std::string::npos,
+            "route event smoke expected cooldown summary after resolution");
+}
+
 bool RunHostileAwarenessSmoke() {
     auto almostEqual = [](float lhs, float rhs) {
         return std::fabs(lhs - rhs) < 0.001f;
@@ -590,6 +734,205 @@ bool RunBt72CombatFeedbackSmoke() {
             "bt72 combat feedback smoke expected heavy shot resource cost") &&
         Check(gameState.lastEvent.find("shock") != std::string::npos,
             "bt72 combat feedback smoke expected heavy-shot feedback copy");
+}
+
+bool RunFieldReflexRpgWeightSmoke() {
+    auto makeWorld = []() {
+        bunker::World world;
+        bunker::MapObject ghoul;
+        ghoul.registryId = "[%enemy_ghoul_rpg_0001]";
+        ghoul.displayName = "Route Ghoul";
+        ghoul.interaction = bunker::InteractionType::Hostile;
+        ghoul.category = bunker::ObjectCategory::Hostile;
+        ghoul.x = 1.0f;
+        ghoul.y = 0.0f;
+        ghoul.width = 1.0f;
+        ghoul.depth = 1.0f;
+        ghoul.health = 120.0f;
+        ghoul.scriptTag = "ghoul_rush";
+        world.AddObject(ghoul);
+        return world;
+    };
+
+    bunker::SessionProfile baselineProfile = bunker::MakeDefaultSessionProfile();
+    baselineProfile.character.special.strength = 6;
+    baselineProfile.character.special.agility = 5;
+    baselineProfile.character.inventory.push_back({"#%it_emergency_baton", 1, 0.8f});
+
+    bunker::SessionProfile boostedProfile = baselineProfile;
+    boostedProfile.character.special.agility = 8;
+    UnlockAndEquipSkill(boostedProfile, "skill_field_reflex");
+
+    bunker::PlayerState player;
+    player.x = 0.0f;
+    player.y = 0.0f;
+    bunker::StaticEraser staticEraser;
+
+    bunker::World baselineWorld = makeWorld();
+    bunker::GameState baselineState;
+    bunker::HandleAttack(baselineWorld, player, baselineProfile, staticEraser, baselineState);
+    const auto* baselineGhoul = baselineWorld.FindObjectByRegistryId("[%enemy_ghoul_rpg_0001]");
+    if (!Check(baselineGhoul != nullptr, "field reflex smoke expected baseline ghoul after attack")) {
+        return false;
+    }
+    const float baselineDamage = 120.0f - baselineGhoul->health;
+
+    bunker::World boostedWorld = makeWorld();
+    bunker::GameState boostedState;
+    bunker::HandleAttack(boostedWorld, player, boostedProfile, staticEraser, boostedState);
+    const auto* boostedGhoul = boostedWorld.FindObjectByRegistryId("[%enemy_ghoul_rpg_0001]");
+    if (!Check(boostedGhoul != nullptr, "field reflex smoke expected boosted ghoul after attack")) {
+        return false;
+    }
+    const float boostedDamage = 120.0f - boostedGhoul->health;
+
+    return Check(boostedDamage > baselineDamage + 1.0f,
+            "field reflex smoke expected agility + Field Reflex to increase first-route foot damage") &&
+        Check(boostedState.lastEvent.find("Field Reflex") != std::string::npos,
+            "field reflex smoke expected readable RPG feedback copy");
+}
+
+bool RunBt72CrewCoordinationWeightSmoke() {
+    auto makeWorld = []() {
+        bunker::World world;
+        bunker::MapObject raider;
+        raider.registryId = "[%enemy_raider_rpg_0001]";
+        raider.displayName = "Route Raider";
+        raider.interaction = bunker::InteractionType::Hostile;
+        raider.category = bunker::ObjectCategory::Hostile;
+        raider.x = 3.4f;
+        raider.y = 0.0f;
+        raider.width = 1.0f;
+        raider.depth = 1.0f;
+        raider.health = 140.0f;
+        raider.scriptTag = "human_tactical";
+        world.AddObject(raider);
+        return world;
+    };
+
+    bunker::SessionProfile baselineProfile = bunker::MakeDefaultSessionProfile();
+    baselineProfile.story.tankLinked = true;
+    baselineProfile.firstPlayableRoute.bt72Restored = true;
+    baselineProfile.partnerTank.secondSeatUnlocked = true;
+
+    bunker::SessionProfile boostedProfile = baselineProfile;
+    boostedProfile.character.special.charisma = 8;
+    boostedProfile.character.special.intelligence = 8;
+    boostedProfile.partnerTank.gunnerDrillSeen = true;
+    boostedProfile.partnerTank.secondSeatPolicy = "trusted_only";
+    boostedProfile.partnerTank.trustedGunnerHandle = "Smoke Client";
+    boostedProfile.partnerTank.assignedGunnerHandle = "Smoke Client";
+    UnlockAndEquipSkill(boostedProfile, "skill_pilot_sync");
+
+    bunker::PlayerState player;
+    player.insideTank = true;
+    player.bt72GunnerSeat = true;
+    player.x = 0.0f;
+    player.y = 0.0f;
+
+    bunker::StaticEraser staticEraser;
+    bunker::World baselineWorld = makeWorld();
+    bunker::GameState baselineState;
+    const float baselineAmmoBefore = baselineProfile.partnerTank.ammoReserve;
+    const float baselineEnergyBefore = baselineProfile.partnerTank.energyReserve;
+    bunker::HandleAttack(baselineWorld, player, baselineProfile, staticEraser, baselineState);
+    const auto* baselineRaider = baselineWorld.FindObjectByRegistryId("[%enemy_raider_rpg_0001]");
+    if (!Check(baselineRaider != nullptr, "crew coordination smoke expected baseline raider after attack")) {
+        return false;
+    }
+    const float baselineDamage = 140.0f - baselineRaider->health;
+    const float baselineAmmoSpent = baselineAmmoBefore - baselineProfile.partnerTank.ammoReserve;
+    const float baselineEnergySpent = baselineEnergyBefore - baselineProfile.partnerTank.energyReserve;
+
+    bunker::World boostedWorld = makeWorld();
+    bunker::GameState boostedState;
+    const float boostedAmmoBefore = boostedProfile.partnerTank.ammoReserve;
+    const float boostedEnergyBefore = boostedProfile.partnerTank.energyReserve;
+    bunker::HandleAttack(boostedWorld, player, boostedProfile, staticEraser, boostedState);
+    const auto* boostedRaider = boostedWorld.FindObjectByRegistryId("[%enemy_raider_rpg_0001]");
+    if (!Check(boostedRaider != nullptr, "crew coordination smoke expected boosted raider after attack")) {
+        return false;
+    }
+    const float boostedDamage = 140.0f - boostedRaider->health;
+    const float boostedAmmoSpent = boostedAmmoBefore - boostedProfile.partnerTank.ammoReserve;
+    const float boostedEnergySpent = boostedEnergyBefore - boostedProfile.partnerTank.energyReserve;
+
+    return Check(boostedDamage > baselineDamage + 1.0f,
+            "crew coordination smoke expected pilot-sync crew support to increase gunner damage") &&
+        Check(boostedAmmoSpent < baselineAmmoSpent,
+            "crew coordination smoke expected crew support to trim gunner ammo cost") &&
+        Check(boostedEnergySpent < baselineEnergySpent,
+            "crew coordination smoke expected crew support to trim gunner energy cost") &&
+        Check(boostedState.lastEvent.find("Pilot Sync and crew discipline") != std::string::npos,
+            "crew coordination smoke expected readable crew-support feedback copy");
+}
+
+bool RunServiceChoiceWeightSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    const bunker::MapObject* workshop = world.FindObjectByRegistryId("[%workshop_0001]");
+    if (!Check(workshop != nullptr, "service choice smoke expected workshop anchor")) {
+        return false;
+    }
+
+    auto makeProfile = [&](bunker::ShelterDoctrine doctrine) {
+        bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+        profile.selectedWorld = "service_choice_smoke.bwld";
+        profile.story.tankLinked = true;
+        profile.firstPlayableRoute.bt72Restored = true;
+        profile.firstPlayableRoute.firstTankCombatResolved = true;
+        profile.partnerTank.worldPositionKnown = true;
+        profile.partnerTank.worldX = workshop->x;
+        profile.partnerTank.worldY = workshop->y;
+        profile.partnerTank.damage.hull = 60.0f;
+        profile.partnerTank.damage.turret = 58.0f;
+        profile.partnerTank.damage.bucket = 62.0f;
+        profile.partnerTank.damage.sensors = 57.0f;
+        profile.partnerTank.damage.cockpit = 55.0f;
+        profile.partnerTank.damage.powerCore = 59.0f;
+        profile.partnerTank.energyReserve = 54.0f;
+        profile.partnerTank.ammoReserve = 51.0f;
+        profile.character.hp = 45.0f;
+        profile.character.mp = 28.0f;
+        profile.doctrine = doctrine;
+        profile.character.inventory.push_back({"repair_patch", 1, 0.2f});
+        return profile;
+    };
+
+    bunker::SessionProfile baselineProfile = makeProfile(bunker::ShelterDoctrine::Balanced);
+    bunker::SessionProfile boostedProfile = makeProfile(bunker::ShelterDoctrine::Medical);
+    boostedProfile.partnerTank.secondSeatUnlocked = true;
+    boostedProfile.partnerTank.gunnerDrillSeen = true;
+    boostedProfile.partnerTank.trustedGunnerHandle = "Smoke Client";
+    boostedProfile.partnerTank.assignedGunnerHandle = "Smoke Client";
+    UnlockAndEquipSkill(boostedProfile, "skill_pilot_sync");
+
+    bunker::PlayerState player;
+    player.insideTank = false;
+    bunker::StaticEraser staticEraser;
+
+    bunker::GameState baselineState;
+    baselineState.tankThermalLoad = 50.0f;
+    const float baselineHpBefore = baselineProfile.character.hp;
+    const float baselineMpBefore = baselineProfile.character.mp;
+    const float baselineEnergyBefore = baselineProfile.partnerTank.energyReserve;
+    bunker::HandleInteraction(workshop, world, player, baselineProfile, staticEraser, baselineState);
+
+    bunker::GameState boostedState;
+    boostedState.tankThermalLoad = 50.0f;
+    const float boostedHpBefore = boostedProfile.character.hp;
+    const float boostedMpBefore = boostedProfile.character.mp;
+    const float boostedEnergyBefore = boostedProfile.partnerTank.energyReserve;
+    bunker::HandleInteraction(workshop, world, player, boostedProfile, staticEraser, boostedState);
+
+    return Check((boostedProfile.character.hp - boostedHpBefore) > (baselineProfile.character.hp - baselineHpBefore),
+            "service choice smoke expected doctrine-weighted service to recover more operator HP") &&
+        Check((boostedProfile.character.mp - boostedMpBefore) > (baselineProfile.character.mp - baselineMpBefore),
+            "service choice smoke expected doctrine-weighted service to recover more operator MP") &&
+        Check((boostedProfile.partnerTank.energyReserve - boostedEnergyBefore) > (baselineProfile.partnerTank.energyReserve - baselineEnergyBefore),
+            "service choice smoke expected Pilot Sync service pass to recover more BT-72 energy") &&
+        Check(boostedState.lastEvent.find("Medical doctrine stabilized the operator") != std::string::npos,
+            "service choice smoke expected readable doctrine-weight feedback copy");
 }
 
 bool RunLauncherAnnouncementSmoke() {
@@ -2784,9 +3127,14 @@ int main() {
         RunFirstCombatWorldEventSmoke() &&
         RunWorkshopServiceRouteHandoffSmoke() &&
         RunDebriefIndustrialHandoffSmoke() &&
+        RunRecoveryHandoffSummarySmoke() &&
+        RunRouteEventLifecycleSmoke() &&
         RunHostileAwarenessSmoke() &&
         RunHumanTriggerDisciplineSmoke() &&
         RunBt72CombatFeedbackSmoke() &&
+        RunFieldReflexRpgWeightSmoke() &&
+        RunBt72CrewCoordinationWeightSmoke() &&
+        RunServiceChoiceWeightSmoke() &&
         RunLauncherAnnouncementSmoke() &&
         RunLanlineServicesRoundtripSmoke() &&
         RunTankServiceKitSmoke() &&

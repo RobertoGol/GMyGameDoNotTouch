@@ -567,6 +567,125 @@ bool TankHasStabilizerSync(const SessionProfile& profile) {
     return CurrentTankSyncMode(profile.partnerTank) == "Stabilizer Sync";
 }
 
+bool HasBt72CrewSupport(const SessionProfile& profile) {
+    return Bt72SecondSeatUnlocked(profile) &&
+        (profile.partnerTank.gunnerDrillSeen ||
+            !profile.partnerTank.trustedGunnerHandle.empty() ||
+            !profile.partnerTank.assignedGunnerHandle.empty());
+}
+
+float Bt72CrewCoordinationBoost(const SessionProfile& profile, const GameState& gameState, bool gunnerSeat) {
+    float boost = 1.0f;
+    if (Bt72SecondSeatUnlocked(profile)) {
+        boost += 0.03f;
+    }
+    if (profile.partnerTank.gunnerDrillSeen) {
+        boost += gunnerSeat ? 0.06f : 0.03f;
+    }
+    if (!profile.partnerTank.trustedGunnerHandle.empty()) {
+        boost += 0.05f;
+    }
+    if (!profile.partnerTank.assignedGunnerHandle.empty()) {
+        boost += gunnerSeat ? 0.07f : 0.04f;
+    }
+    boost += static_cast<float>(std::max(0, EffectiveStatValue(profile, gameState, 'C') - 5)) * 0.015f;
+    boost += static_cast<float>(std::max(0, EffectiveStatValue(profile, gameState, 'I') - 5)) * 0.01f;
+    if (HasEquippedPassiveSkill(profile, "skill_pilot_sync")) {
+        boost += gunnerSeat ? 0.08f : 0.05f;
+    }
+    return boost;
+}
+
+float Bt72AttackEnergyDiscount(const SessionProfile& profile, const GameState& gameState, bool gunnerSeat) {
+    float discount = static_cast<float>(std::max(0, EffectiveStatValue(profile, gameState, 'I') - 5)) * 0.1f;
+    if (HasEquippedPassiveSkill(profile, "skill_pilot_sync")) {
+        discount += gunnerSeat ? 0.7f : 0.8f;
+    }
+    if (HasBt72CrewSupport(profile)) {
+        discount += gunnerSeat ? 0.5f : 0.3f;
+    }
+    return discount;
+}
+
+float Bt72AttackAmmoDiscount(const SessionProfile& profile, bool gunnerSeat) {
+    float discount = 0.0f;
+    if (HasBt72CrewSupport(profile)) {
+        discount += gunnerSeat ? 0.6f : 0.4f;
+    }
+    if (HasEquippedPassiveSkill(profile, "skill_pilot_sync")) {
+        discount += gunnerSeat ? 0.2f : 0.0f;
+    }
+    return discount;
+}
+
+float FootReflexCombatBoost(const SessionProfile& profile, const GameState& gameState) {
+    float boost = 1.0f;
+    boost += static_cast<float>(std::max(0, EffectiveStatValue(profile, gameState, 'A') - 5)) * 0.03f;
+    if (HasEquippedPassiveSkill(profile, "skill_field_reflex")) {
+        boost += 0.12f;
+    }
+    return boost;
+}
+
+float Bt72ServiceSkillBoost(const SessionProfile& profile, const GameState& gameState) {
+    float boost = 1.0f;
+    boost += static_cast<float>(std::max(0, EffectiveStatValue(profile, gameState, 'I') - 5)) * 0.03f;
+    if (HasEquippedPassiveSkill(profile, "skill_pilot_sync")) {
+        boost += 0.08f;
+    }
+    if (HasEquippedPassiveSkill(profile, "skill_muscle_memory")) {
+        boost += 0.04f;
+    }
+    if (HasBt72CrewSupport(profile)) {
+        boost += 0.05f;
+    }
+    return boost;
+}
+
+void ApplyServiceChoiceBonuses(SessionProfile& profile,
+    GameState& gameState,
+    bool fieldService,
+    std::string& eventText) {
+    const float energyBonus = fieldService ? 4.0f : 6.0f;
+    const float ammoBonus = fieldService ? 2.0f : 4.0f;
+    const float sensorBonus = fieldService ? 2.0f : 3.0f;
+    if (HasEquippedPassiveSkill(profile, "skill_pilot_sync")) {
+        profile.partnerTank.energyReserve = std::min(100.0f, profile.partnerTank.energyReserve + energyBonus);
+        profile.partnerTank.damage.sensors = std::min(100.0f, profile.partnerTank.damage.sensors + sensorBonus);
+        profile.partnerTank.trustLink = std::min(1.0f, profile.partnerTank.trustLink + (fieldService ? 0.015f : 0.025f));
+        eventText += " Pilot Sync trimmed service losses and tightened the link.";
+    }
+    if (HasBt72CrewSupport(profile)) {
+        profile.partnerTank.ammoReserve = std::min(100.0f, profile.partnerTank.ammoReserve + ammoBonus);
+        profile.partnerTank.damage.turret = std::min(100.0f, profile.partnerTank.damage.turret + (fieldService ? 2.0f : 3.0f));
+        eventText += " Crew coordination sped the reload and sight reset.";
+    }
+
+    switch (profile.doctrine) {
+        case ShelterDoctrine::Industry:
+            profile.partnerTank.energyReserve = std::min(100.0f, profile.partnerTank.energyReserve + (fieldService ? 3.0f : 5.0f));
+            profile.partnerTank.ammoReserve = std::min(100.0f, profile.partnerTank.ammoReserve + (fieldService ? 3.0f : 5.0f));
+            profile.partnerTank.damage.bucket = std::min(100.0f, profile.partnerTank.damage.bucket + (fieldService ? 2.0f : 4.0f));
+            eventText += " Industry doctrine prioritized reserves and utility throughput.";
+            break;
+        case ShelterDoctrine::Defense:
+            profile.partnerTank.damage.hull = std::min(100.0f, profile.partnerTank.damage.hull + (fieldService ? 4.0f : 6.0f));
+            profile.partnerTank.damage.turret = std::min(100.0f, profile.partnerTank.damage.turret + (fieldService ? 4.0f : 6.0f));
+            gameState.tankThermalLoad = std::max(0.0f, gameState.tankThermalLoad - (fieldService ? 8.0f : 12.0f));
+            eventText += " Defense doctrine hardened the combat package.";
+            break;
+        case ShelterDoctrine::Medical:
+            profile.partnerTank.damage.cockpit = std::min(100.0f, profile.partnerTank.damage.cockpit + (fieldService ? 3.0f : 5.0f));
+            profile.character.hp = std::min(profile.character.maxHp, profile.character.hp + (fieldService ? 10.0f : 16.0f));
+            profile.character.mp = std::min(profile.character.maxMp, profile.character.mp + (fieldService ? 12.0f : 18.0f));
+            eventText += " Medical doctrine stabilized the operator during service.";
+            break;
+        case ShelterDoctrine::Balanced:
+        default:
+            break;
+    }
+}
+
 float DoctrineWorkshopBoost(const SessionProfile& profile) {
     switch (profile.doctrine) {
         case ShelterDoctrine::Industry: return 1.14f;
@@ -1055,7 +1174,9 @@ bool TryRunFieldWorkbench(PlayerState& player,
     }
 
     const bool hasEngineer = HasAssignedSpecialistRole(profile, "engineer", "scavenger_support");
-    const float boost = hasEngineer ? 1.12f : 1.0f;
+    const float intelligence = static_cast<float>(EffectiveStatValue(profile, gameState, 'I'));
+    const float boost = (hasEngineer ? 1.12f : 1.0f) * Bt72ServiceSkillBoost(profile, gameState) *
+        (1.0f + std::max(0.0f, intelligence - 5.0f) * 0.015f);
     profile.partnerTank.damage.hull = std::min(100.0f, profile.partnerTank.damage.hull + 8.0f * boost);
     profile.partnerTank.damage.bucket = std::min(100.0f, profile.partnerTank.damage.bucket + 10.0f * boost);
     profile.partnerTank.damage.sensors = std::min(100.0f, profile.partnerTank.damage.sensors + 9.0f * boost);
@@ -1071,6 +1192,7 @@ bool TryRunFieldWorkbench(PlayerState& player,
     gameState.lastEvent = hasEngineer
         ? "Field service rack cycled. Scavenger-side engineer tuning improved the repair pass."
         : "Field service rack cycled. BT-72 patched and partially resupplied in the field.";
+    ApplyServiceChoiceBonuses(profile, gameState, true, gameState.lastEvent);
     if (profile.firstPlayableRoute.firstTankCombatResolved && !profile.firstPlayableRoute.firstServicePerformed) {
         profile.firstPlayableRoute.firstServicePerformed = true;
         gameState.lastEvent += " First service halt logged for the route.";
@@ -3174,6 +3296,382 @@ void UpdateWaterReclaimer(SessionProfile& profile, GameState& gameState, float d
     gameState.lastEvent = "Water reclaimer completed a purification cycle and stabilized frontier recovery reserves.";
 }
 
+namespace {
+
+bool RouteEventLayerUnlocked(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.debriefSummaryViewed ||
+        profile.story.returnedToBase ||
+        HasCollectedTapeId(profile, "debrief_shelter17");
+}
+
+const char* RouteEventLabel(std::string_view routeEventType) {
+    if (routeEventType == "service_call") {
+        return "Service call";
+    }
+    if (routeEventType == "field_refuel") {
+        return "Field refuel";
+    }
+    if (routeEventType == "relay_instability") {
+        return "Relay instability";
+    }
+    if (routeEventType == "blocked_route") {
+        return "Blocked route";
+    }
+    if (routeEventType == "damaged_convoy") {
+        return "Damaged convoy";
+    }
+    return "Route event";
+}
+
+float RouteEventDuration(std::string_view routeEventType) {
+    if (routeEventType == "service_call") {
+        return 150.0f;
+    }
+    if (routeEventType == "field_refuel") {
+        return 135.0f;
+    }
+    if (routeEventType == "relay_instability") {
+        return 145.0f;
+    }
+    if (routeEventType == "blocked_route") {
+        return 165.0f;
+    }
+    if (routeEventType == "damaged_convoy") {
+        return 155.0f;
+    }
+    return 120.0f;
+}
+
+float RouteEventCooldown(std::string_view routeEventType, bool success) {
+    const float baseCooldown = success ? 120.0f : 180.0f;
+    if (routeEventType == "blocked_route") {
+        return baseCooldown + 20.0f;
+    }
+    if (routeEventType == "relay_instability") {
+        return baseCooldown + 10.0f;
+    }
+    return baseCooldown;
+}
+
+int RouteEventGoal(std::string_view) {
+    return 2;
+}
+
+std::string RouteEventStartText(std::string_view routeEventType) {
+    if (routeEventType == "service_call") {
+        return "ROUTE EVENT: Service call tagged near the recovery fringe. Stabilize BT-72 and complete one honest repair/service pass before the window closes.";
+    }
+    if (routeEventType == "field_refuel") {
+        return "ROUTE EVENT: Field refuel window opened. Rebuild BT-72 reserves and secure one upstream fuel/support line.";
+    }
+    if (routeEventType == "relay_instability") {
+        return "ROUTE EVENT: Relay instability is bleeding across the starter route. Re-stabilize the local signal backbone before the packet degrades.";
+    }
+    if (routeEventType == "blocked_route") {
+        return "ROUTE EVENT: Fresh debris pressure is choking the cleared route. Reassert route control before the lane hard-locks again.";
+    }
+    if (routeEventType == "damaged_convoy") {
+        return "ROUTE EVENT: A damaged convoy drifted into the recovery fringe. Stabilize logistics and pull the cargo back into Shelter 17.";
+    }
+    return "ROUTE EVENT: A field incident was tagged on the active recovery route.";
+}
+
+std::string RouteEventEscalationText(std::string_view routeEventType) {
+    if (routeEventType == "service_call") {
+        return "ROUTE EVENT ESCALATING: Service call reserves are drying up. BT-72 support stock is about to be lost.";
+    }
+    if (routeEventType == "field_refuel") {
+        return "ROUTE EVENT ESCALATING: The refuel window is collapsing and the support cache is about to burn off.";
+    }
+    if (routeEventType == "relay_instability") {
+        return "ROUTE EVENT ESCALATING: Relay noise is spiking and the local route packet is starting to tear.";
+    }
+    if (routeEventType == "blocked_route") {
+        return "ROUTE EVENT ESCALATING: Debris and ether buildup are reclaiming the cleared lane.";
+    }
+    if (routeEventType == "damaged_convoy") {
+        return "ROUTE EVENT ESCALATING: The damaged convoy is breaking apart and recovery stock is spilling across the route.";
+    }
+    return "ROUTE EVENT ESCALATING: The field incident is worsening.";
+}
+
+int RouteEventProgress(const SessionProfile& profile, const WorldFieldState& worldState) {
+    if (worldState.activeRouteEventType == "service_call") {
+        int progress = 0;
+        if (profile.character.awakening.fieldServiceUses > 0 ||
+            worldState.serviceCyclesCompleted > 0 ||
+            worldState.serviceBayActive) {
+            progress += 1;
+        }
+        if (profile.partnerTank.damage.hull >= 70.0f &&
+            profile.partnerTank.energyReserve >= 55.0f &&
+            profile.partnerTank.ammoReserve >= 45.0f) {
+            progress += 1;
+        }
+        return progress;
+    }
+    if (worldState.activeRouteEventType == "field_refuel") {
+        int progress = 0;
+        if (profile.partnerTank.energyReserve >= 70.0f ||
+            InventoryCount(profile, "power_cell") > 0) {
+            progress += 1;
+        }
+        if (worldState.caravanRouteActive ||
+            worldState.droneStationsActive ||
+            worldState.tradeNetworkActive ||
+            worldState.railFreightActive) {
+            progress += 1;
+        }
+        return progress;
+    }
+    if (worldState.activeRouteEventType == "relay_instability") {
+        int progress = 0;
+        if (worldState.localRelayAvailable ||
+            worldState.regionalGridOnline ||
+            worldState.towerSyncRecovered) {
+            progress += 1;
+        }
+        if (worldState.relaySubstationActive ||
+            worldState.relaySyncCycles > 0 ||
+            worldState.routeContamination < 12.0f) {
+            progress += 1;
+        }
+        return progress;
+    }
+    if (worldState.activeRouteEventType == "blocked_route") {
+        int progress = 0;
+        if (!worldState.routeOverrun && worldState.routeContamination < 18.0f) {
+            progress += 1;
+        }
+        if (worldState.campFortificationLevel >= 1 ||
+            worldState.railFortressActive ||
+            worldState.caravanRouteActive ||
+            worldState.droneStationsActive) {
+            progress += 1;
+        }
+        return progress;
+    }
+    if (worldState.activeRouteEventType == "damaged_convoy") {
+        int progress = 0;
+        if (worldState.caravanRouteActive ||
+            worldState.droneStationsActive ||
+            worldState.tradeNetworkActive ||
+            worldState.railFreightActive) {
+            progress += 1;
+        }
+        if (worldState.serviceBayActive ||
+            InventoryCount(profile, "repair_patch") > 0 ||
+            profile.firstPlayableRoute.firstServicePerformed) {
+            progress += 1;
+        }
+        return progress;
+    }
+    return 0;
+}
+
+void ApplyRouteEventSuccess(SessionProfile& profile, WorldFieldState& worldState, GameState& gameState) {
+    const std::string routeEventType = worldState.activeRouteEventType;
+    if (routeEventType == "service_call") {
+        AddInventoryItem(profile, "repair_patch", 1, 0.2f);
+        AddInventoryItem(profile, "cryo_medkit", 1, 0.5f);
+        worldState.serviceCyclesCompleted = std::max(worldState.serviceCyclesCompleted, 1);
+        worldState.infrastructureDecay = std::max(0.0f, worldState.infrastructureDecay - 1.5f);
+        profile.partnerTank.energyReserve = std::min(100.0f, profile.partnerTank.energyReserve + 6.0f);
+        profile.partnerTank.ammoReserve = std::min(100.0f, profile.partnerTank.ammoReserve + 4.0f);
+        gameState.lastEvent = "ROUTE EVENT RESOLVED: Service call stabilized. Shelter 17 logged fresh repair stock and emergency med support.";
+    } else if (routeEventType == "field_refuel") {
+        AddInventoryItem(profile, "power_cell", 1, 0.3f);
+        AddInventoryItem(profile, "trade_voucher", 1, 0.0f);
+        profile.partnerTank.energyReserve = std::min(100.0f, profile.partnerTank.energyReserve + 14.0f);
+        profile.partnerTank.ammoReserve = std::min(100.0f, profile.partnerTank.ammoReserve + 6.0f);
+        worldState.infrastructureDecay = std::max(0.0f, worldState.infrastructureDecay - 0.6f);
+        gameState.lastEvent = "ROUTE EVENT RESOLVED: Field refuel window secured. BT-72 reserves and supply vouchers were pushed back into the route ledger.";
+    } else if (routeEventType == "relay_instability") {
+        AddInventoryItem(profile, "copper_wire", 1, 0.2f);
+        worldState.localRelayAvailable = worldState.localRelayAvailable || profile.story.relayRecovered;
+        worldState.routeContamination = std::max(0.0f, worldState.routeContamination - 6.0f);
+        worldState.relayCreditsEarned += 20;
+        gameState.lastEvent = "ROUTE EVENT RESOLVED: Relay instability contained. The local packet stabilized and fresh relay credit was logged.";
+    } else if (routeEventType == "blocked_route") {
+        AddInventoryItem(profile, "steel_scrap", 2, 0.5f);
+        AddInventoryItem(profile, "old_plate", 1, 0.5f);
+        worldState.routeOverrun = false;
+        worldState.routeContamination = std::max(0.0f, worldState.routeContamination - 10.0f);
+        worldState.infrastructureDecay = std::max(0.0f, worldState.infrastructureDecay - 1.5f);
+        gameState.lastEvent = "ROUTE EVENT RESOLVED: The blocked route was reopened and the salvage lane is readable again.";
+    } else if (routeEventType == "damaged_convoy") {
+        AddInventoryItem(profile, "trade_voucher", 1, 0.0f);
+        AddInventoryItem(profile, "repair_patch", 1, 0.2f);
+        AddInventoryItem(profile, "steel_scrap", 2, 0.5f);
+        worldState.tradeCyclesCompleted = std::max(worldState.tradeCyclesCompleted, 1);
+        gameState.lastEvent = "ROUTE EVENT RESOLVED: The damaged convoy was recovered and its cargo folded back into Shelter 17 logistics.";
+    } else {
+        gameState.lastEvent = "ROUTE EVENT RESOLVED: The field incident was contained.";
+    }
+
+    worldState.routeEventsResolved += 1;
+    gameState.lastEvent += " " + CurrentRecoveryHandoffSummary(profile);
+}
+
+void ApplyRouteEventFailure(SessionProfile& profile, WorldFieldState& worldState, GameState& gameState) {
+    const std::string routeEventType = worldState.activeRouteEventType;
+    if (routeEventType == "service_call") {
+        worldState.infrastructureDecay = std::min(100.0f, worldState.infrastructureDecay + 2.5f);
+        profile.partnerTank.energyReserve = std::max(0.0f, profile.partnerTank.energyReserve - 5.0f);
+        gameState.lastEvent = "ROUTE EVENT FAILED: The service call slipped. BT-72 reserve pressure climbed and field upkeep drifted upward.";
+    } else if (routeEventType == "field_refuel") {
+        worldState.routeContamination = std::min(100.0f, worldState.routeContamination + 2.0f);
+        profile.partnerTank.energyReserve = std::max(0.0f, profile.partnerTank.energyReserve - 10.0f);
+        gameState.lastEvent = "ROUTE EVENT FAILED: The refuel window collapsed and BT-72 lost precious reserve stock.";
+    } else if (routeEventType == "relay_instability") {
+        worldState.routeContamination = std::min(100.0f, worldState.routeContamination + 6.0f);
+        worldState.infrastructureDecay = std::min(100.0f, worldState.infrastructureDecay + 2.0f);
+        gameState.lastEvent = "ROUTE EVENT FAILED: Relay instability spilled back into the route and signal decay worsened.";
+    } else if (routeEventType == "blocked_route") {
+        worldState.routeOverrun = true;
+        worldState.routeContamination = std::min(100.0f, worldState.routeContamination + 8.0f);
+        worldState.infrastructureDecay = std::min(100.0f, worldState.infrastructureDecay + 2.0f);
+        gameState.lastEvent = "ROUTE EVENT FAILED: The blocked lane folded back under debris pressure and the route is drifting toward overrun.";
+    } else if (routeEventType == "damaged_convoy") {
+        worldState.routeContamination = std::min(100.0f, worldState.routeContamination + 3.0f);
+        worldState.infrastructureDecay = std::min(100.0f, worldState.infrastructureDecay + 1.5f);
+        gameState.lastEvent = "ROUTE EVENT FAILED: The convoy broke apart before recovery crews could stabilize it.";
+    } else {
+        gameState.lastEvent = "ROUTE EVENT FAILED: The field incident expired unresolved.";
+    }
+
+    worldState.routeEventsFailed += 1;
+}
+
+struct RouteEventCandidate {
+    const char* type = "";
+    int weight = 0;
+};
+
+std::string PickRouteEventType(const SessionProfile& profile, const WorldFieldState& worldState) {
+    std::vector<RouteEventCandidate> candidates;
+    if (profile.firstPlayableRoute.firstServicePerformed &&
+        !worldState.serviceBayActive &&
+        (TankNeedsRepair(profile) || worldState.serviceCyclesCompleted == 0)) {
+        candidates.push_back({"service_call", 5});
+    }
+    if (profile.story.tankLinked &&
+        (profile.partnerTank.energyReserve < 80.0f ||
+            profile.partnerTank.ammoReserve < 70.0f ||
+            InventoryCount(profile, "power_cell") == 0)) {
+        candidates.push_back({"field_refuel", 4});
+    }
+    if (profile.firstPlayableRoute.firstRecoveryNodeActivated &&
+        !worldState.relaySubstationActive &&
+        (worldState.routeContamination >= 10.0f ||
+            !worldState.localRelayAvailable ||
+            !worldState.regionalGridOnline)) {
+        candidates.push_back({"relay_instability", 3});
+    }
+    if (profile.story.outerRoadCleared &&
+        (worldState.routeOverrun ||
+            worldState.routeContamination >= 16.0f ||
+            worldState.infrastructureDecay >= 18.0f)) {
+        candidates.push_back({"blocked_route", 3});
+    }
+    if ((worldState.caravanRouteActive ||
+            worldState.droneStationsActive ||
+            worldState.tradeNetworkActive ||
+            worldState.railFreightActive) &&
+        worldState.serviceCyclesCompleted == 0) {
+        candidates.push_back({"damaged_convoy", 2});
+    }
+    if (candidates.empty() && profile.story.tankLinked && TankNeedsRepair(profile)) {
+        candidates.push_back({"service_call", 1});
+    }
+    if (candidates.empty()) {
+        return {};
+    }
+
+    int totalWeight = 0;
+    for (const auto& candidate : candidates) {
+        totalWeight += candidate.weight;
+    }
+    const int pick = totalWeight > 0 ? (worldState.routeEventSerial % totalWeight) : 0;
+    int cumulative = 0;
+    for (const auto& candidate : candidates) {
+        cumulative += candidate.weight;
+        if (pick < cumulative) {
+            return candidate.type;
+        }
+    }
+    return candidates.front().type;
+}
+
+void BeginRouteEvent(WorldFieldState& worldState, std::string routeEventType, GameState& gameState) {
+    worldState.activeRouteEventType = std::move(routeEventType);
+    worldState.routeEventTimeRemaining = RouteEventDuration(worldState.activeRouteEventType);
+    worldState.routeEventProgress = 0;
+    worldState.routeEventStage = 0;
+    worldState.routeEventCooldown = 0.0f;
+    worldState.routeEventSerial += 1;
+    gameState.lastEvent = RouteEventStartText(worldState.activeRouteEventType);
+}
+
+void EndRouteEvent(WorldFieldState& worldState, bool success) {
+    const std::string routeEventType = worldState.activeRouteEventType;
+    worldState.activeRouteEventType.clear();
+    worldState.routeEventTimeRemaining = 0.0f;
+    worldState.routeEventProgress = 0;
+    worldState.routeEventStage = 0;
+    worldState.routeEventCooldown = RouteEventCooldown(routeEventType, success);
+}
+
+}  // namespace
+
+void UpdateRouteRandomEvents(SessionProfile& profile, GameState& gameState, float dt) {
+    auto* worldState = FindWorldFieldState(profile, profile.selectedWorld, true);
+    if (worldState == nullptr) {
+        return;
+    }
+
+    if (!RouteEventLayerUnlocked(profile)) {
+        if (!HasActiveRouteEvent(*worldState)) {
+            worldState->routeEventCooldown = 0.0f;
+        }
+        return;
+    }
+
+    if (HasActiveRouteEvent(*worldState)) {
+        const float eventDuration = RouteEventDuration(worldState->activeRouteEventType);
+        worldState->routeEventTimeRemaining = std::max(0.0f, worldState->routeEventTimeRemaining - dt);
+        worldState->routeEventProgress = std::max(worldState->routeEventProgress, RouteEventProgress(profile, *worldState));
+        if (worldState->routeEventStage == 0 &&
+            worldState->routeEventTimeRemaining <= eventDuration * 0.45f) {
+            worldState->routeEventStage = 1;
+            gameState.lastEvent = RouteEventEscalationText(worldState->activeRouteEventType);
+        }
+        if (worldState->routeEventProgress >= RouteEventGoal(worldState->activeRouteEventType)) {
+            ApplyRouteEventSuccess(profile, *worldState, gameState);
+            EndRouteEvent(*worldState, true);
+            return;
+        }
+        if (worldState->routeEventTimeRemaining <= 0.0f) {
+            ApplyRouteEventFailure(profile, *worldState, gameState);
+            EndRouteEvent(*worldState, false);
+        }
+        return;
+    }
+
+    worldState->routeEventCooldown = std::max(0.0f, worldState->routeEventCooldown - dt);
+    if (worldState->routeEventCooldown > 0.0f) {
+        return;
+    }
+
+    const std::string routeEventType = PickRouteEventType(profile, *worldState);
+    if (routeEventType.empty()) {
+        worldState->routeEventCooldown = 30.0f;
+        return;
+    }
+
+    BeginRouteEvent(*worldState, routeEventType, gameState);
+}
+
 void UpdateHostiles(World& world,
     PlayerState& player,
     SessionProfile& profile,
@@ -3312,12 +3810,14 @@ void HandleAttack(World& world,
     }
 
     if (gunnerSeat) {
-        if (profile.partnerTank.ammoReserve < 3.0f || profile.partnerTank.energyReserve < 2.0f) {
+        const float ammoCost = std::max(1.6f, 3.0f - Bt72AttackAmmoDiscount(profile, true));
+        const float energyCost = std::max(1.0f, 2.0f - Bt72AttackEnergyDiscount(profile, gameState, true));
+        if (profile.partnerTank.ammoReserve < ammoCost || profile.partnerTank.energyReserve < energyCost) {
             gameState.lastEvent = "BT-72 gunner seat lacks ammo or power for a support burst.";
             return;
         }
-        profile.partnerTank.ammoReserve = std::max(0.0f, profile.partnerTank.ammoReserve - 3.0f);
-        profile.partnerTank.energyReserve = std::max(0.0f, profile.partnerTank.energyReserve - 2.0f);
+        profile.partnerTank.ammoReserve = std::max(0.0f, profile.partnerTank.ammoReserve - ammoCost);
+        profile.partnerTank.energyReserve = std::max(0.0f, profile.partnerTank.energyReserve - energyCost);
         player.recoilOffset = std::min(0.5f, player.recoilOffset + 0.12f);
         gameState.tankThermalLoad = std::min(100.0f, gameState.tankThermalLoad + 4.0f);
     }
@@ -3326,6 +3826,12 @@ void HandleAttack(World& world,
         const HostileRole role = ClassifyHostileRole(*mutableObject);
         const bool hasEmergencyMeleeTool = HasEmergencyMeleeTool(profile);
         const float momentum = std::sqrt((player.velocityX * player.velocityX) + (player.velocityY * player.velocityY));
+        const bool fieldReflexEquipped = !player.insideTank && HasEquippedPassiveSkill(profile, "skill_field_reflex");
+        const bool crewSupportReadable = player.insideTank &&
+            HasEquippedPassiveSkill(profile, "skill_pilot_sync") &&
+            HasBt72CrewSupport(profile);
+        const float footReflexBoost = player.insideTank ? 1.0f : FootReflexCombatBoost(profile, gameState);
+        const float crewCoordinationBoost = player.insideTank ? Bt72CrewCoordinationBoost(profile, gameState, gunnerSeat) : 1.0f;
         const float linkFactor = player.insideTank ? (0.88f + profile.partnerTank.trustLink * (gunnerSeat ? 0.24f : 0.18f)) : 1.0f;
         const float sensorFactor = player.insideTank ? std::clamp(profile.partnerTank.damage.sensors / 100.0f, 0.58f, 1.0f) : 1.0f;
         const float thermalFactor = player.insideTank
@@ -3339,7 +3845,9 @@ void HandleAttack(World& world,
                 momentum * (TankUsesRamShield(profile) ? 4.0f : 2.7f))
             : ((hasEmergencyMeleeTool ? 20.0f : 14.0f) + static_cast<float>(EffectiveStatValue(profile, gameState, 'S')) * (hasEmergencyMeleeTool ? 1.05f : 0.9f)));
         if (player.insideTank) {
-            damage *= linkFactor * sensorFactor * thermalFactor;
+            damage *= linkFactor * sensorFactor * thermalFactor * crewCoordinationBoost;
+        } else {
+            damage *= footReflexBoost;
         }
         if (gunnerSeat && role == HostileRole::HumanTactical) {
             damage += 4.0f;
@@ -3374,10 +3882,16 @@ void HandleAttack(World& world,
             }
         } else {
             gameState.lastEvent = gunnerSeat
-                ? "BT-72 gunner burst landed. Muzzle flash lit the lane and armor fragments peeled off the target."
+                ? (crewSupportReadable
+                    ? "BT-72 gunner burst landed. Pilot Sync and crew discipline tightened the burst and armor fragments peeled off the target."
+                    : "BT-72 gunner burst landed. Muzzle flash lit the lane and armor fragments peeled off the target.")
                 : (player.insideTank
                 ? "Ram impact landed. Shock rolled through the lane as BT-72 drove the contact back."
-                : (hasEmergencyMeleeTool ? "Emergency baton strike landed." : "Strike landed on hostile target."));
+                : (fieldReflexEquipped
+                    ? (hasEmergencyMeleeTool
+                        ? "Emergency baton strike landed. Field Reflex kept the operator tight on the opening exchange."
+                        : "Strike landed cleanly. Field Reflex kept the operator tight on the opening exchange.")
+                    : (hasEmergencyMeleeTool ? "Emergency baton strike landed." : "Strike landed on hostile target.")));
         }
     }
 }
@@ -3398,8 +3912,10 @@ void HandleSpecialAttack(World& world,
     }
 
     if (player.insideTank) {
-        const float ammoCost = gunnerSeat ? 6.0f : 8.0f;
-        const float energyCost = gunnerSeat ? 4.0f : (TankHasStabilizerSync(profile) ? 5.0f : 6.0f);
+        const float ammoCost = std::max(3.5f, (gunnerSeat ? 6.0f : 8.0f) - Bt72AttackAmmoDiscount(profile, gunnerSeat));
+        const float energyCost = std::max(2.0f,
+            (gunnerSeat ? 4.0f : (TankHasStabilizerSync(profile) ? 5.0f : 6.0f)) -
+            Bt72AttackEnergyDiscount(profile, gameState, gunnerSeat));
         if (profile.partnerTank.ammoReserve < ammoCost || profile.partnerTank.energyReserve < energyCost) {
             gameState.lastEvent = gunnerSeat
                 ? "BT-72 gunner seat lacks ammo or power for a support cannon cycle."
@@ -3424,16 +3940,26 @@ void HandleSpecialAttack(World& world,
             gameState.lastEvent = "No PTRS ammo available for a ranged shot.";
             return;
         }
-        if (profile.character.mp < 8.0f) {
+        const float precisionCost = std::max(4.0f,
+            8.0f -
+            static_cast<float>(std::max(0, EffectiveStatValue(profile, gameState, 'A') - 5)) * 0.35f -
+            (HasEquippedPassiveSkill(profile, "skill_field_reflex") ? 1.4f : 0.0f));
+        if (profile.character.mp < precisionCost) {
             AddInventoryItem(profile, "#%it_ptrs_ammo", 1, 0.7f);
             gameState.lastEvent = "Not enough MP to stabilize a precision shot.";
             return;
         }
-        profile.character.mp = std::max(0.0f, profile.character.mp - 8.0f);
+        profile.character.mp = std::max(0.0f, profile.character.mp - precisionCost);
     }
 
     if (auto* mutableObject = const_cast<MapObject*>(hostile); mutableObject != nullptr) {
         const HostileRole role = ClassifyHostileRole(*mutableObject);
+        const bool fieldReflexEquipped = !player.insideTank && HasEquippedPassiveSkill(profile, "skill_field_reflex");
+        const bool crewSupportReadable = player.insideTank &&
+            HasEquippedPassiveSkill(profile, "skill_pilot_sync") &&
+            HasBt72CrewSupport(profile);
+        const float footReflexBoost = player.insideTank ? 1.0f : FootReflexCombatBoost(profile, gameState);
+        const float crewCoordinationBoost = player.insideTank ? Bt72CrewCoordinationBoost(profile, gameState, gunnerSeat) : 1.0f;
         const float linkFactor = player.insideTank ? (0.9f + profile.partnerTank.trustLink * 0.2f) : 1.0f;
         const float sensorFactor = player.insideTank ? std::clamp(profile.partnerTank.damage.sensors / 100.0f, 0.55f, 1.0f) : 1.0f;
         const float thermalFactor = player.insideTank
@@ -3444,7 +3970,9 @@ void HandleSpecialAttack(World& world,
                 static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * (gunnerSeat ? 2.2f : 2.0f))
             : (24.0f + static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * 1.1f);
         if (player.insideTank) {
-            damage *= linkFactor * sensorFactor * thermalFactor;
+            damage *= linkFactor * sensorFactor * thermalFactor * crewCoordinationBoost;
+        } else {
+            damage *= footReflexBoost;
         }
         if (player.insideTank && role == HostileRole::RobotControl) {
             damage += gunnerSeat ? 6.0f : 9.0f;
@@ -3483,9 +4011,13 @@ void HandleSpecialAttack(World& world,
         } else {
             gameState.lastEvent = player.insideTank
                 ? (gunnerSeat
-                    ? "BT-72 gunner cannon strike landed. Support flash and shock rippled through the lane."
+                    ? (crewSupportReadable
+                        ? "BT-72 gunner cannon strike landed. Pilot Sync and crew discipline kept the support flash tight across the lane."
+                        : "BT-72 gunner cannon strike landed. Support flash and shock rippled through the lane.")
                     : "Cannon strike landed. Heavy muzzle flash and shock wave rolled off the hull.")
-                : "Precision shot landed.";
+                : (fieldReflexEquipped
+                    ? "Precision shot landed. Field Reflex steadied the opening shot."
+                    : "Precision shot landed.");
         }
     }
 }
@@ -3939,7 +4471,7 @@ void HandleInteraction(const MapObject* nearest,
             const float infrastructurePenalty = worldState != nullptr
                 ? std::max(0.68f, 1.0f - worldState->infrastructureDecay / 150.0f)
                 : 1.0f;
-            const float repairBoost = engineerBoost * doctrineBoost * infrastructurePenalty;
+            const float repairBoost = engineerBoost * doctrineBoost * infrastructurePenalty * Bt72ServiceSkillBoost(profile, gameState);
             profile.partnerTank.damage.hull = std::min(100.0f, profile.partnerTank.damage.hull + (18.0f + intelligence * 0.9f) * repairBoost);
             profile.partnerTank.damage.bucket = std::min(100.0f, profile.partnerTank.damage.bucket + (20.0f + intelligence * 0.7f) * repairBoost);
             profile.partnerTank.damage.sensors = std::min(100.0f, profile.partnerTank.damage.sensors + (16.0f + intelligence * 0.8f) * repairBoost);
@@ -3961,17 +4493,11 @@ void HandleInteraction(const MapObject* nearest,
                         ? "Workshop cycle complete. Resident engineer boosted BT-72 repair output. " + progressionEvent
                         : "Workshop cycle complete. BT-72 repaired and resupplied. " + progressionEvent;
                 }
+                ApplyServiceChoiceBonuses(profile, gameState, false, gameState.lastEvent);
                 if (profile.firstPlayableRoute.firstTankCombatResolved && !profile.firstPlayableRoute.firstServicePerformed) {
                     profile.firstPlayableRoute.firstServicePerformed = true;
                     gameState.lastEvent += " First service halt logged for the route.";
                     AppendObjectivePreviewHint(gameState.lastEvent, profile);
-                }
-                if (profile.doctrine == ShelterDoctrine::Industry) {
-                    gameState.lastEvent += " Industry doctrine amplified service throughput.";
-                } else if (profile.doctrine == ShelterDoctrine::Medical) {
-                    gameState.lastEvent += " Medical doctrine kept service safe but conservative.";
-                } else if (profile.doctrine == ShelterDoctrine::Defense) {
-                    gameState.lastEvent += " Defense doctrine prioritized combat readiness.";
                 }
             }
             break;
@@ -4479,6 +5005,13 @@ void DrawPipPad(const World& world,
             profile.firstPlayableRoute.surfaceArrivalReached
                 ? "secured"
                 : (profile.story.exitedBunker ? "approach unlocked" : "locked"));
+        ImGui::TextWrapped("Recovery Handoff: %s", CurrentRecoveryHandoffSummary(profile).c_str());
+        ImGui::TextWrapped("Route Event Layer: %s", ActiveRouteEventSummary(profile).c_str());
+        if (worldFieldState != nullptr) {
+            ImGui::BulletText("Route events resolved/failed: %d / %d",
+                worldFieldState->routeEventsResolved,
+                worldFieldState->routeEventsFailed);
+        }
         if (nextSliceStep != verticalSliceRoute.end()) {
             ImGui::TextWrapped("Next Payoff: %s", nextSliceStep->text.c_str());
         }

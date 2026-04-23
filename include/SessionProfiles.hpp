@@ -115,6 +115,14 @@ struct WorldFieldState {
     bool feyRingInterserverUnlocked = false;
     int relayCreditsEarned = 0;
     int relayCreditsSpent = 0;
+    std::string activeRouteEventType{};
+    float routeEventTimeRemaining = 0.0f;
+    float routeEventCooldown = 0.0f;
+    int routeEventProgress = 0;
+    int routeEventStage = 0;
+    int routeEventSerial = 0;
+    int routeEventsResolved = 0;
+    int routeEventsFailed = 0;
 };
 
 struct SkillAwakeningProgress {
@@ -508,6 +516,20 @@ inline void MergeWorldFieldState(WorldFieldState& target, const WorldFieldState&
     target.feyRingInterserverUnlocked = target.feyRingInterserverUnlocked || source.feyRingInterserverUnlocked;
     target.relayCreditsEarned = std::max(target.relayCreditsEarned, source.relayCreditsEarned);
     target.relayCreditsSpent = std::max(target.relayCreditsSpent, source.relayCreditsSpent);
+    if (target.activeRouteEventType.empty() || source.routeEventTimeRemaining > target.routeEventTimeRemaining) {
+        target.activeRouteEventType = source.activeRouteEventType;
+        target.routeEventTimeRemaining = source.routeEventTimeRemaining;
+        target.routeEventProgress = source.routeEventProgress;
+        target.routeEventStage = source.routeEventStage;
+    }
+    target.routeEventCooldown = std::max(target.routeEventCooldown, source.routeEventCooldown);
+    target.routeEventSerial = std::max(target.routeEventSerial, source.routeEventSerial);
+    target.routeEventsResolved = std::max(target.routeEventsResolved, source.routeEventsResolved);
+    target.routeEventsFailed = std::max(target.routeEventsFailed, source.routeEventsFailed);
+}
+
+inline bool HasActiveRouteEvent(const WorldFieldState& worldState) {
+    return !worldState.activeRouteEventType.empty() && worldState.routeEventTimeRemaining > 0.0f;
 }
 
 inline bool HasCollectedTapeId(const SessionProfile& profile, const std::string& tapeId) {

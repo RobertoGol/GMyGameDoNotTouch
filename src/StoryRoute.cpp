@@ -109,6 +109,36 @@ bool HasBt72RestorationMaterials(const SessionProfile& profile) {
         CountInventory(profile, "old_plate") >= 1;
 }
 
+const char* RouteEventLabel(std::string_view routeEventType) {
+    if (routeEventType == "service_call") {
+        return "Service call";
+    }
+    if (routeEventType == "field_refuel") {
+        return "Field refuel";
+    }
+    if (routeEventType == "relay_instability") {
+        return "Relay instability";
+    }
+    if (routeEventType == "blocked_route") {
+        return "Blocked route";
+    }
+    if (routeEventType == "damaged_convoy") {
+        return "Damaged convoy";
+    }
+    return "Route event";
+}
+
+int RouteEventGoal(const WorldFieldState& worldState) {
+    if (worldState.activeRouteEventType == "service_call" ||
+        worldState.activeRouteEventType == "field_refuel" ||
+        worldState.activeRouteEventType == "relay_instability" ||
+        worldState.activeRouteEventType == "blocked_route" ||
+        worldState.activeRouteEventType == "damaged_convoy") {
+        return 2;
+    }
+    return 1;
+}
+
 const WorldFieldState* SelectedWorldState(const SessionProfile& profile) {
     return FindWorldFieldState(profile, profile.selectedWorld);
 }
@@ -358,6 +388,93 @@ std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEra
         return "Recovery buildout active. Runtime world state not loaded yet.";
     }
     return CurrentIndustrialObjective(profile, *worldState);
+}
+
+std::string CurrentRecoveryHandoffSummary(const SessionProfile& profile) {
+    if (!FirstRecoveryNodeActivated(profile)) {
+        return "Recovery handoff locked until the first relay node comes online.";
+    }
+    if (!DebriefSummaryViewed(profile)) {
+        return "Return to Shelter 17, upload the debrief, and turn the route payoff into recovery planning.";
+    }
+
+    const auto* worldState = SelectedWorldState(profile);
+    if (worldState == nullptr) {
+        return "Recovery handoff waiting for selected-world state.";
+    }
+
+    if (!IsRailFreightOperational(profile, *worldState)) {
+        return "Handoff: restore rail freight and move heavy salvage off the starter route.";
+    }
+    if (!IsOrbitalUplinkOperational(profile, *worldState)) {
+        return "Handoff: align the orbital uplink and extend recovery scans past the first corridor.";
+    }
+    if (!IsRailFortressOperational(profile, *worldState)) {
+        return "Handoff: deploy the Rail Fortress and harden the restored spur.";
+    }
+    if (!IsRecoveryFabricatorOperational(profile, *worldState)) {
+        return "Handoff: prime the Recovery Fabricator and turn salvage into field stock.";
+    }
+    if (!worldState->industrialGateUnlocked) {
+        return "Handoff: unlock the industrial gate and push beyond the starter recovery lane.";
+    }
+    if (!IsIndustrialSurveyOperational(*worldState)) {
+        return "Handoff: start industrial survey coverage for the inner spur.";
+    }
+    if (!IsIndustrialOutpostOperational(*worldState)) {
+        return "Handoff: establish the inner spur outpost and secure forward logistics.";
+    }
+    if (!IsAssemblyCellOperational(*worldState)) {
+        return "Handoff: bring the assembly cell online for local industrial recovery.";
+    }
+    if (!IsFoundryLineOperational(*worldState)) {
+        return "Handoff: restart the foundry line for heavy plate output.";
+    }
+    if (!IsReactorYardOperational(*worldState)) {
+        return "Handoff: stabilize the reactor yard for deeper industrial power.";
+    }
+    if (!IsCapacitorBankOperational(*worldState)) {
+        return "Handoff: charge the capacitor bank and buffer the heavy grid.";
+    }
+    if (!IsRelaySubstationOperational(*worldState)) {
+        return "Handoff: sync the relay substation back into Shelter 17.";
+    }
+    if (!IsServiceBayOperational(*worldState)) {
+        return "Handoff: bring the service bay online for deep BT-72 support.";
+    }
+    if (!IsWaterReclaimerOperational(*worldState)) {
+        return "Handoff: bring the water reclaimer online and stabilize frontier recovery.";
+    }
+    return "Handoff complete: Shelter 17 has a stable recovery backbone and can push deeper into the inner spur.";
+}
+
+std::string ActiveRouteEventSummary(const SessionProfile& profile) {
+    const auto* worldState = SelectedWorldState(profile);
+    if (worldState == nullptr) {
+        return "Route event layer waiting for selected-world state.";
+    }
+
+    if (HasActiveRouteEvent(*worldState)) {
+        const int goal = RouteEventGoal(*worldState);
+        const int secondsRemaining = worldState->routeEventTimeRemaining > 0.0f
+            ? static_cast<int>(worldState->routeEventTimeRemaining + 0.5f)
+            : 0;
+        const char* phase = worldState->routeEventStage > 0 ? "escalating" : "active";
+        return std::string(RouteEventLabel(worldState->activeRouteEventType)) + " " + phase +
+            " // progress " + std::to_string(worldState->routeEventProgress) + "/" + std::to_string(goal) +
+            " // " + std::to_string(secondsRemaining) + "s left";
+    }
+
+    if (!(DebriefSummaryViewed(profile) || FirstRecoveryNodeActivated(profile))) {
+        return "Route event layer locked until the route debrief handoff.";
+    }
+
+    if (worldState->routeEventCooldown > 0.0f) {
+        const int secondsRemaining = static_cast<int>(worldState->routeEventCooldown + 0.5f);
+        return "Route event cooldown // next field incident window in " + std::to_string(secondsRemaining) + "s";
+    }
+
+    return "Route event layer ready for the next field incident window.";
 }
 
 std::vector<StoryRouteEntry> BuildBt72RestorationRoute(const SessionProfile& profile) {

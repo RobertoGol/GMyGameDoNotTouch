@@ -464,6 +464,7 @@ int main() {
         bunker::UpdateRelaySubstation(sessionProfile, gameState, dt);
         bunker::UpdateServiceBay(sessionProfile, gameState, dt);
         bunker::UpdateWaterReclaimer(sessionProfile, gameState, dt);
+        bunker::UpdateRouteRandomEvents(sessionProfile, gameState, dt);
         if (gameState.rationEffectTimer > 0.0f) {
             gameState.rationEffectTimer = std::max(0.0f, gameState.rationEffectTimer - dt);
             if (gameState.rationEffectTimer == 0.0f) {

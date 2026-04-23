@@ -161,6 +161,7 @@ void UpdateCapacitorBank(SessionProfile& profile, GameState& gameState, float dt
 void UpdateRelaySubstation(SessionProfile& profile, GameState& gameState, float dt);
 void UpdateServiceBay(SessionProfile& profile, GameState& gameState, float dt);
 void UpdateWaterReclaimer(SessionProfile& profile, GameState& gameState, float dt);
+void UpdateRouteRandomEvents(SessionProfile& profile, GameState& gameState, float dt);
 void HandleAttack(World& world,
     PlayerState& player,
     SessionProfile& profile,
