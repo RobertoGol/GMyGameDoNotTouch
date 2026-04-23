@@ -912,6 +912,7 @@ void DrawPipPadServicesTab(const World& world, const PlayerState& player, Sessio
     ImGui::BulletText("Tank service nearby: %s", gameState.tankServiceNearby ? "yes" : "no");
     ImGui::BulletText("Medical support nearby: %s", gameState.medicalSupportNearby ? "yes" : "no");
     ImGui::BulletText("Fey schedule visible: %s", gameState.feyRingScheduleVisible ? "yes" : "no");
+    ImGui::BulletText("Route event layer: %s", ActiveRouteEventSummary(profile).c_str());
     const int deliveredOrders = CountSupportOrdersInState(lanlineServices, SupportOrderState::Delivered);
     const bool canClaimDeliveredOrders =
         deliveredOrders > 0 &&
@@ -936,6 +937,16 @@ void DrawPipPadServicesTab(const World& world, const PlayerState& player, Sessio
     }
     if (!gameState.lastPortalAction.empty()) {
         ImGui::TextWrapped("Portal action: %s", gameState.lastPortalAction.c_str());
+    }
+    if (currentWorldFieldState != nullptr &&
+        currentWorldFieldState->activeRouteEventType == "merchant_window" &&
+        HasActiveRouteEvent(*currentWorldFieldState)) {
+        ImGui::Separator();
+        ImGui::Text("Merchant Window");
+        ImGui::TextWrapped("A rare merchant trace is open. Broker one exchange from the services layer before the window closes.");
+        if (ImGui::Button("Broker Merchant Exchange")) {
+            TryResolveMerchantRouteEvent(profile, gameState);
+        }
     }
     DrawLanlineServicesPanel(lanlineServices, servicesUnlock, nowUnix);
     SyncLanlineServicesSessionProfile(profile, lanlineServices);

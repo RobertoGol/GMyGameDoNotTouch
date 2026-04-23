@@ -125,6 +125,9 @@ const char* RouteEventLabel(std::string_view routeEventType) {
     if (routeEventType == "damaged_convoy") {
         return "Damaged convoy";
     }
+    if (routeEventType == "merchant_window") {
+        return "Merchant window";
+    }
     return "Route event";
 }
 
@@ -479,27 +482,45 @@ std::string ActiveRouteEventSummaryForProfile(const SessionProfile& profile) {
         return "Route event layer waiting for selected-world state.";
     }
 
+    const bool onboardingComplete =
+        profile.story.awakenedFromCryo &&
+        profile.story.pipPadRecovered &&
+        profile.story.archiveRecovered &&
+        profile.firstPlayableRoute.bt72Restored &&
+        profile.story.tankLinked;
+
+    if (!onboardingComplete) {
+        return "Route event layer locked before onboarding complete.";
+    }
+
+    if (!(DebriefSummaryViewed(profile) || profile.story.returnedToBase || HasCollectedTapeId(profile, "debrief_shelter17"))) {
+        return "Route event layer unlocked by onboarding but held until the first-route debrief handoff.";
+    }
+
     if (HasActiveRouteEvent(*worldState)) {
         const int goal = RouteEventGoal(*worldState);
         const int secondsRemaining = worldState->routeEventTimeRemaining > 0.0f
             ? static_cast<int>(worldState->routeEventTimeRemaining + 0.5f)
             : 0;
-        const char* phase = worldState->routeEventStage > 0 ? "escalating" : "active";
+        const char* phase = worldState->routeEventOfferTimeRemaining > 0.0f
+            ? "offered"
+            : (worldState->routeEventStage > 0 ? "escalating" : "active");
         return std::string(RouteEventLabel(worldState->activeRouteEventType)) + " " + phase +
             " // progress " + std::to_string(worldState->routeEventProgress) + "/" + std::to_string(goal) +
             " // " + std::to_string(secondsRemaining) + "s left";
     }
 
-    if (!(DebriefSummaryViewed(profile) || FirstRecoveryNodeActivated(profile))) {
-        return "Route event layer locked until the route debrief handoff.";
+    if (!worldState->lastRouteEventOutcome.empty() && !worldState->lastRouteEventType.empty() && worldState->routeEventCooldown > 0.0f) {
+        const int secondsRemaining = static_cast<int>(worldState->routeEventCooldown + 0.5f);
+        return std::string(RouteEventLabel(worldState->lastRouteEventType)) + " " + worldState->lastRouteEventOutcome +
+            " // cooldown " + std::to_string(secondsRemaining) + "s";
     }
-
     if (worldState->routeEventCooldown > 0.0f) {
         const int secondsRemaining = static_cast<int>(worldState->routeEventCooldown + 0.5f);
         return "Route event cooldown // next field incident window in " + std::to_string(secondsRemaining) + "s";
     }
 
-    return "Route event layer ready for the next field incident window.";
+    return "Route event layer unlocked // waiting for the next rare field prompt.";
 }
 
 FirstPlayableRouteBeat CurrentFirstPlayableRouteBeatForProfile(const SessionProfile& profile) {

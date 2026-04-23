@@ -3511,10 +3511,22 @@ void UpdateWaterReclaimer(SessionProfile& profile, GameState& gameState, float d
 
 namespace {
 
+bool RouteEventOnboardingComplete(const SessionProfile& profile) {
+    return profile.story.awakenedFromCryo &&
+        profile.story.pipPadRecovered &&
+        profile.story.archiveRecovered &&
+        profile.firstPlayableRoute.bt72Restored &&
+        profile.story.tankLinked;
+}
+
 bool RouteEventLayerUnlocked(const SessionProfile& profile) {
     return profile.firstPlayableRoute.debriefSummaryViewed ||
         profile.story.returnedToBase ||
         HasCollectedTapeId(profile, "debrief_shelter17");
+}
+
+float RouteEventOfferDuration(std::string_view routeEventType) {
+    return routeEventType == "merchant_window" ? 22.0f : 14.0f;
 }
 
 const char* RouteEventLabel(std::string_view routeEventType) {
@@ -3532,6 +3544,9 @@ const char* RouteEventLabel(std::string_view routeEventType) {
     }
     if (routeEventType == "damaged_convoy") {
         return "Damaged convoy";
+    }
+    if (routeEventType == "merchant_window") {
+        return "Merchant window";
     }
     return "Route event";
 }
@@ -3552,6 +3567,9 @@ float RouteEventDuration(std::string_view routeEventType) {
     if (routeEventType == "damaged_convoy") {
         return 155.0f;
     }
+    if (routeEventType == "merchant_window") {
+        return 110.0f;
+    }
     return 120.0f;
 }
 
@@ -3563,30 +3581,43 @@ float RouteEventCooldown(std::string_view routeEventType, bool success) {
     if (routeEventType == "relay_instability") {
         return baseCooldown + 10.0f;
     }
+    if (routeEventType == "merchant_window") {
+        return baseCooldown + (success ? 45.0f : 70.0f);
+    }
     return baseCooldown;
 }
 
-int RouteEventGoal(std::string_view) {
+int RouteEventGoal(std::string_view routeEventType) {
+    if (routeEventType == "merchant_window") {
+        return 1;
+    }
     return 2;
 }
 
 std::string RouteEventStartText(std::string_view routeEventType) {
     if (routeEventType == "service_call") {
-        return "ROUTE EVENT: Service call tagged near the recovery fringe. Stabilize BT-72 and complete one honest repair/service pass before the window closes.";
+        return "ROUTE EVENT OFFERED: Service call tagged near the recovery fringe. Stabilize BT-72 and complete one honest repair/service pass before the window closes.";
     }
     if (routeEventType == "field_refuel") {
-        return "ROUTE EVENT: Field refuel window opened. Rebuild BT-72 reserves and secure one upstream fuel/support line.";
+        return "ROUTE EVENT OFFERED: Field refuel window opened. Rebuild BT-72 reserves and secure one upstream fuel/support line.";
     }
     if (routeEventType == "relay_instability") {
-        return "ROUTE EVENT: Relay instability is bleeding across the starter route. Re-stabilize the local signal backbone before the packet degrades.";
+        return "ROUTE EVENT OFFERED: Relay instability is bleeding across the starter route. Re-stabilize the local signal backbone before the packet degrades.";
     }
     if (routeEventType == "blocked_route") {
-        return "ROUTE EVENT: Fresh debris pressure is choking the cleared route. Reassert route control before the lane hard-locks again.";
+        return "ROUTE EVENT OFFERED: Fresh debris pressure is choking the cleared route. Reassert route control before the lane hard-locks again.";
     }
     if (routeEventType == "damaged_convoy") {
-        return "ROUTE EVENT: A damaged convoy drifted into the recovery fringe. Stabilize logistics and pull the cargo back into Shelter 17.";
+        return "ROUTE EVENT OFFERED: A damaged convoy drifted into the recovery fringe. Stabilize logistics and pull the cargo back into Shelter 17.";
     }
-    return "ROUTE EVENT: A field incident was tagged on the active recovery route.";
+    if (routeEventType == "merchant_window") {
+        return "ROUTE EVENT OFFERED: A field merchant trace surfaced on the recovery fringe. One discreet exchange window is open before the broker folds the signal.";
+    }
+    return "ROUTE EVENT OFFERED: A field incident was tagged on the active recovery route.";
+}
+
+std::string RouteEventActivationText(std::string_view routeEventType) {
+    return std::string("ROUTE EVENT ACTIVE: ") + RouteEventLabel(routeEventType) + " is now live on the active recovery route.";
 }
 
 std::string RouteEventEscalationText(std::string_view routeEventType) {
@@ -3604,6 +3635,9 @@ std::string RouteEventEscalationText(std::string_view routeEventType) {
     }
     if (routeEventType == "damaged_convoy") {
         return "ROUTE EVENT ESCALATING: The damaged convoy is breaking apart and recovery stock is spilling across the route.";
+    }
+    if (routeEventType == "merchant_window") {
+        return "ROUTE EVENT ESCALATING: The merchant trace is thinning out and the broker is about to cut the channel.";
     }
     return "ROUTE EVENT ESCALATING: The field incident is worsening.";
 }
@@ -3679,7 +3713,36 @@ int RouteEventProgress(const SessionProfile& profile, const WorldFieldState& wor
         }
         return progress;
     }
+    if (worldState.activeRouteEventType == "merchant_window") {
+        return worldState.tradeCyclesCompleted > 0 ? 1 : 0;
+    }
     return 0;
+}
+
+bool RouteEventHardFail(const SessionProfile& profile, const WorldFieldState& worldState) {
+    if (worldState.activeRouteEventType == "service_call") {
+        return profile.partnerTank.damage.hull < 32.0f || profile.partnerTank.energyReserve < 16.0f;
+    }
+    if (worldState.activeRouteEventType == "field_refuel") {
+        return profile.partnerTank.energyReserve < 12.0f && worldState.routeContamination >= 22.0f;
+    }
+    if (worldState.activeRouteEventType == "relay_instability") {
+        return worldState.routeContamination >= 28.0f && !worldState.localRelayAvailable;
+    }
+    if (worldState.activeRouteEventType == "blocked_route") {
+        return worldState.routeOverrun && worldState.routeContamination >= 24.0f;
+    }
+    if (worldState.activeRouteEventType == "damaged_convoy") {
+        return worldState.infrastructureDecay >= 30.0f &&
+            !worldState.caravanRouteActive &&
+            !worldState.droneStationsActive &&
+            !worldState.tradeNetworkActive &&
+            !worldState.railFreightActive;
+    }
+    if (worldState.activeRouteEventType == "merchant_window") {
+        return worldState.routeOverrun || worldState.routeContamination >= 20.0f;
+    }
+    return false;
 }
 
 void ApplyRouteEventSuccess(SessionProfile& profile, WorldFieldState& worldState, GameState& gameState) {
@@ -3718,6 +3781,10 @@ void ApplyRouteEventSuccess(SessionProfile& profile, WorldFieldState& worldState
         AddInventoryItem(profile, "steel_scrap", 2, 0.5f);
         worldState.tradeCyclesCompleted = std::max(worldState.tradeCyclesCompleted, 1);
         gameState.lastEvent = "ROUTE EVENT RESOLVED: The damaged convoy was recovered and its cargo folded back into Shelter 17 logistics.";
+    } else if (routeEventType == "merchant_window") {
+        worldState.tradeCyclesCompleted = std::max(worldState.tradeCyclesCompleted, 1);
+        worldState.infrastructureDecay = std::max(0.0f, worldState.infrastructureDecay - 0.8f);
+        gameState.lastEvent = "ROUTE EVENT RESOLVED: The merchant window closed cleanly after a discreet field exchange and the broker trace folded back into the recovery ledger.";
     } else {
         gameState.lastEvent = "ROUTE EVENT RESOLVED: The field incident was contained.";
     }
@@ -3726,34 +3793,55 @@ void ApplyRouteEventSuccess(SessionProfile& profile, WorldFieldState& worldState
     gameState.lastEvent += " " + CurrentRecoveryHandoffSummary(profile);
 }
 
-void ApplyRouteEventFailure(SessionProfile& profile, WorldFieldState& worldState, GameState& gameState) {
+void ApplyRouteEventFailure(SessionProfile& profile, WorldFieldState& worldState, GameState& gameState, bool expired) {
     const std::string routeEventType = worldState.activeRouteEventType;
     if (routeEventType == "service_call") {
         worldState.infrastructureDecay = std::min(100.0f, worldState.infrastructureDecay + 2.5f);
         profile.partnerTank.energyReserve = std::max(0.0f, profile.partnerTank.energyReserve - 5.0f);
-        gameState.lastEvent = "ROUTE EVENT FAILED: The service call slipped. BT-72 reserve pressure climbed and field upkeep drifted upward.";
+        gameState.lastEvent = expired
+            ? "ROUTE EVENT EXPIRED: The service call window closed. BT-72 reserve pressure climbed and field upkeep drifted upward."
+            : "ROUTE EVENT FAILED: The service call slipped. BT-72 reserve pressure climbed and field upkeep drifted upward.";
     } else if (routeEventType == "field_refuel") {
         worldState.routeContamination = std::min(100.0f, worldState.routeContamination + 2.0f);
         profile.partnerTank.energyReserve = std::max(0.0f, profile.partnerTank.energyReserve - 10.0f);
-        gameState.lastEvent = "ROUTE EVENT FAILED: The refuel window collapsed and BT-72 lost precious reserve stock.";
+        gameState.lastEvent = expired
+            ? "ROUTE EVENT EXPIRED: The refuel window collapsed and BT-72 lost precious reserve stock."
+            : "ROUTE EVENT FAILED: The refuel window collapsed under pressure and BT-72 lost precious reserve stock.";
     } else if (routeEventType == "relay_instability") {
         worldState.routeContamination = std::min(100.0f, worldState.routeContamination + 6.0f);
         worldState.infrastructureDecay = std::min(100.0f, worldState.infrastructureDecay + 2.0f);
-        gameState.lastEvent = "ROUTE EVENT FAILED: Relay instability spilled back into the route and signal decay worsened.";
+        gameState.lastEvent = expired
+            ? "ROUTE EVENT EXPIRED: Relay instability spilled back into the route and signal decay worsened."
+            : "ROUTE EVENT FAILED: Relay instability broke containment and signal decay worsened.";
     } else if (routeEventType == "blocked_route") {
         worldState.routeOverrun = true;
         worldState.routeContamination = std::min(100.0f, worldState.routeContamination + 8.0f);
         worldState.infrastructureDecay = std::min(100.0f, worldState.infrastructureDecay + 2.0f);
-        gameState.lastEvent = "ROUTE EVENT FAILED: The blocked lane folded back under debris pressure and the route is drifting toward overrun.";
+        gameState.lastEvent = expired
+            ? "ROUTE EVENT EXPIRED: The blocked lane folded back under debris pressure and the route is drifting toward overrun."
+            : "ROUTE EVENT FAILED: The blocked lane broke cleanly and the route is drifting toward overrun.";
     } else if (routeEventType == "damaged_convoy") {
         worldState.routeContamination = std::min(100.0f, worldState.routeContamination + 3.0f);
         worldState.infrastructureDecay = std::min(100.0f, worldState.infrastructureDecay + 1.5f);
-        gameState.lastEvent = "ROUTE EVENT FAILED: The convoy broke apart before recovery crews could stabilize it.";
+        gameState.lastEvent = expired
+            ? "ROUTE EVENT EXPIRED: The convoy broke apart before recovery crews could stabilize it."
+            : "ROUTE EVENT FAILED: The convoy collapsed before recovery crews could stabilize it.";
+    } else if (routeEventType == "merchant_window") {
+        worldState.routeContamination = std::min(100.0f, worldState.routeContamination + (expired ? 1.0f : 2.0f));
+        gameState.lastEvent = expired
+            ? "ROUTE EVENT EXPIRED: The merchant trace folded before the exchange could be made."
+            : "ROUTE EVENT FAILED: The merchant trace panicked and cut the channel before the exchange landed.";
     } else {
-        gameState.lastEvent = "ROUTE EVENT FAILED: The field incident expired unresolved.";
+        gameState.lastEvent = expired
+            ? "ROUTE EVENT EXPIRED: The field incident closed unresolved."
+            : "ROUTE EVENT FAILED: The field incident expired unresolved.";
     }
 
-    worldState.routeEventsFailed += 1;
+    if (expired) {
+        worldState.routeEventsExpired += 1;
+    } else {
+        worldState.routeEventsFailed += 1;
+    }
 }
 
 struct RouteEventCandidate {
@@ -3794,6 +3882,18 @@ std::string PickRouteEventType(const SessionProfile& profile, const WorldFieldSt
         worldState.serviceCyclesCompleted == 0) {
         candidates.push_back({"damaged_convoy", 2});
     }
+    if (!worldState.routeOverrun &&
+        worldState.routeContamination < 10.0f &&
+        worldState.infrastructureDecay < 24.0f &&
+        (worldState.tradeNetworkActive ||
+            worldState.caravanRouteActive ||
+            worldState.droneStationsActive ||
+            worldState.railFreightActive ||
+            worldState.serviceBayActive) &&
+        (profile.lanlineServices.relayCredits >= 90 ||
+            InventoryCount(profile, "trade_voucher") > 0)) {
+        candidates.push_back({"merchant_window", 1});
+    }
     if (candidates.empty() && profile.story.tankLinked && TankNeedsRepair(profile)) {
         candidates.push_back({"service_call", 1});
     }
@@ -3819,17 +3919,23 @@ std::string PickRouteEventType(const SessionProfile& profile, const WorldFieldSt
 void BeginRouteEvent(WorldFieldState& worldState, std::string routeEventType, GameState& gameState) {
     worldState.activeRouteEventType = std::move(routeEventType);
     worldState.routeEventTimeRemaining = RouteEventDuration(worldState.activeRouteEventType);
+    worldState.routeEventOfferTimeRemaining = RouteEventOfferDuration(worldState.activeRouteEventType);
     worldState.routeEventProgress = 0;
     worldState.routeEventStage = 0;
     worldState.routeEventCooldown = 0.0f;
+    worldState.lastRouteEventType = worldState.activeRouteEventType;
+    worldState.lastRouteEventOutcome.clear();
     worldState.routeEventSerial += 1;
     gameState.lastEvent = RouteEventStartText(worldState.activeRouteEventType);
 }
 
-void EndRouteEvent(WorldFieldState& worldState, bool success) {
+void EndRouteEvent(WorldFieldState& worldState, bool success, std::string_view outcome) {
     const std::string routeEventType = worldState.activeRouteEventType;
+    worldState.lastRouteEventType = routeEventType;
+    worldState.lastRouteEventOutcome = std::string(outcome);
     worldState.activeRouteEventType.clear();
     worldState.routeEventTimeRemaining = 0.0f;
+    worldState.routeEventOfferTimeRemaining = 0.0f;
     worldState.routeEventProgress = 0;
     worldState.routeEventStage = 0;
     worldState.routeEventCooldown = RouteEventCooldown(routeEventType, success);
@@ -3843,30 +3949,55 @@ void UpdateRouteRandomEvents(SessionProfile& profile, GameState& gameState, floa
         return;
     }
 
+    if (!RouteEventOnboardingComplete(profile)) {
+        if (!HasActiveRouteEvent(*worldState)) {
+            worldState->routeEventCooldown = 0.0f;
+            worldState->routeEventOfferTimeRemaining = 0.0f;
+            worldState->lastRouteEventType.clear();
+            worldState->lastRouteEventOutcome.clear();
+        }
+        return;
+    }
+
     if (!RouteEventLayerUnlocked(profile)) {
         if (!HasActiveRouteEvent(*worldState)) {
             worldState->routeEventCooldown = 0.0f;
+            worldState->routeEventOfferTimeRemaining = 0.0f;
         }
         return;
     }
 
     if (HasActiveRouteEvent(*worldState)) {
+        if (worldState->routeEventOfferTimeRemaining > 0.0f) {
+            worldState->routeEventOfferTimeRemaining = std::max(0.0f, worldState->routeEventOfferTimeRemaining - dt);
+            if (worldState->routeEventOfferTimeRemaining <= 0.0f) {
+                gameState.lastEvent = RouteEventActivationText(worldState->activeRouteEventType);
+            }
+        }
+
         const float eventDuration = RouteEventDuration(worldState->activeRouteEventType);
         worldState->routeEventTimeRemaining = std::max(0.0f, worldState->routeEventTimeRemaining - dt);
         worldState->routeEventProgress = std::max(worldState->routeEventProgress, RouteEventProgress(profile, *worldState));
-        if (worldState->routeEventStage == 0 &&
+        if (worldState->routeEventOfferTimeRemaining <= 0.0f &&
+            worldState->routeEventStage == 0 &&
             worldState->routeEventTimeRemaining <= eventDuration * 0.45f) {
             worldState->routeEventStage = 1;
             gameState.lastEvent = RouteEventEscalationText(worldState->activeRouteEventType);
         }
         if (worldState->routeEventProgress >= RouteEventGoal(worldState->activeRouteEventType)) {
             ApplyRouteEventSuccess(profile, *worldState, gameState);
-            EndRouteEvent(*worldState, true);
+            EndRouteEvent(*worldState, true, "success");
+            return;
+        }
+        if (worldState->routeEventOfferTimeRemaining <= 0.0f &&
+            RouteEventHardFail(profile, *worldState)) {
+            ApplyRouteEventFailure(profile, *worldState, gameState, false);
+            EndRouteEvent(*worldState, false, "failed");
             return;
         }
         if (worldState->routeEventTimeRemaining <= 0.0f) {
-            ApplyRouteEventFailure(profile, *worldState, gameState);
-            EndRouteEvent(*worldState, false);
+            ApplyRouteEventFailure(profile, *worldState, gameState, true);
+            EndRouteEvent(*worldState, false, "expired");
         }
         return;
     }
@@ -3883,6 +4014,53 @@ void UpdateRouteRandomEvents(SessionProfile& profile, GameState& gameState, floa
     }
 
     BeginRouteEvent(*worldState, routeEventType, gameState);
+}
+
+bool TryResolveMerchantRouteEvent(SessionProfile& profile, GameState& gameState) {
+    auto* worldState = FindWorldFieldState(profile, profile.selectedWorld, true);
+    if (worldState == nullptr) {
+        gameState.lastEvent = "Merchant window could not resolve without selected-world state.";
+        return false;
+    }
+    if (worldState->activeRouteEventType != "merchant_window" || !HasActiveRouteEvent(*worldState)) {
+        gameState.lastEvent = "No merchant route event is currently open.";
+        return false;
+    }
+    if (worldState->routeEventOfferTimeRemaining > 0.0f) {
+        worldState->routeEventOfferTimeRemaining = 0.0f;
+    }
+
+    bool paidWithVoucher = ConsumeInventoryItem(profile, "trade_voucher", 1);
+    if (!paidWithVoucher) {
+        const int creditCost = 90;
+        if (profile.lanlineServices.relayCredits < creditCost) {
+            gameState.lastEvent = "Merchant window needs 1 trade voucher or 90 relay credits before the broker will commit.";
+            return false;
+        }
+        profile.lanlineServices.relayCredits -= creditCost;
+        worldState->relayCreditsSpent += creditCost;
+    }
+
+    switch (worldState->routeEventSerial % 3) {
+        case 0:
+            AddInventoryItem(profile, "repair_patch", 1, 0.2f);
+            AddInventoryItem(profile, "filter_media", 1, 0.3f);
+            break;
+        case 1:
+            AddInventoryItem(profile, "power_cell", 1, 0.3f);
+            AddInventoryItem(profile, "field_battery", 1, 0.2f);
+            break;
+        default:
+            AddInventoryItem(profile, "cryo_medkit", 1, 0.5f);
+            AddInventoryItem(profile, "sealant_roll", 1, 0.2f);
+            break;
+    }
+
+    worldState->tradeCyclesCompleted += 1;
+    worldState->routeEventProgress = RouteEventGoal(worldState->activeRouteEventType);
+    ApplyRouteEventSuccess(profile, *worldState, gameState);
+    EndRouteEvent(*worldState, true, "success");
+    return true;
 }
 
 void UpdateHostiles(World& world,
@@ -5256,9 +5434,18 @@ void DrawPipPad(const World& world,
         ImGui::TextWrapped("Beat Cue: %s", routeBeat.cue.c_str());
         ImGui::TextWrapped("Readable Payoff: %s", routeBeat.payoff.c_str());
         if (worldFieldState != nullptr) {
-            ImGui::BulletText("Route events resolved/failed: %d / %d",
+            ImGui::BulletText("Route events resolved/failed/expired: %d / %d / %d",
                 worldFieldState->routeEventsResolved,
-                worldFieldState->routeEventsFailed);
+                worldFieldState->routeEventsFailed,
+                worldFieldState->routeEventsExpired);
+            if (worldFieldState->activeRouteEventType == "merchant_window" && HasActiveRouteEvent(*worldFieldState)) {
+                ImGui::Separator();
+                ImGui::Text("Merchant Window");
+                ImGui::TextWrapped("One discreet broker exchange is open on the recovery fringe. Spend 1 trade voucher or 90 relay credits before the trace folds.");
+                if (ImGui::Button("Broker Field Exchange")) {
+                    TryResolveMerchantRouteEvent(profile, gameState);
+                }
+            }
         }
         if (nextSliceStep != verticalSliceRoute.end()) {
             ImGui::TextWrapped("Next Payoff: %s", nextSliceStep->text.c_str());

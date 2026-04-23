@@ -631,9 +631,10 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
     ImGui::TextWrapped("Beat cue: %s", routeBeat.cue.c_str());
     ImGui::TextWrapped("Readable payoff: %s", routeBeat.payoff.c_str());
     if (worldState != nullptr) {
-        ImGui::BulletText("Route events resolved/failed: %d / %d",
+        ImGui::BulletText("Route events resolved/failed/expired: %d / %d / %d",
             worldState->routeEventsResolved,
-            worldState->routeEventsFailed);
+            worldState->routeEventsFailed,
+            worldState->routeEventsExpired);
     }
     if (nextSliceStep != verticalSliceRoute.end()) {
         ImGui::TextWrapped("Next payoff: %s", nextSliceStep->text.c_str());

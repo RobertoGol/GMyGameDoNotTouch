@@ -118,11 +118,15 @@ struct WorldFieldState {
     std::string activeRouteEventType{};
     float routeEventTimeRemaining = 0.0f;
     float routeEventCooldown = 0.0f;
+    float routeEventOfferTimeRemaining = 0.0f;
     int routeEventProgress = 0;
     int routeEventStage = 0;
     int routeEventSerial = 0;
     int routeEventsResolved = 0;
     int routeEventsFailed = 0;
+    int routeEventsExpired = 0;
+    std::string lastRouteEventType{};
+    std::string lastRouteEventOutcome{};
 };
 
 struct SkillAwakeningProgress {
@@ -519,6 +523,7 @@ inline void MergeWorldFieldState(WorldFieldState& target, const WorldFieldState&
     if (target.activeRouteEventType.empty() || source.routeEventTimeRemaining > target.routeEventTimeRemaining) {
         target.activeRouteEventType = source.activeRouteEventType;
         target.routeEventTimeRemaining = source.routeEventTimeRemaining;
+        target.routeEventOfferTimeRemaining = source.routeEventOfferTimeRemaining;
         target.routeEventProgress = source.routeEventProgress;
         target.routeEventStage = source.routeEventStage;
     }
@@ -526,6 +531,11 @@ inline void MergeWorldFieldState(WorldFieldState& target, const WorldFieldState&
     target.routeEventSerial = std::max(target.routeEventSerial, source.routeEventSerial);
     target.routeEventsResolved = std::max(target.routeEventsResolved, source.routeEventsResolved);
     target.routeEventsFailed = std::max(target.routeEventsFailed, source.routeEventsFailed);
+    target.routeEventsExpired = std::max(target.routeEventsExpired, source.routeEventsExpired);
+    if (target.lastRouteEventOutcome.empty() || source.routeEventCooldown > target.routeEventCooldown) {
+        target.lastRouteEventType = source.lastRouteEventType;
+        target.lastRouteEventOutcome = source.lastRouteEventOutcome;
+    }
 }
 
 inline bool HasActiveRouteEvent(const WorldFieldState& worldState) {

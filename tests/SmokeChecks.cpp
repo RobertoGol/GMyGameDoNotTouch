@@ -144,11 +144,15 @@ bool RunProfileRoundtrip() {
     savedWorldState->activeRouteEventType = "service_call";
     savedWorldState->routeEventTimeRemaining = 92.0f;
     savedWorldState->routeEventCooldown = 17.0f;
+    savedWorldState->routeEventOfferTimeRemaining = 11.0f;
     savedWorldState->routeEventProgress = 1;
     savedWorldState->routeEventStage = 1;
     savedWorldState->routeEventSerial = 3;
     savedWorldState->routeEventsResolved = 2;
     savedWorldState->routeEventsFailed = 1;
+    savedWorldState->routeEventsExpired = 4;
+    savedWorldState->lastRouteEventType = "damaged_convoy";
+    savedWorldState->lastRouteEventOutcome = "failed";
 
     const auto saveStatus = bunker::SaveProfileAtomically(savedProfile, bunker::DefaultSessionProfilePath());
     if (!Check(saveStatus.ok, "profile save failed: " + saveStatus.message)) {
@@ -182,12 +186,20 @@ bool RunProfileRoundtrip() {
             "profile roundtrip active route event mismatch") &&
         Check(std::abs(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->routeEventTimeRemaining - 92.0f) < 0.01f,
             "profile roundtrip active route event timer mismatch") &&
+        Check(std::abs(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->routeEventOfferTimeRemaining - 11.0f) < 0.01f,
+            "profile roundtrip route event offer timer mismatch") &&
         Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->routeEventProgress == 1,
             "profile roundtrip route event progress mismatch") &&
         Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->routeEventsResolved == 2,
             "profile roundtrip resolved route-event count mismatch") &&
         Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->routeEventsFailed == 1,
-            "profile roundtrip failed route-event count mismatch");
+            "profile roundtrip failed route-event count mismatch") &&
+        Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->routeEventsExpired == 4,
+            "profile roundtrip expired route-event count mismatch") &&
+        Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->lastRouteEventType == "damaged_convoy",
+            "profile roundtrip last route-event type mismatch") &&
+        Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->lastRouteEventOutcome == "failed",
+            "profile roundtrip last route-event outcome mismatch");
 }
 
 bool RunFirstPlayableRouteStorySmoke() {
@@ -599,6 +611,23 @@ bool RunRecoveryHandoffSummarySmoke() {
 }
 
 bool RunRouteEventLifecycleSmoke() {
+    bunker::SessionProfile lockedProfile = bunker::MakeDefaultSessionProfile();
+    lockedProfile.selectedWorld = "route_event_locked_smoke.bwld";
+    auto* lockedWorldState = bunker::FindWorldFieldState(lockedProfile, lockedProfile.selectedWorld, true);
+    if (!Check(lockedWorldState != nullptr, "route event smoke expected locked world field state")) {
+        return false;
+    }
+    bunker::GameState lockedState;
+    bunker::UpdateRouteRandomEvents(lockedProfile, lockedState, 1.0f);
+    if (!Check(!bunker::HasActiveRouteEvent(*lockedWorldState),
+            "route event smoke expected layer to stay locked before onboarding and debrief")) {
+        return false;
+    }
+    if (!Check(bunker::ActiveRouteEventSummary(lockedProfile).find("locked before onboarding") != std::string::npos,
+            "route event smoke expected locked summary before onboarding")) {
+        return false;
+    }
+
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     profile.selectedWorld = "route_event_lifecycle_smoke.bwld";
     profile.story.awakenedFromCryo = true;
@@ -632,8 +661,22 @@ bool RunRouteEventLifecycleSmoke() {
             "route event smoke expected deterministic service-call spawn")) {
         return false;
     }
-    if (!Check(bunker::ActiveRouteEventSummary(profile).find("Service call") != std::string::npos,
-            "route event smoke expected active route-event summary")) {
+    if (!Check(worldState->routeEventOfferTimeRemaining > 0.0f,
+            "route event smoke expected offered state before activation")) {
+        return false;
+    }
+    if (!Check(bunker::ActiveRouteEventSummary(profile).find("offered") != std::string::npos,
+            "route event smoke expected offered route-event summary")) {
+        return false;
+    }
+
+    bunker::UpdateRouteRandomEvents(profile, gameState, 20.0f);
+    if (!Check(worldState->routeEventOfferTimeRemaining <= 0.0f,
+            "route event smoke expected offer timer to collapse into active state")) {
+        return false;
+    }
+    if (!Check(bunker::ActiveRouteEventSummary(profile).find("active") != std::string::npos,
+            "route event smoke expected active route-event summary after offer")) {
         return false;
     }
 
@@ -648,8 +691,87 @@ bool RunRouteEventLifecycleSmoke() {
         Check(worldState->routeEventCooldown > 0.0f, "route event smoke expected post-resolution cooldown") &&
         Check(gameState.lastEvent.find("ROUTE EVENT RESOLVED") != std::string::npos,
             "route event smoke expected resolution event copy") &&
-        Check(bunker::ActiveRouteEventSummary(profile).find("cooldown") != std::string::npos,
-            "route event smoke expected cooldown summary after resolution");
+        Check(bunker::ActiveRouteEventSummary(profile).find("success") != std::string::npos &&
+                bunker::ActiveRouteEventSummary(profile).find("cooldown") != std::string::npos,
+            "route event smoke expected success-plus-cooldown summary after resolution");
+}
+
+bool RunMerchantRouteEventSmoke() {
+    auto countInventory = [](const bunker::SessionProfile& profile, const std::string& itemId) {
+        int total = 0;
+        for (const auto& entry : profile.character.inventory) {
+            if (entry.itemId == itemId) {
+                total += entry.count;
+            }
+        }
+        return total;
+    };
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.selectedWorld = "merchant_route_event_smoke.bwld";
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    profile.story.outerRoadCleared = true;
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+    profile.firstPlayableRoute.firstServicePerformed = true;
+    profile.story.relayRecovered = true;
+    profile.firstPlayableRoute.firstRecoveryNodeActivated = true;
+    profile.story.returnedToBase = true;
+    profile.firstPlayableRoute.debriefSummaryViewed = true;
+    profile.lanlineServices.relayCredits = 150;
+    profile.character.inventory.push_back({"trade_voucher", 1, 0.0f});
+    profile.character.inventory.push_back({"power_cell", 1, 0.3f});
+    profile.partnerTank.damage.hull = 100.0f;
+    profile.partnerTank.energyReserve = 94.0f;
+    profile.partnerTank.ammoReserve = 92.0f;
+
+    auto* worldState = bunker::FindWorldFieldState(profile, profile.selectedWorld, true);
+    if (!Check(worldState != nullptr, "merchant route event smoke expected world field state")) {
+        return false;
+    }
+    worldState->tradeNetworkActive = true;
+    worldState->serviceBayActive = true;
+    worldState->serviceCyclesCompleted = 1;
+    worldState->localRelayAvailable = true;
+    worldState->regionalGridOnline = true;
+    worldState->routeContamination = 4.0f;
+    worldState->infrastructureDecay = 6.0f;
+    worldState->routeOverrun = false;
+
+    bunker::GameState gameState;
+    bunker::UpdateRouteRandomEvents(profile, gameState, 1.0f);
+
+    const int vouchersBefore = countInventory(profile, "trade_voucher");
+    if (!Check(worldState->activeRouteEventType == "merchant_window",
+            "merchant route event smoke expected merchant-window spawn")) {
+        return false;
+    }
+    if (!Check(bunker::ActiveRouteEventSummary(profile).find("Merchant window offered") != std::string::npos,
+            "merchant route event smoke expected offered merchant summary")) {
+        return false;
+    }
+    if (!Check(bunker::TryResolveMerchantRouteEvent(profile, gameState),
+            "merchant route event smoke expected merchant exchange resolution")) {
+        return false;
+    }
+
+    return Check(!bunker::HasActiveRouteEvent(*worldState), "merchant route event smoke expected exchange to close the window") &&
+        Check(worldState->routeEventsResolved == 1, "merchant route event smoke expected resolved counter increment") &&
+        Check(countInventory(profile, "trade_voucher") == vouchersBefore - 1,
+            "merchant route event smoke expected voucher to be spent first") &&
+        Check(gameState.lastEvent.find("merchant window") != std::string::npos ||
+                gameState.lastEvent.find("broker trace") != std::string::npos,
+            "merchant route event smoke expected merchant resolution copy") &&
+        Check(bunker::ActiveRouteEventSummary(profile).find("success") != std::string::npos,
+            "merchant route event smoke expected merchant success summary with cooldown");
 }
 
 bool RunWorldScopedRouteSummarySmoke() {
@@ -726,7 +848,8 @@ bool RunWorldScopedRouteSummarySmoke() {
             "world-scoped route summary smoke expected selected-world handoff to reflect completed backbone: " + alphaHandoff) &&
         Check(betaHandoff.find("rail freight") != std::string::npos,
             "world-scoped route summary smoke expected beta handoff to point at rail freight: " + betaHandoff) &&
-        Check(alphaEvent.find("ready") != std::string::npos,
+        Check(alphaEvent.find("unlocked") != std::string::npos &&
+                alphaEvent.find("rare field prompt") != std::string::npos,
             "world-scoped route summary smoke expected selected-world event layer to be idle: " + alphaEvent) &&
         Check(betaEvent.find("Blocked route escalating") != std::string::npos,
             "world-scoped route summary smoke expected beta preview to show its blocked-route event");
@@ -3372,6 +3495,7 @@ int main() {
         RunDebriefIndustrialHandoffSmoke() &&
         RunRecoveryHandoffSummarySmoke() &&
         RunRouteEventLifecycleSmoke() &&
+        RunMerchantRouteEventSmoke() &&
         RunWorldScopedRouteSummarySmoke() &&
         RunHostileAwarenessSmoke() &&
         RunHumanTriggerDisciplineSmoke() &&

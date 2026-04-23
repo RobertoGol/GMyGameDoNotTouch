@@ -172,6 +172,7 @@ void UpdateRelaySubstation(SessionProfile& profile, GameState& gameState, float 
 void UpdateServiceBay(SessionProfile& profile, GameState& gameState, float dt);
 void UpdateWaterReclaimer(SessionProfile& profile, GameState& gameState, float dt);
 void UpdateRouteRandomEvents(SessionProfile& profile, GameState& gameState, float dt);
+bool TryResolveMerchantRouteEvent(SessionProfile& profile, GameState& gameState);
 void HandleAttack(World& world,
     PlayerState& player,
     SessionProfile& profile,
