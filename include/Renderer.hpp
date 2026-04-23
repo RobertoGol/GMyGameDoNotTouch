@@ -25,6 +25,11 @@ struct PlayerState {
     float velocityX = 0.0f;
     float velocityY = 0.0f;
     float recoilOffset = 0.0f;
+    float muzzleFlashTimer = 0.0f;
+    float muzzleFlashStrength = 0.0f;
+    float shockWaveTimer = 0.0f;
+    float shockWaveDuration = 0.0f;
+    float shockWaveStrength = 0.0f;
     bool insideTank = false;
     bool bt72GunnerSeat = false;
     bool bucketRaised = false;

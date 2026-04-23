@@ -2,6 +2,7 @@
 
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <cmath>
 
 namespace bunker {
@@ -43,6 +44,23 @@ void DrawRect(float x, float y, float halfWidth, float halfHeight) {
     glVertex2f(x + halfWidth, y - halfHeight);
     glVertex2f(x + halfWidth, y + halfHeight);
     glVertex2f(x - halfWidth, y + halfHeight);
+    glEnd();
+}
+
+void DrawRing(float x, float y, float radius, float thickness, int segments) {
+    if (radius <= 0.0f || thickness <= 0.0f) {
+        return;
+    }
+
+    const float innerRadius = std::max(0.05f, radius - thickness);
+    glBegin(GL_TRIANGLE_STRIP);
+    for (int index = 0; index <= segments; ++index) {
+        const float angle = (static_cast<float>(index) / static_cast<float>(segments)) * 6.2831853f;
+        const float cosAngle = std::cos(angle);
+        const float sinAngle = std::sin(angle);
+        glVertex2f(x + cosAngle * radius, y + sinAngle * radius);
+        glVertex2f(x + cosAngle * innerRadius, y + sinAngle * innerRadius);
+    }
     glEnd();
 }
 
@@ -145,6 +163,46 @@ void RenderWorld(const World& world, const PlayerState& player, WeatherAnomaly w
     glVertex2f(player.x - forwardX * 0.8f + rightX * 0.6f, player.y - forwardY * 0.8f + rightY * 0.6f);
     glVertex2f(player.x - forwardX * 0.8f - rightX * 0.6f, player.y - forwardY * 0.8f - rightY * 0.6f);
     glEnd();
+
+    if (player.muzzleFlashTimer > 0.0f || player.shockWaveTimer > 0.0f) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    if (player.muzzleFlashTimer > 0.0f) {
+        const float flashAlpha = std::min(0.92f, player.muzzleFlashTimer * (player.insideTank ? 2.4f : 2.8f) * std::max(0.25f, player.muzzleFlashStrength));
+        const float flashReach = player.insideTank ? (2.6f + player.muzzleFlashStrength * 2.8f) : (1.4f + player.muzzleFlashStrength * 1.4f);
+        const float flashWidth = player.insideTank ? (0.8f + player.muzzleFlashStrength * 1.8f) : (0.35f + player.muzzleFlashStrength * 0.9f);
+        const float muzzleX = player.x + forwardX * (player.insideTank ? 1.8f : 0.85f);
+        const float muzzleY = player.y + forwardY * (player.insideTank ? 1.8f : 0.85f);
+
+        glColor4f(1.0f, 0.78f, 0.24f, flashAlpha);
+        glBegin(GL_TRIANGLES);
+        glVertex2f(muzzleX + forwardX * flashReach, muzzleY + forwardY * flashReach);
+        glVertex2f(muzzleX - rightX * flashWidth, muzzleY - rightY * flashWidth);
+        glVertex2f(muzzleX + rightX * flashWidth, muzzleY + rightY * flashWidth);
+        glEnd();
+
+        glColor4f(1.0f, 0.94f, 0.72f, flashAlpha * 0.7f);
+        glBegin(GL_TRIANGLES);
+        glVertex2f(muzzleX + forwardX * (flashReach * 0.7f), muzzleY + forwardY * (flashReach * 0.7f));
+        glVertex2f(muzzleX - rightX * (flashWidth * 0.45f), muzzleY - rightY * (flashWidth * 0.45f));
+        glVertex2f(muzzleX + rightX * (flashWidth * 0.45f), muzzleY + rightY * (flashWidth * 0.45f));
+        glEnd();
+    }
+
+    if (player.shockWaveTimer > 0.0f && player.shockWaveDuration > 0.0f) {
+        const float progress = 1.0f - std::clamp(player.shockWaveTimer / player.shockWaveDuration, 0.0f, 1.0f);
+        const float radius = 0.8f + progress * (player.insideTank ? 6.8f : 4.0f) * std::max(0.35f, player.shockWaveStrength);
+        const float thickness = 0.18f + (1.0f - progress) * 0.32f * std::max(0.35f, player.shockWaveStrength);
+        const float alpha = (1.0f - progress) * 0.35f * std::max(0.35f, player.shockWaveStrength);
+        glColor4f(1.0f, 0.70f, 0.26f, alpha);
+        DrawRing(player.x, player.y, radius, thickness, 48);
+    }
+
+    if (player.muzzleFlashTimer > 0.0f || player.shockWaveTimer > 0.0f) {
+        glDisable(GL_BLEND);
+    }
 
     if (player.viewMode == ViewMode::Cockpit) {
         glMatrixMode(GL_PROJECTION);

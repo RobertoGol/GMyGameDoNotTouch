@@ -1,18 +1,18 @@
-Start testing: Apr 23 11:03 RTZ 2 (çèìà)
+Start testing: Apr 23 11:41 RTZ 2 (çèìà)
 ----------------------------------------------------------
 1/1 Testing: BunkerSmokeChecks
 1/1 Test: BunkerSmokeChecks
 Command: "D:/Projects/Game_Project/build_verify_ninja_fresh/BunkerSmokeChecks.exe"
 Directory: D:/Projects/Game_Project/build_verify_ninja_fresh
-"BunkerSmokeChecks" start time: Apr 23 11:03 RTZ 2 (çèìà)
+"BunkerSmokeChecks" start time: Apr 23 11:41 RTZ 2 (çèìà)
 Output:
 ----------------------------------------------------------
 <end of output>
-Test time =   0.33 sec
+Test time =   1.20 sec
 ----------------------------------------------------------
 Test Passed.
-"BunkerSmokeChecks" end time: Apr 23 11:03 RTZ 2 (çèìà)
-"BunkerSmokeChecks" time elapsed: 00:00:00
+"BunkerSmokeChecks" end time: Apr 23 11:41 RTZ 2 (çèìà)
+"BunkerSmokeChecks" time elapsed: 00:00:01
 ----------------------------------------------------------
 
-End testing: Apr 23 11:03 RTZ 2 (çèìà)
+End testing: Apr 23 11:41 RTZ 2 (çèìà)

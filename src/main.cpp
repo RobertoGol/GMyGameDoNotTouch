@@ -517,6 +517,15 @@ int main() {
             gameState.damageFlashTimer -= dt;
         }
         player.recoilOffset = std::max(0.0f, player.recoilOffset - (dt * 1.7f));
+        player.muzzleFlashTimer = std::max(0.0f, player.muzzleFlashTimer - dt * 2.6f);
+        player.shockWaveTimer = std::max(0.0f, player.shockWaveTimer - dt);
+        if (player.muzzleFlashTimer <= 0.0f) {
+            player.muzzleFlashStrength = 0.0f;
+        }
+        if (player.shockWaveTimer <= 0.0f) {
+            player.shockWaveDuration = 0.0f;
+            player.shockWaveStrength = 0.0f;
+        }
 
         float moveX = 0.0f;
         float moveY = 0.0f;
@@ -726,6 +735,11 @@ int main() {
             player.velocityX = 0.0f;
             player.velocityY = 0.0f;
             player.recoilOffset = 0.0f;
+            player.muzzleFlashTimer = 0.0f;
+            player.muzzleFlashStrength = 0.0f;
+            player.shockWaveTimer = 0.0f;
+            player.shockWaveDuration = 0.0f;
+            player.shockWaveStrength = 0.0f;
             sessionProfile.partnerTank.deployed = false;
             sessionProfile.partnerTank.energyReserve = std::max(0.0f, sessionProfile.partnerTank.energyReserve - 18.0f);
             sessionProfile.character.hp = std::max(18.0f, sessionProfile.character.hp - 28.0f);
@@ -790,6 +804,11 @@ int main() {
                 player.velocityX = 0.0f;
                 player.velocityY = 0.0f;
                 player.recoilOffset = 0.0f;
+                player.muzzleFlashTimer = 0.0f;
+                player.muzzleFlashStrength = 0.0f;
+                player.shockWaveTimer = 0.0f;
+                player.shockWaveDuration = 0.0f;
+                player.shockWaveStrength = 0.0f;
                 sessionProfile.partnerTank.deployed = false;
                 sessionProfile.partnerTank.worldX = player.x;
                 sessionProfile.partnerTank.worldY = player.y;
@@ -840,6 +859,9 @@ int main() {
             ImGui::Text("Ether Pressure: %.0f%%", bunker::CurrentEtherErosion(sessionProfile));
             if (gameState.damageFlashTimer > 0.0f) {
                 ImGui::TextColored(ImVec4(0.95f, 0.32f, 0.22f, 1.0f), "Under attack");
+            }
+            if (player.muzzleFlashTimer > 0.0f) {
+                ImGui::TextColored(ImVec4(1.0f, 0.76f, 0.24f, 1.0f), "Weapon flash active");
             }
             ImGui::End();
         }
@@ -894,6 +916,12 @@ int main() {
             }
             if (gameState.damageFlashTimer > 0.0f) {
                 ImGui::TextColored(ImVec4(0.95f, 0.32f, 0.22f, 1.0f), "Impact warning");
+            }
+            if (player.muzzleFlashTimer > 0.0f) {
+                ImGui::TextColored(ImVec4(1.0f, 0.76f, 0.24f, 1.0f), "Heavy muzzle flash");
+            }
+            if (player.shockWaveTimer > 0.0f) {
+                ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.30f, 1.0f), "Shock wave rolling off the hull");
             }
             ImGui::End();
         }

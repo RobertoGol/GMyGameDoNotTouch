@@ -15,6 +15,12 @@
 
 namespace bunker {
 
+struct HostileAwarenessState {
+    std::string registryId;
+    float awareness = 0.0f;
+    float lostTimer = 0.0f;
+};
+
 struct GameState {
     bool cycleViewPressed = false;
     bool usePressed = false;
@@ -76,6 +82,7 @@ struct GameState {
     bool tankServiceNearby = false;
     bool medicalSupportNearby = false;
     WeatherAnomaly weather = WeatherAnomaly::Clear;
+    std::vector<HostileAwarenessState> hostileAwareness{};
     std::string lastEvent = "Cryostasis breached. Reorient, secure an access card, recover the Pip-Pad, and trace the BT-72 berth.";
     std::string lastSupportAction = "No support activity.";
     std::string lastPortalAction = "No portal updates.";

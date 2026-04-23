@@ -245,6 +245,248 @@ std::string DescribeHostileImpact(const MapObject& object, HostileRole role, boo
     }
 }
 
+HostileAwarenessState& EnsureHostileAwarenessState(GameState& gameState, const std::string& registryId) {
+    auto existing = std::find_if(
+        gameState.hostileAwareness.begin(),
+        gameState.hostileAwareness.end(),
+        [&](const HostileAwarenessState& state) { return state.registryId == registryId; });
+    if (existing != gameState.hostileAwareness.end()) {
+        return *existing;
+    }
+    gameState.hostileAwareness.push_back({registryId, 0.0f, 0.0f});
+    return gameState.hostileAwareness.back();
+}
+
+float PlayerMotionNoise(const PlayerState& player) {
+    const float movementSpeed = std::sqrt((player.velocityX * player.velocityX) + (player.velocityY * player.velocityY));
+    return player.insideTank ? movementSpeed * 1.3f : movementSpeed;
+}
+
+float PlayerCombatNoise(const PlayerState& player) {
+    float noise = PlayerMotionNoise(player);
+    noise += player.recoilOffset * (player.insideTank ? 4.8f : 2.8f);
+    if (player.muzzleFlashTimer > 0.0f) {
+        noise += player.insideTank ? (2.4f + player.muzzleFlashStrength * 2.2f) : (1.4f + player.muzzleFlashStrength * 1.1f);
+    }
+    if (player.shockWaveTimer > 0.0f) {
+        noise += 1.8f + player.shockWaveStrength * 2.6f;
+    }
+    return noise;
+}
+
+float HostileVisualRadius(HostileRole role, const PlayerState& player, const GameState& gameState) {
+    float radius = HostileAlertRadius(role, player.insideTank) * (player.insideTank ? 0.9f : 0.82f);
+    if (gameState.weather == WeatherAnomaly::EtherFog) {
+        radius *= 0.72f;
+    } else if (gameState.weather == WeatherAnomaly::AcidRain) {
+        radius *= 0.85f;
+    }
+    if (role == HostileRole::RobotControl) {
+        radius += 0.5f;
+    }
+    return std::max(2.1f, radius);
+}
+
+float HostileHearingRadius(HostileRole role, const PlayerState& player, const GameState& gameState, float playerNoise) {
+    float baseRadius = 2.1f;
+    switch (role) {
+        case HostileRole::VerminRush: baseRadius = 1.9f; break;
+        case HostileRole::GhoulRush: baseRadius = 2.3f; break;
+        case HostileRole::HumanTactical: baseRadius = 2.6f; break;
+        case HostileRole::RobotControl: baseRadius = 3.0f; break;
+        case HostileRole::Unknown:
+        default: baseRadius = 2.2f; break;
+    }
+    float hearingRadius = baseRadius + std::min(playerNoise, player.insideTank ? 3.6f : 2.3f);
+    if (gameState.weather == WeatherAnomaly::AcidRain) {
+        hearingRadius += 0.35f;
+    }
+    return std::min(6.6f, hearingRadius);
+}
+
+void UpdateHostileAwareness(HostileAwarenessState& state, HostileRole role, bool seesTarget, bool hearsTarget, float dt) {
+    if (seesTarget) {
+        const float sightGain = role == HostileRole::RobotControl ? 80.0f : (role == HostileRole::HumanTactical ? 68.0f : 58.0f);
+        state.awareness = std::min(100.0f, state.awareness + dt * sightGain);
+        state.lostTimer = 0.0f;
+        return;
+    }
+
+    if (hearsTarget) {
+        const float hearingGain = role == HostileRole::GhoulRush ? 26.0f : 22.0f;
+        state.awareness = std::min(72.0f, state.awareness + dt * hearingGain);
+        state.lostTimer = 0.0f;
+        return;
+    }
+
+    state.lostTimer += dt;
+    const float lossRate = state.awareness >= 50.0f ? 16.0f : 24.0f;
+    state.awareness = std::max(0.0f, state.awareness - dt * lossRate);
+}
+
+bool ObjectContainsPoint(const MapObject& object, float x, float y, float padding = 0.0f) {
+    return x >= object.x - object.width * 0.5f - padding &&
+        x <= object.x + object.width * 0.5f + padding &&
+        y >= object.y - object.depth * 0.5f - padding &&
+        y <= object.y + object.depth * 0.5f + padding;
+}
+
+bool SegmentSamplesHitObject(const MapObject& object, float x1, float y1, float x2, float y2) {
+    for (int sample = 1; sample < 12; ++sample) {
+        const float t = static_cast<float>(sample) / 12.0f;
+        const float x = x1 + (x2 - x1) * t;
+        const float y = y1 + (y2 - y1) * t;
+        if (ObjectContainsPoint(object, x, y, 0.08f)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool HasBlockingGeometryOnLine(const World& world,
+    const MapObject& source,
+    float targetX,
+    float targetY) {
+    for (const auto& blocker : world.objects) {
+        if (blocker.registryId == source.registryId ||
+            !blocker.blocksMovement ||
+            blocker.interaction == InteractionType::Hostile ||
+            ObjectContainsPoint(blocker, targetX, targetY, 0.15f)) {
+            continue;
+        }
+        if (SegmentSamplesHitObject(blocker, source.x, source.y, targetX, targetY)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+float DistancePointToSegment(float px, float py, float x1, float y1, float x2, float y2) {
+    const float dx = x2 - x1;
+    const float dy = y2 - y1;
+    const float lengthSq = dx * dx + dy * dy;
+    if (lengthSq <= 0.0001f) {
+        const float localDx = px - x1;
+        const float localDy = py - y1;
+        return std::sqrt(localDx * localDx + localDy * localDy);
+    }
+
+    const float projection = std::clamp(((px - x1) * dx + (py - y1) * dy) / lengthSq, 0.0f, 1.0f);
+    const float nearestX = x1 + dx * projection;
+    const float nearestY = y1 + dy * projection;
+    const float offsetX = px - nearestX;
+    const float offsetY = py - nearestY;
+    return std::sqrt(offsetX * offsetX + offsetY * offsetY);
+}
+
+bool HasFriendlyOnShotLine(const World& world,
+    const MapObject& source,
+    float targetX,
+    float targetY) {
+    const float totalDx = targetX - source.x;
+    const float totalDy = targetY - source.y;
+    const float totalLengthSq = totalDx * totalDx + totalDy * totalDy;
+    if (totalLengthSq <= 0.0001f) {
+        return false;
+    }
+
+    for (const auto& ally : world.objects) {
+        if (ally.registryId == source.registryId || ally.interaction != InteractionType::Hostile) {
+            continue;
+        }
+
+        const float projection = ((ally.x - source.x) * totalDx + (ally.y - source.y) * totalDy) / totalLengthSq;
+        if (projection <= 0.1f || projection >= 0.92f) {
+            continue;
+        }
+
+        const float laneDistance = DistancePointToSegment(ally.x, ally.y, source.x, source.y, targetX, targetY);
+        const float safeRadius = std::max(0.55f, std::max(ally.width, ally.depth) * 0.6f);
+        if (laneDistance <= safeRadius) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool WouldOverlapBlockingObject(const World& world,
+    const MapObject& movingObject,
+    float targetX,
+    float targetY) {
+    for (const auto& blocker : world.objects) {
+        if (blocker.registryId == movingObject.registryId ||
+            !blocker.blocksMovement ||
+            blocker.interaction == InteractionType::Hostile) {
+            continue;
+        }
+
+        const float combinedHalfWidth = movingObject.width * 0.5f + blocker.width * 0.5f + 0.08f;
+        const float combinedHalfDepth = movingObject.depth * 0.5f + blocker.depth * 0.5f + 0.08f;
+        if (std::abs(targetX - blocker.x) < combinedHalfWidth &&
+            std::abs(targetY - blocker.y) < combinedHalfDepth) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void TryMoveHostile(World& world, MapObject& object, float deltaX, float deltaY) {
+    const float targetX = object.x + deltaX;
+    const float targetY = object.y + deltaY;
+    if (!WouldOverlapBlockingObject(world, object, targetX, targetY)) {
+        object.x = targetX;
+        object.y = targetY;
+        return;
+    }
+
+    if (std::abs(deltaX) > 0.001f &&
+        !WouldOverlapBlockingObject(world, object, object.x + deltaX, object.y)) {
+        object.x += deltaX;
+        return;
+    }
+
+    if (std::abs(deltaY) > 0.001f &&
+        !WouldOverlapBlockingObject(world, object, object.x, object.y + deltaY)) {
+        object.y += deltaY;
+        return;
+    }
+
+    const float lateralLength = std::sqrt(deltaX * deltaX + deltaY * deltaY);
+    if (lateralLength <= 0.0001f) {
+        return;
+    }
+
+    const float lateralX = -deltaY / lateralLength * lateralLength * 0.85f;
+    const float lateralY = deltaX / lateralLength * lateralLength * 0.85f;
+    if (!WouldOverlapBlockingObject(world, object, object.x + lateralX, object.y + lateralY)) {
+        object.x += lateralX;
+        object.y += lateralY;
+        return;
+    }
+    if (!WouldOverlapBlockingObject(world, object, object.x - lateralX, object.y - lateralY)) {
+        object.x -= lateralX;
+        object.y -= lateralY;
+    }
+}
+
+bool IsRangedDisciplineRole(HostileRole role) {
+    return role == HostileRole::HumanTactical || role == HostileRole::RobotControl;
+}
+
+void TriggerCombatFeedback(PlayerState& player,
+    float muzzleFlashTimer,
+    float muzzleFlashStrength,
+    float shockWaveDuration,
+    float shockWaveStrength) {
+    player.muzzleFlashTimer = std::max(player.muzzleFlashTimer, muzzleFlashTimer);
+    player.muzzleFlashStrength = std::max(player.muzzleFlashStrength, muzzleFlashStrength);
+    if (shockWaveDuration > 0.0f) {
+        player.shockWaveTimer = std::max(player.shockWaveTimer, shockWaveDuration);
+        player.shockWaveDuration = std::max(player.shockWaveDuration, shockWaveDuration);
+        player.shockWaveStrength = std::max(player.shockWaveStrength, shockWaveStrength);
+    }
+}
+
 bool TankUsesRamShield(const SessionProfile& profile) {
     const auto* module = FindTankModule(profile, TankModuleSlotType::Bucket);
     return module != nullptr && module->moduleId == "ram_shield_mk1";
@@ -2942,6 +3184,7 @@ void UpdateHostiles(World& world,
         gameState.damageCooldown -= dt;
     }
 
+    const float playerNoise = PlayerCombatNoise(player);
     for (auto& object : world.objects) {
         if (object.interaction != InteractionType::Hostile) {
             continue;
@@ -2953,30 +3196,65 @@ void UpdateHostiles(World& world,
         const float distance = std::sqrt(distanceSq);
 
         const HostileRole role = ClassifyHostileRole(object);
-        const float alertRadius = HostileAlertRadius(role, player.insideTank);
-        if (distance > 0.2f && distance < alertRadius) {
-            const float step = dt * HostileAdvanceSpeed(role);
-            const float preferredMinRange = HostilePreferredMinRange(role);
-            const float preferredMaxRange = HostilePreferredMaxRange(role);
-            const bool usesStandoffMovement = preferredMaxRange > preferredMinRange;
-            const bool shouldRetreat =
-                role == HostileRole::HumanTactical &&
-                object.health <= HostileMaxHealthHint(role) * 0.4f &&
-                distance < preferredMaxRange + 0.5f;
+        HostileAwarenessState& awareness = EnsureHostileAwarenessState(gameState, object.registryId);
+        const float visualRadius = HostileVisualRadius(role, player, gameState);
+        const float hearingRadius = HostileHearingRadius(role, player, gameState, playerNoise);
+        const bool visualContact = distance > 0.2f &&
+            distance <= visualRadius &&
+            !HasBlockingGeometryOnLine(world, object, player.x, player.y);
+        const bool heardNearby = distance > 0.2f &&
+            distance <= hearingRadius &&
+            playerNoise >= 0.55f;
+        UpdateHostileAwareness(awareness, role, visualContact, heardNearby, dt);
+
+        const bool suspicious = awareness.awareness >= 18.0f;
+        const bool engaged = awareness.awareness >= 55.0f;
+        const float preferredMinRange = HostilePreferredMinRange(role);
+        const float preferredMaxRange = HostilePreferredMaxRange(role);
+        const bool usesStandoffMovement = preferredMaxRange > preferredMinRange;
+        const bool rangedDiscipline = IsRangedDisciplineRole(role);
+        bool shotLineBlocked = rangedDiscipline && HasBlockingGeometryOnLine(world, object, player.x, player.y);
+        bool friendlyInLine = rangedDiscipline && HasFriendlyOnShotLine(world, object, player.x, player.y);
+        const bool shouldRetreat =
+            role == HostileRole::HumanTactical &&
+            (object.health <= HostileMaxHealthHint(role) * 0.45f ||
+                (player.insideTank && distance < preferredMaxRange + 0.35f));
+        if (suspicious && distance > 0.2f) {
+            const float step = dt * HostileAdvanceSpeed(role) * (engaged ? 1.0f : 0.72f);
+            float moveX = 0.0f;
+            float moveY = 0.0f;
+
             if (usesStandoffMovement && (distance < preferredMinRange || shouldRetreat)) {
-                object.x -= (dx / distance) * step;
-                object.y -= (dy / distance) * step;
-            } else if (usesStandoffMovement && distance <= preferredMaxRange) {
+                moveX = -(dx / distance) * step;
+                moveY = -(dy / distance) * step;
+            } else if (usesStandoffMovement && (shotLineBlocked || friendlyInLine)) {
                 const float bias = HostileLateralBias(object);
-                object.x += (-dy / distance) * step * 0.7f * bias;
-                object.y += (dx / distance) * step * 0.7f * bias;
+                moveX = (-dy / distance) * step * bias;
+                moveY = (dx / distance) * step * bias;
+            } else if (usesStandoffMovement && distance <= preferredMaxRange && engaged) {
+                const float bias = HostileLateralBias(object);
+                moveX = (-dy / distance) * step * 0.7f * bias;
+                moveY = (dx / distance) * step * 0.7f * bias;
             } else {
-                object.x += (dx / distance) * step;
-                object.y += (dy / distance) * step;
+                moveX = (dx / distance) * step;
+                moveY = (dy / distance) * step;
             }
+
+            TryMoveHostile(world, object, moveX, moveY);
         }
 
-        if (distance < HostileAttackRange(role, player.insideTank) && gameState.damageCooldown <= 0.0f && profile.character.hp > 0.0f) {
+        const float updatedDx = player.x - object.x;
+        const float updatedDy = player.y - object.y;
+        const float updatedDistance = std::sqrt((updatedDx * updatedDx) + (updatedDy * updatedDy));
+        shotLineBlocked = rangedDiscipline && HasBlockingGeometryOnLine(world, object, player.x, player.y);
+        friendlyInLine = rangedDiscipline && HasFriendlyOnShotLine(world, object, player.x, player.y);
+        if (updatedDistance < HostileAttackRange(role, player.insideTank) &&
+            engaged &&
+            gameState.damageCooldown <= 0.0f &&
+            profile.character.hp > 0.0f) {
+            if (rangedDiscipline && (shotLineBlocked || friendlyInLine || !visualContact)) {
+                continue;
+            }
             if (player.insideTank) {
                 float tankDamage = HostileTankDamage(role);
                 if (TankHasBulwarkSync(profile)) {
@@ -3012,6 +3290,11 @@ void UpdateHostiles(World& world,
             return false;
         }),
         world.objects.end());
+
+    gameState.hostileAwareness.erase(
+        std::remove_if(gameState.hostileAwareness.begin(), gameState.hostileAwareness.end(),
+            [&](const HostileAwarenessState& state) { return !world.HasObject(state.registryId); }),
+        gameState.hostileAwareness.end());
 }
 
 void HandleAttack(World& world,
@@ -3040,15 +3323,37 @@ void HandleAttack(World& world,
     }
 
     if (auto* mutableObject = const_cast<MapObject*>(hostile); mutableObject != nullptr) {
+        const HostileRole role = ClassifyHostileRole(*mutableObject);
         const bool hasEmergencyMeleeTool = HasEmergencyMeleeTool(profile);
-        const float damage = gunnerSeat
+        const float momentum = std::sqrt((player.velocityX * player.velocityX) + (player.velocityY * player.velocityY));
+        const float linkFactor = player.insideTank ? (0.88f + profile.partnerTank.trustLink * (gunnerSeat ? 0.24f : 0.18f)) : 1.0f;
+        const float sensorFactor = player.insideTank ? std::clamp(profile.partnerTank.damage.sensors / 100.0f, 0.58f, 1.0f) : 1.0f;
+        const float thermalFactor = player.insideTank
+            ? (gameState.tankThermalLoad >= 80.0f ? 0.88f : (gameState.tankThermalLoad >= 55.0f ? 0.94f : 1.0f))
+            : 1.0f;
+        float damage = gunnerSeat
             ? (24.0f + static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * 1.8f)
             : (player.insideTank
-            ? ((TankUsesRamShield(profile) ? 36.0f : 28.0f) + static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * 1.5f)
+            ? ((TankUsesRamShield(profile) ? 36.0f : 28.0f) +
+                static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * 1.5f +
+                momentum * (TankUsesRamShield(profile) ? 4.0f : 2.7f))
             : ((hasEmergencyMeleeTool ? 20.0f : 14.0f) + static_cast<float>(EffectiveStatValue(profile, gameState, 'S')) * (hasEmergencyMeleeTool ? 1.05f : 0.9f)));
+        if (player.insideTank) {
+            damage *= linkFactor * sensorFactor * thermalFactor;
+        }
+        if (gunnerSeat && role == HostileRole::HumanTactical) {
+            damage += 4.0f;
+        } else if (player.insideTank && !gunnerSeat && role == HostileRole::GhoulRush) {
+            damage += 5.0f;
+        }
         mutableObject->health -= damage;
         if (player.insideTank) {
             RegisterTankSyncStyle(profile, !gunnerSeat);
+        }
+        if (gunnerSeat) {
+            TriggerCombatFeedback(player, 0.24f, 0.62f, 0.0f, 0.0f);
+        } else if (player.insideTank) {
+            TriggerCombatFeedback(player, 0.0f, 0.0f, 0.24f, std::min(1.0f, 0.38f + momentum * 0.12f));
         }
         if (mutableObject->health <= 0.0f) {
             std::string progressionEvent;
@@ -3069,9 +3374,9 @@ void HandleAttack(World& world,
             }
         } else {
             gameState.lastEvent = gunnerSeat
-                ? "BT-72 gunner burst landed on hostile target."
+                ? "BT-72 gunner burst landed. Muzzle flash lit the lane and armor fragments peeled off the target."
                 : (player.insideTank
-                ? "Ram impact landed on hostile target."
+                ? "Ram impact landed. Shock rolled through the lane as BT-72 drove the contact back."
                 : (hasEmergencyMeleeTool ? "Emergency baton strike landed." : "Strike landed on hostile target."));
         }
     }
@@ -3128,13 +3433,35 @@ void HandleSpecialAttack(World& world,
     }
 
     if (auto* mutableObject = const_cast<MapObject*>(hostile); mutableObject != nullptr) {
-        const float damage = player.insideTank
+        const HostileRole role = ClassifyHostileRole(*mutableObject);
+        const float linkFactor = player.insideTank ? (0.9f + profile.partnerTank.trustLink * 0.2f) : 1.0f;
+        const float sensorFactor = player.insideTank ? std::clamp(profile.partnerTank.damage.sensors / 100.0f, 0.55f, 1.0f) : 1.0f;
+        const float thermalFactor = player.insideTank
+            ? (gameState.tankThermalLoad >= 80.0f ? 0.86f : (gameState.tankThermalLoad >= 55.0f ? 0.93f : 1.0f))
+            : 1.0f;
+        float damage = player.insideTank
             ? ((gunnerSeat ? 58.0f : (TankHasStabilizerSync(profile) ? 50.0f : 45.0f)) +
                 static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * (gunnerSeat ? 2.2f : 2.0f))
             : (24.0f + static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * 1.1f);
+        if (player.insideTank) {
+            damage *= linkFactor * sensorFactor * thermalFactor;
+        }
+        if (player.insideTank && role == HostileRole::RobotControl) {
+            damage += gunnerSeat ? 6.0f : 9.0f;
+        }
         mutableObject->health -= damage;
         if (player.insideTank) {
             RegisterTankSyncStyle(profile, false);
+        }
+        if (player.insideTank) {
+            TriggerCombatFeedback(
+                player,
+                gunnerSeat ? 0.34f : 0.48f,
+                gunnerSeat ? 0.82f : 1.0f,
+                gunnerSeat ? 0.24f : 0.38f,
+                gunnerSeat ? 0.62f : 1.0f);
+        } else {
+            TriggerCombatFeedback(player, 0.18f, 0.34f, 0.0f, 0.0f);
         }
         if (mutableObject->health <= 0.0f) {
             std::string progressionEvent;
@@ -3155,7 +3482,9 @@ void HandleSpecialAttack(World& world,
             }
         } else {
             gameState.lastEvent = player.insideTank
-                ? (gunnerSeat ? "BT-72 gunner cannon strike landed." : "Cannon strike landed.")
+                ? (gunnerSeat
+                    ? "BT-72 gunner cannon strike landed. Support flash and shock rippled through the lane."
+                    : "Cannon strike landed. Heavy muzzle flash and shock wave rolled off the hull.")
                 : "Precision shot landed.";
         }
     }

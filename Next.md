@@ -104,5 +104,5 @@
 
 ## 5. Следующий рабочий пакет
 
-1. `BT-72` combat feel / enemy role readability pass
-2. recovery-node-to-midgame handoff pass
+1. recovery-node-to-midgame handoff pass
+2. lightweight random-event layer over route/recovery state

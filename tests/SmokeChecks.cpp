@@ -430,6 +430,168 @@ bool RunDebriefIndustrialHandoffSmoke() {
             "debrief handoff smoke expected industrial rail-depot handoff");
 }
 
+bool RunHostileAwarenessSmoke() {
+    auto almostEqual = [](float lhs, float rhs) {
+        return std::fabs(lhs - rhs) < 0.001f;
+    };
+
+    bunker::World world;
+
+    bunker::MapObject wall;
+    wall.registryId = "[%wall_aware_0001]";
+    wall.displayName = "Service Wall";
+    wall.interaction = bunker::InteractionType::Static;
+    wall.category = bunker::ObjectCategory::Structure;
+    wall.x = 2.6f;
+    wall.y = 0.0f;
+    wall.width = 1.4f;
+    wall.depth = 3.0f;
+    world.AddObject(wall);
+
+    bunker::MapObject ghoul;
+    ghoul.registryId = "[%enemy_ghoul_awareness_0001]";
+    ghoul.displayName = "Outer Ghoul";
+    ghoul.interaction = bunker::InteractionType::Hostile;
+    ghoul.category = bunker::ObjectCategory::Hostile;
+    ghoul.x = 5.0f;
+    ghoul.y = 0.0f;
+    ghoul.width = 1.0f;
+    ghoul.depth = 1.0f;
+    ghoul.health = 55.0f;
+    ghoul.scriptTag = "ghoul_rush";
+    world.AddObject(ghoul);
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    player.x = 0.0f;
+    player.y = 0.0f;
+
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    bunker::UpdateHostiles(world, player, profile, staticEraser, gameState, 1.0f);
+
+    const auto* quietGhoul = world.FindObjectByRegistryId("[%enemy_ghoul_awareness_0001]");
+    if (!Check(quietGhoul != nullptr, "hostile awareness smoke expected ghoul after quiet pass")) {
+        return false;
+    }
+    if (!Check(almostEqual(quietGhoul->x, 5.0f) && almostEqual(quietGhoul->y, 0.0f),
+            "hostile awareness smoke expected quiet player behind wall to avoid instant ghoul alert")) {
+        return false;
+    }
+
+    player.insideTank = true;
+    player.muzzleFlashTimer = 0.4f;
+    player.muzzleFlashStrength = 1.0f;
+    bunker::UpdateHostiles(world, player, profile, staticEraser, gameState, 1.0f);
+
+    const auto* alertedGhoul = world.FindObjectByRegistryId("[%enemy_ghoul_awareness_0001]");
+    if (!Check(alertedGhoul != nullptr, "hostile awareness smoke expected ghoul after noisy pass")) {
+        return false;
+    }
+
+    const auto awarenessIt = std::find_if(
+        gameState.hostileAwareness.begin(),
+        gameState.hostileAwareness.end(),
+        [](const bunker::HostileAwarenessState& state) { return state.registryId == "[%enemy_ghoul_awareness_0001]"; });
+    return Check(awarenessIt != gameState.hostileAwareness.end() && awarenessIt->awareness >= 18.0f,
+            "hostile awareness smoke expected noisy BT-72 cue to raise awareness") &&
+        Check(!almostEqual(alertedGhoul->y, 0.0f),
+            "hostile awareness smoke expected blocker-aware sidestep instead of magic wallhack rush");
+}
+
+bool RunHumanTriggerDisciplineSmoke() {
+    auto almostEqual = [](float lhs, float rhs) {
+        return std::fabs(lhs - rhs) < 0.001f;
+    };
+
+    bunker::World world;
+
+    bunker::MapObject wall;
+    wall.registryId = "[%wall_discipline_0001]";
+    wall.displayName = "Concrete Divider";
+    wall.interaction = bunker::InteractionType::Static;
+    wall.category = bunker::ObjectCategory::Structure;
+    wall.x = 2.5f;
+    wall.y = 0.0f;
+    wall.width = 1.3f;
+    wall.depth = 2.8f;
+    world.AddObject(wall);
+
+    bunker::MapObject raider;
+    raider.registryId = "[%enemy_raider_0001]";
+    raider.displayName = "Raider Rifleman";
+    raider.interaction = bunker::InteractionType::Hostile;
+    raider.category = bunker::ObjectCategory::Hostile;
+    raider.x = 5.0f;
+    raider.y = 0.0f;
+    raider.width = 1.0f;
+    raider.depth = 1.0f;
+    raider.health = 48.0f;
+    raider.scriptTag = "human_tactical";
+    world.AddObject(raider);
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    const float hpBefore = profile.character.hp;
+
+    bunker::PlayerState player;
+    player.x = 0.0f;
+    player.y = 0.0f;
+
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    gameState.hostileAwareness.push_back({"[%enemy_raider_0001]", 70.0f, 0.0f});
+    bunker::UpdateHostiles(world, player, profile, staticEraser, gameState, 1.0f);
+
+    const auto* updatedRaider = world.FindObjectByRegistryId("[%enemy_raider_0001]");
+    return Check(updatedRaider != nullptr, "trigger discipline smoke expected raider after update") &&
+        Check(almostEqual(profile.character.hp, hpBefore),
+            "trigger discipline smoke expected raider to hold fire through blocked line") &&
+        Check(!almostEqual(updatedRaider->y, 0.0f),
+            "trigger discipline smoke expected raider to reposition instead of shooting through the wall");
+}
+
+bool RunBt72CombatFeedbackSmoke() {
+    bunker::World world;
+
+    bunker::MapObject robot;
+    robot.registryId = "[%enemy_robot_0001]";
+    robot.displayName = "Sentinel Drone";
+    robot.interaction = bunker::InteractionType::Hostile;
+    robot.category = bunker::ObjectCategory::Hostile;
+    robot.x = 4.2f;
+    robot.y = 0.0f;
+    robot.width = 1.1f;
+    robot.depth = 1.1f;
+    robot.health = 220.0f;
+    robot.scriptTag = "robot_control";
+    world.AddObject(robot);
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+
+    bunker::PlayerState player;
+    player.insideTank = true;
+    player.x = 0.0f;
+    player.y = 0.0f;
+    player.facingRadians = 0.0f;
+
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    const float ammoBefore = profile.partnerTank.ammoReserve;
+    const float energyBefore = profile.partnerTank.energyReserve;
+    bunker::HandleSpecialAttack(world, player, profile, staticEraser, gameState);
+
+    return Check(player.muzzleFlashTimer > 0.0f && player.muzzleFlashStrength > 0.0f,
+            "bt72 combat feedback smoke expected muzzle flash feedback") &&
+        Check(player.shockWaveTimer > 0.0f && player.shockWaveStrength > 0.0f,
+            "bt72 combat feedback smoke expected shock wave feedback") &&
+        Check(profile.partnerTank.ammoReserve < ammoBefore && profile.partnerTank.energyReserve < energyBefore,
+            "bt72 combat feedback smoke expected heavy shot resource cost") &&
+        Check(gameState.lastEvent.find("shock") != std::string::npos,
+            "bt72 combat feedback smoke expected heavy-shot feedback copy");
+}
+
 bool RunLauncherAnnouncementSmoke() {
     bunker::SessionProfile unseenProfile = bunker::MakeDefaultSessionProfile();
     if (!Check(
@@ -2622,6 +2784,9 @@ int main() {
         RunFirstCombatWorldEventSmoke() &&
         RunWorkshopServiceRouteHandoffSmoke() &&
         RunDebriefIndustrialHandoffSmoke() &&
+        RunHostileAwarenessSmoke() &&
+        RunHumanTriggerDisciplineSmoke() &&
+        RunBt72CombatFeedbackSmoke() &&
         RunLauncherAnnouncementSmoke() &&
         RunLanlineServicesRoundtripSmoke() &&
         RunTankServiceKitSmoke() &&
