@@ -1,5 +1,7 @@
 #include "../include/StoryRoute.hpp"
 
+#include <algorithm>
+
 namespace bunker {
 
 namespace {
@@ -730,6 +732,57 @@ std::string ActiveRouteEventSummaryForProfile(const SessionProfile& profile) {
     return "Route event layer unlocked // waiting for the next rare field prompt.";
 }
 
+const char* FirstPlayableRouteSurfaceStatus(const SessionProfile& profile) {
+    if (!profile.story.exitedBunker) {
+        return "bunker-bound";
+    }
+    if (!SurfaceArrivalReached(profile)) {
+        return "ascent corridor live";
+    }
+    if (!profile.story.outerRoadCleared) {
+        return "surface foothold secured";
+    }
+    if (!FirstTankCombatResolved(profile)) {
+        return "combat lane open";
+    }
+    if (!FirstServicePerformed(profile)) {
+        return "contact resolved, service halt pending";
+    }
+    if (!FirstRecoveryNodeActivated(profile)) {
+        return "service complete, recovery node pending";
+    }
+    if (!DebriefSummaryViewed(profile)) {
+        return "recovery node live, debrief pending";
+    }
+    return "route closed, industrial handoff live";
+}
+
+FirstPlayableRouteReadout BuildFirstPlayableRouteReadoutForProfile(const SessionProfile& profile) {
+    const auto routeBeat = CurrentFirstPlayableRouteBeat(profile);
+    const auto verticalSliceRoute = BuildFirstPlayableRouteSlice(profile);
+    const auto nextSliceStep = std::find_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
+        [](const StoryRouteEntry& entry) { return !entry.completed; });
+
+    FirstPlayableRouteReadout readout{};
+    readout.checkpoint = CurrentStoryCheckpointLabel(profile);
+    readout.beat = routeBeat.label;
+    readout.completedSteps = static_cast<int>(std::count_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
+        [](const StoryRouteEntry& entry) { return entry.completed; }));
+    readout.totalSteps = static_cast<int>(verticalSliceRoute.size());
+    readout.nextPayoff = nextSliceStep != verticalSliceRoute.end()
+        ? nextSliceStep->text
+        : CurrentRecoveryHandoffSummary(profile);
+    readout.surfaceStatus = FirstPlayableRouteSurfaceStatus(profile);
+    readout.brief = routeBeat.cue;
+    if (!readout.nextPayoff.empty() && readout.brief.find(readout.nextPayoff) == std::string::npos) {
+        readout.brief += " Next: " + readout.nextPayoff;
+    }
+    if (!routeBeat.payoff.empty() && readout.brief.find(routeBeat.payoff) == std::string::npos) {
+        readout.brief += " Payoff: " + routeBeat.payoff;
+    }
+    return readout;
+}
+
 FirstPlayableRouteBeat CurrentFirstPlayableRouteBeatForProfile(const SessionProfile& profile) {
     if (!profile.story.pipPadRecovered) {
         return {
@@ -854,6 +907,14 @@ FirstPlayableRouteBeat CurrentFirstPlayableRouteBeat(const SessionProfile& profi
 
 FirstPlayableRouteBeat CurrentFirstPlayableRouteBeat(const SessionProfile& profile, std::string_view worldReference) {
     return CurrentFirstPlayableRouteBeatForProfile(BuildWorldScopedProfile(profile, worldReference));
+}
+
+FirstPlayableRouteReadout BuildFirstPlayableRouteReadout(const SessionProfile& profile) {
+    return BuildFirstPlayableRouteReadoutForProfile(profile);
+}
+
+FirstPlayableRouteReadout BuildFirstPlayableRouteReadout(const SessionProfile& profile, std::string_view worldReference) {
+    return BuildFirstPlayableRouteReadoutForProfile(BuildWorldScopedProfile(profile, worldReference));
 }
 
 std::vector<StoryRouteEntry> BuildBt72RestorationRoute(const SessionProfile& profile) {

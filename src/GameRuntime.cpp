@@ -1154,6 +1154,120 @@ float FootReflexCombatBoost(const SessionProfile& profile, const GameState& game
     return boost;
 }
 
+struct CombatDamageWindow {
+    float multiplier = 1.0f;
+    float flatDamage = 0.0f;
+    bool weakPoint = false;
+    bool execute = false;
+    bool stagger = false;
+};
+
+CombatDamageWindow EvaluateCombatDamageWindow(const MapObject& object,
+    HostileRole role,
+    const MechanicalHostileDamageState* mechanicalDamage,
+    const PlayerState& player,
+    const SessionProfile& profile,
+    const GameState& gameState,
+    bool specialAttack,
+    float momentum) {
+    CombatDamageWindow window;
+    const bool gunnerSeat = player.insideTank && player.bt72GunnerSeat;
+    const float maxHealthHint = std::max(1.0f, HostileMaxHealthHint(role));
+    const bool executeWindow = object.health <= maxHealthHint * (specialAttack ? 0.62f : 0.48f);
+
+    if (player.insideTank) {
+        if (gameState.tankThermalLoad >= 25.0f && gameState.tankThermalLoad < 55.0f) {
+            window.multiplier += gunnerSeat
+                ? (specialAttack ? 0.06f : 0.04f)
+                : (specialAttack ? 0.05f : 0.03f);
+        }
+
+        if (mechanicalDamage != nullptr) {
+            if (gunnerSeat) {
+                if (mechanicalDamage->sensorDamage >= 40.0f) {
+                    window.flatDamage += specialAttack ? 10.0f : 6.0f;
+                    window.weakPoint = true;
+                }
+                if (mechanicalDamage->weaponDamage >= 40.0f) {
+                    window.flatDamage += specialAttack ? 6.0f : 4.0f;
+                    window.weakPoint = true;
+                }
+            } else if (specialAttack) {
+                if (mechanicalDamage->mobilityDamage >= 40.0f) {
+                    window.flatDamage += 9.0f;
+                    window.stagger = true;
+                }
+                if (mechanicalDamage->weaponDamage >= 40.0f) {
+                    window.flatDamage += 5.0f;
+                    window.weakPoint = true;
+                }
+            } else {
+                if (mechanicalDamage->mobilityDamage >= 40.0f) {
+                    window.flatDamage += 6.0f + std::min(8.0f, momentum * 3.0f);
+                    window.stagger = true;
+                }
+                if (mechanicalDamage->sensorDamage >= 75.0f) {
+                    window.flatDamage += 3.0f;
+                    window.weakPoint = true;
+                }
+            }
+        }
+
+        if (executeWindow) {
+            window.flatDamage += gunnerSeat
+                ? (specialAttack ? 12.0f : 7.0f)
+                : (specialAttack ? 10.0f : 6.0f);
+            window.execute = true;
+        }
+        if (!specialAttack && !gunnerSeat && TankUsesRamShield(profile) && momentum >= 1.6f) {
+            window.multiplier += 0.08f;
+        }
+        return window;
+    }
+
+    const float strength = static_cast<float>(std::max(0, EffectiveStatValue(profile, gameState, 'S') - 5));
+    const float agility = static_cast<float>(std::max(0, EffectiveStatValue(profile, gameState, 'A') - 5));
+    const float perception = static_cast<float>(std::max(0, EffectiveStatValue(profile, gameState, 'P') - 5));
+    if (executeWindow) {
+        window.flatDamage += specialAttack
+            ? (5.0f + perception * 0.8f + agility * 0.5f)
+            : (4.0f + strength * 0.7f + agility * 0.4f);
+        window.execute = true;
+    }
+    if (HasEquippedPassiveSkill(profile, "skill_field_reflex")) {
+        if (role == HostileRole::GhoulRush || role == HostileRole::VerminRush) {
+            window.multiplier += specialAttack ? 0.04f : 0.06f;
+        }
+        if (executeWindow) {
+            window.flatDamage += specialAttack ? 2.0f : 1.5f;
+        }
+    }
+    return window;
+}
+
+std::string DescribeCombatDamageWindow(const CombatDamageWindow& window,
+    bool insideTank,
+    bool gunnerSeat,
+    bool specialAttack) {
+    std::string feedback;
+    if (window.weakPoint) {
+        feedback += insideTank && gunnerSeat
+            ? " Weak-point lane flashed open across the target frame."
+            : " Weak-point plating gave way under the hit.";
+    }
+    if (window.stagger) {
+        feedback += specialAttack
+            ? " The blast rode the staggered chassis."
+            : " The hit folded into the staggered drive line.";
+    }
+    if (window.execute) {
+        feedback += insideTank
+            ? " Finish window held and the strike bit deeper."
+            : " Finish window opened and the strike bit deeper.";
+    }
+    return feedback;
+}
+
 float Bt72ServiceSkillBoost(const SessionProfile& profile, const GameState& gameState) {
     float boost = 1.0f;
     boost += static_cast<float>(std::max(0, EffectiveStatValue(profile, gameState, 'I') - 5)) * 0.03f;
@@ -4707,6 +4821,8 @@ void HandleAttack(World& world,
 
     if (auto* mutableObject = const_cast<MapObject*>(hostile); mutableObject != nullptr) {
         const HostileRole role = ClassifyHostileRole(*mutableObject);
+        const MechanicalHostileDamageState* mechanicalDamage =
+            FindMechanicalHostileDamageState(gameState, mutableObject->registryId);
         const bool hasEmergencyMeleeTool = HasEmergencyMeleeTool(profile);
         const bool fieldReflexEquipped = !player.insideTank && HasEquippedPassiveSkill(profile, "skill_field_reflex");
         const bool crewSupportReadable = player.insideTank &&
@@ -4717,7 +4833,9 @@ void HandleAttack(World& world,
         const float linkFactor = player.insideTank ? (0.88f + profile.partnerTank.trustLink * (gunnerSeat ? 0.24f : 0.18f)) : 1.0f;
         const float sensorFactor = player.insideTank ? std::clamp(profile.partnerTank.damage.sensors / 100.0f, 0.58f, 1.0f) : 1.0f;
         const float thermalFactor = player.insideTank
-            ? (gameState.tankThermalLoad >= 80.0f ? 0.88f : (gameState.tankThermalLoad >= 55.0f ? 0.94f : 1.0f))
+            ? (gameState.tankThermalLoad >= 80.0f ? 0.88f
+                : (gameState.tankThermalLoad >= 55.0f ? 0.94f
+                    : (gameState.tankThermalLoad >= 25.0f ? 1.03f : 1.0f)))
             : 1.0f;
         float damage = gunnerSeat
             ? (24.0f + static_cast<float>(EffectiveStatValue(profile, gameState, 'P')) * 1.8f)
@@ -4736,6 +4854,16 @@ void HandleAttack(World& world,
         } else if (player.insideTank && !gunnerSeat && role == HostileRole::GhoulRush) {
             damage += 5.0f;
         }
+        const CombatDamageWindow damageWindow = EvaluateCombatDamageWindow(
+            *mutableObject,
+            role,
+            mechanicalDamage,
+            player,
+            profile,
+            gameState,
+            false,
+            momentum);
+        damage = damage * damageWindow.multiplier + damageWindow.flatDamage;
         const std::string mechanicalFeedback = ApplyMechanicalHostileDamage(
             *mutableObject,
             role,
@@ -4744,6 +4872,7 @@ void HandleAttack(World& world,
             gameState,
             false,
             momentum);
+        const std::string windowFeedback = DescribeCombatDamageWindow(damageWindow, player.insideTank, gunnerSeat, false);
         mutableObject->health -= damage;
         if (player.insideTank) {
             RegisterTankSyncStyle(profile, !gunnerSeat);
@@ -4764,6 +4893,7 @@ void HandleAttack(World& world,
             staticEraser.Erase(mutableObject->registryId);
             staticEraser.Save(profile.selectedWorld);
             gameState.lastEvent = mutableObject->displayName + " neutralized. " + progressionEvent;
+            gameState.lastEvent += windowFeedback;
             if (!skillEvent.empty()) {
                 gameState.lastEvent += " " + skillEvent;
             }
@@ -4783,6 +4913,7 @@ void HandleAttack(World& world,
                         ? "Emergency baton strike landed. Field Reflex kept the operator tight on the opening exchange."
                         : "Strike landed cleanly. Field Reflex kept the operator tight on the opening exchange.")
                     : (hasEmergencyMeleeTool ? "Emergency baton strike landed." : "Strike landed on hostile target.")));
+            gameState.lastEvent += windowFeedback;
             gameState.lastEvent += mechanicalFeedback;
         }
     }
@@ -4891,6 +5022,8 @@ void HandleSpecialAttack(World& world,
 
     if (auto* mutableObject = const_cast<MapObject*>(hostile); mutableObject != nullptr) {
         const HostileRole role = ClassifyHostileRole(*mutableObject);
+        const MechanicalHostileDamageState* mechanicalDamage =
+            FindMechanicalHostileDamageState(gameState, mutableObject->registryId);
         const bool fieldReflexEquipped = !player.insideTank && HasEquippedPassiveSkill(profile, "skill_field_reflex");
         const bool crewSupportReadable = player.insideTank &&
             HasEquippedPassiveSkill(profile, "skill_pilot_sync") &&
@@ -4900,7 +5033,9 @@ void HandleSpecialAttack(World& world,
         const float linkFactor = player.insideTank ? (0.9f + profile.partnerTank.trustLink * 0.2f) : 1.0f;
         const float sensorFactor = player.insideTank ? std::clamp(profile.partnerTank.damage.sensors / 100.0f, 0.55f, 1.0f) : 1.0f;
         const float thermalFactor = player.insideTank
-            ? (gameState.tankThermalLoad >= 80.0f ? 0.86f : (gameState.tankThermalLoad >= 55.0f ? 0.93f : 1.0f))
+            ? (gameState.tankThermalLoad >= 80.0f ? 0.86f
+                : (gameState.tankThermalLoad >= 55.0f ? 0.93f
+                    : (gameState.tankThermalLoad >= 25.0f ? 1.05f : 1.0f)))
             : 1.0f;
         float damage = player.insideTank
             ? ((gunnerSeat ? 58.0f : (TankHasStabilizerSync(profile) ? 50.0f : 45.0f)) +
@@ -4914,6 +5049,16 @@ void HandleSpecialAttack(World& world,
         if (player.insideTank && role == HostileRole::RobotControl) {
             damage += gunnerSeat ? 6.0f : 9.0f;
         }
+        const CombatDamageWindow damageWindow = EvaluateCombatDamageWindow(
+            *mutableObject,
+            role,
+            mechanicalDamage,
+            player,
+            profile,
+            gameState,
+            true,
+            0.0f);
+        damage = damage * damageWindow.multiplier + damageWindow.flatDamage;
         const std::string mechanicalFeedback = ApplyMechanicalHostileDamage(
             *mutableObject,
             role,
@@ -4922,6 +5067,7 @@ void HandleSpecialAttack(World& world,
             gameState,
             true,
             0.0f);
+        const std::string windowFeedback = DescribeCombatDamageWindow(damageWindow, player.insideTank, gunnerSeat, true);
         mutableObject->health -= damage;
         if (player.insideTank) {
             RegisterTankSyncStyle(profile, false);
@@ -4938,6 +5084,7 @@ void HandleSpecialAttack(World& world,
             staticEraser.Erase(mutableObject->registryId);
             staticEraser.Save(profile.selectedWorld);
             gameState.lastEvent = mutableObject->displayName + " destroyed by special attack. " + progressionEvent;
+            gameState.lastEvent += windowFeedback;
             if (!skillEvent.empty()) {
                 gameState.lastEvent += " " + skillEvent;
             }
@@ -4954,6 +5101,7 @@ void HandleSpecialAttack(World& world,
                 : (fieldReflexEquipped
                     ? "Precision shot landed. Field Reflex steadied the opening shot."
                     : "Precision shot landed.");
+            gameState.lastEvent += windowFeedback;
             gameState.lastEvent += mechanicalFeedback;
         }
     }
@@ -5937,29 +6085,20 @@ void DrawPipPad(const World& world,
         auto* worldFieldState = FindWorldFieldState(profile, profile.selectedWorld, true);
         const bool stableRecoveryBackbone = worldFieldState != nullptr &&
             IsStableRecoveryBackbone(profile, *worldFieldState);
-        const auto routeBeat = CurrentFirstPlayableRouteBeat(profile);
+        const auto routeReadout = BuildFirstPlayableRouteReadout(profile);
         const auto backboneStatus = CurrentRecoveryBackboneStatus(profile);
         ImGui::Text("Mission Log");
-        ImGui::BulletText("Checkpoint: %s", CurrentStoryCheckpointLabel(profile).c_str());
+        ImGui::BulletText("Checkpoint: %s", routeReadout.checkpoint.c_str());
         ImGui::BulletText("%s", CurrentStoryObjective(profile, staticEraser).c_str());
-        ImGui::BulletText("Route Beat: %s", routeBeat.label.c_str());
-        const auto verticalSliceRoute = BuildFirstPlayableRouteSlice(profile);
-        const int completedSliceSteps = static_cast<int>(std::count_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
-            [](const StoryRouteEntry& entry) { return entry.completed; }));
-        const auto nextSliceStep = std::find_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
-            [](const StoryRouteEntry& entry) { return !entry.completed; });
-        ImGui::BulletText("Vertical Slice: %d / %d", completedSliceSteps, static_cast<int>(verticalSliceRoute.size()));
-        ImGui::BulletText("Surface Arrival: %s",
-            profile.firstPlayableRoute.surfaceArrivalReached
-                ? "secured"
-                : (profile.story.exitedBunker ? "approach unlocked" : "locked"));
+        ImGui::BulletText("Route Beat: %s", routeReadout.beat.c_str());
+        ImGui::BulletText("Vertical Slice: %d / %d", routeReadout.completedSteps, routeReadout.totalSteps);
+        ImGui::BulletText("Surface Lane: %s", routeReadout.surfaceStatus.c_str());
         ImGui::TextWrapped("Recovery Handoff: %s", CurrentRecoveryHandoffSummary(profile).c_str());
         ImGui::BulletText("Industrial Backbone: %s", backboneStatus.stage.c_str());
         ImGui::TextWrapped("Backbone status: %s", backboneStatus.status.c_str());
         ImGui::TextWrapped("Backbone payoff: %s", backboneStatus.payoff.c_str());
         ImGui::TextWrapped("Route Event Layer: %s", ActiveRouteEventSummary(profile).c_str());
-        ImGui::TextWrapped("Beat Cue: %s", routeBeat.cue.c_str());
-        ImGui::TextWrapped("Readable Payoff: %s", routeBeat.payoff.c_str());
+        ImGui::TextWrapped("Vertical Slice Brief: %s", routeReadout.brief.c_str());
         if (worldFieldState != nullptr) {
             ImGui::BulletText("Route events resolved/failed/expired: %d / %d / %d",
                 worldFieldState->routeEventsResolved,
@@ -5974,9 +6113,7 @@ void DrawPipPad(const World& world,
                 }
             }
         }
-        if (nextSliceStep != verticalSliceRoute.end()) {
-            ImGui::TextWrapped("Next Payoff: %s", nextSliceStep->text.c_str());
-        }
+        ImGui::TextWrapped("Next Payoff: %s", routeReadout.nextPayoff.c_str());
         if (!profile.firstPlayableRoute.bt72Restored || !profile.firstPlayableRoute.clearanceModuleInstalled) {
             ImGui::Separator();
             ImGui::Text("BT-72 Restore Route");

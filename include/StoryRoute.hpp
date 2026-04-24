@@ -20,6 +20,16 @@ struct FirstPlayableRouteBeat {
     std::string payoff;
 };
 
+struct FirstPlayableRouteReadout {
+    std::string checkpoint;
+    std::string beat;
+    std::string brief;
+    std::string nextPayoff;
+    std::string surfaceStatus;
+    int completedSteps = 0;
+    int totalSteps = 0;
+};
+
 struct RecoveryBackboneStatus {
     std::string stage;
     std::string status;
@@ -38,6 +48,8 @@ std::string ActiveRouteEventSummary(const SessionProfile& profile);
 std::string ActiveRouteEventSummary(const SessionProfile& profile, std::string_view worldReference);
 FirstPlayableRouteBeat CurrentFirstPlayableRouteBeat(const SessionProfile& profile);
 FirstPlayableRouteBeat CurrentFirstPlayableRouteBeat(const SessionProfile& profile, std::string_view worldReference);
+FirstPlayableRouteReadout BuildFirstPlayableRouteReadout(const SessionProfile& profile);
+FirstPlayableRouteReadout BuildFirstPlayableRouteReadout(const SessionProfile& profile, std::string_view worldReference);
 std::vector<StoryRouteEntry> BuildBt72RestorationRoute(const SessionProfile& profile);
 std::vector<StoryRouteEntry> BuildFirstPlayableRouteSlice(const SessionProfile& profile);
 std::vector<StoryRouteEntry> BuildStarterRoute(const SessionProfile& profile, const StaticEraser& staticEraser);

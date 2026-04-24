@@ -597,26 +597,18 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
     const auto* worldState = bunker::FindWorldFieldState(
         sessionProfile,
         selectedWorldReference.empty() ? sessionProfile.selectedWorld : selectedWorldReference);
-    const auto routeBeat = bunker::CurrentFirstPlayableRouteBeat(sessionProfile, selectedWorldReference);
+    const auto routeReadout = bunker::BuildFirstPlayableRouteReadout(sessionProfile, selectedWorldReference);
     const auto backboneStatus = bunker::CurrentRecoveryBackboneStatus(sessionProfile, selectedWorldReference);
-    const auto verticalSliceRoute = bunker::BuildFirstPlayableRouteSlice(sessionProfile);
-    const int completedSliceSteps = static_cast<int>(std::count_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
-        [](const bunker::StoryRouteEntry& entry) { return entry.completed; }));
-    const auto nextSliceStep = std::find_if(verticalSliceRoute.begin(), verticalSliceRoute.end(),
-        [](const bunker::StoryRouteEntry& entry) { return !entry.completed; });
     ImGui::Text("Session Summary");
     ImGui::BulletText("Operator: %s", selectedCharacterLabel);
     ImGui::BulletText("Mode: %s", selectedModeLabel);
     ImGui::BulletText("World: %s", selectedWorld.string().c_str());
     ImGui::BulletText("Level %d | XP %d", sessionProfile.character.level, sessionProfile.character.experience);
     ImGui::BulletText("Relay Credits: %d", sessionProfile.lanlineServices.relayCredits);
-    ImGui::BulletText("Route checkpoint: %s", bunker::CurrentStoryCheckpointLabel(sessionProfile).c_str());
-    ImGui::BulletText("Route beat: %s", routeBeat.label.c_str());
-    ImGui::BulletText("Vertical slice progress: %d / %d", completedSliceSteps, static_cast<int>(verticalSliceRoute.size()));
-    ImGui::BulletText("Surface arrival: %s",
-        sessionProfile.firstPlayableRoute.surfaceArrivalReached
-            ? "secured"
-            : (sessionProfile.story.exitedBunker ? "approach unlocked" : "locked"));
+    ImGui::BulletText("Route checkpoint: %s", routeReadout.checkpoint.c_str());
+    ImGui::BulletText("Route beat: %s", routeReadout.beat.c_str());
+    ImGui::BulletText("Vertical slice progress: %d / %d", routeReadout.completedSteps, routeReadout.totalSteps);
+    ImGui::BulletText("Surface lane: %s", routeReadout.surfaceStatus.c_str());
     ImGui::BulletText("BT-72 restore: %d / 3",
         (sessionProfile.firstPlayableRoute.bt72HullInspected ? 1 : 0) +
             (sessionProfile.firstPlayableRoute.bt72CoreRecovered ? 1 : 0) +
@@ -632,17 +624,14 @@ void DrawSessionSummary(const bunker::SessionProfile& sessionProfile, const char
     ImGui::TextWrapped("Backbone payoff: %s", backboneStatus.payoff.c_str());
     ImGui::TextWrapped("Route event layer: %s",
         bunker::ActiveRouteEventSummary(sessionProfile, selectedWorldReference).c_str());
-    ImGui::TextWrapped("Beat cue: %s", routeBeat.cue.c_str());
-    ImGui::TextWrapped("Readable payoff: %s", routeBeat.payoff.c_str());
+    ImGui::TextWrapped("Vertical slice brief: %s", routeReadout.brief.c_str());
     if (worldState != nullptr) {
         ImGui::BulletText("Route events resolved/failed/expired: %d / %d / %d",
             worldState->routeEventsResolved,
             worldState->routeEventsFailed,
             worldState->routeEventsExpired);
     }
-    if (nextSliceStep != verticalSliceRoute.end()) {
-        ImGui::TextWrapped("Next payoff: %s", nextSliceStep->text.c_str());
-    }
+    ImGui::TextWrapped("Next payoff: %s", routeReadout.nextPayoff.c_str());
     const std::string objective = BuildLauncherObjectivePreview(sessionProfile, worldState, selectedWorldReference);
     ImGui::TextWrapped("Objective: %s", objective.c_str());
 }

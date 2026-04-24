@@ -367,6 +367,87 @@ bool RunRouteBeatPresentationSmoke() {
             "route beat smoke expected industrial handoff cue to point at rail freight");
 }
 
+bool RunFirstPlayableRouteReadoutSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    const auto introReadout = bunker::BuildFirstPlayableRouteReadout(profile);
+    if (!Check(introReadout.checkpoint == "Intro // Cryo Wake",
+            "route readout smoke expected intro checkpoint")) {
+        return false;
+    }
+    if (!Check(introReadout.completedSteps == 0 && introReadout.totalSteps == 14,
+            "route readout smoke expected empty intro progress")) {
+        return false;
+    }
+    if (!Check(introReadout.surfaceStatus == "bunker-bound",
+            "route readout smoke expected bunker-bound surface status before exit")) {
+        return false;
+    }
+    if (!Check(introReadout.nextPayoff == "Wake from cryostasis.",
+            "route readout smoke expected cryostasis as first payoff")) {
+        return false;
+    }
+    if (!Check(introReadout.brief.find("Pip-Pad") != std::string::npos,
+            "route readout smoke expected bunker-trace brief to mention Pip-Pad recovery")) {
+        return false;
+    }
+
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    const auto ascentReadout = bunker::BuildFirstPlayableRouteReadout(profile);
+    if (!Check(ascentReadout.beat == "Surface Ascent",
+            "route readout smoke expected surface-ascent beat after bunker exit")) {
+        return false;
+    }
+    if (!Check(ascentReadout.surfaceStatus == "ascent corridor live",
+            "route readout smoke expected ascent-corridor surface status after exit")) {
+        return false;
+    }
+    if (!Check(ascentReadout.nextPayoff == "Reach the first surface arrival foothold.",
+            "route readout smoke expected surface foothold next payoff")) {
+        return false;
+    }
+    if (!Check(ascentReadout.brief.find("Skyline, exposure") != std::string::npos,
+            "route readout smoke expected surface-ascent payoff in the compact brief")) {
+        return false;
+    }
+
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    profile.story.outerRoadCleared = true;
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+    const auto serviceReadout = bunker::BuildFirstPlayableRouteReadout(profile);
+    if (!Check(serviceReadout.surfaceStatus == "contact resolved, service halt pending",
+            "route readout smoke expected post-contact service-halt surface status")) {
+        return false;
+    }
+    if (!Check(serviceReadout.nextPayoff == "Take the first service/rest halt.",
+            "route readout smoke expected first service as the next payoff")) {
+        return false;
+    }
+
+    profile.firstPlayableRoute.firstServicePerformed = true;
+    profile.story.relayRecovered = true;
+    profile.firstPlayableRoute.firstRecoveryNodeActivated = true;
+    profile.firstPlayableRoute.debriefSummaryViewed = true;
+    if (!Check(bunker::FindWorldFieldState(profile, profile.selectedWorld, true) != nullptr,
+            "route readout smoke expected selected world state for industrial handoff")) {
+        return false;
+    }
+    const auto industrialReadout = bunker::BuildFirstPlayableRouteReadout(profile);
+    return Check(industrialReadout.completedSteps == 14 && industrialReadout.totalSteps == 14,
+            "route readout smoke expected full slice progress after debrief") &&
+        Check(industrialReadout.surfaceStatus == "route closed, industrial handoff live",
+            "route readout smoke expected closed-route surface status after debrief") &&
+        Check(industrialReadout.nextPayoff.find("rail freight") != std::string::npos,
+            "route readout smoke expected industrial handoff to point at rail freight");
+}
+
 bool RunSurfaceArrivalWorldEventSmoke() {
     bunker::World world;
 
@@ -1607,6 +1688,79 @@ bool RunBt72CrewCoordinationWeightSmoke() {
             "crew coordination smoke expected crew support to trim gunner energy cost") &&
         Check(boostedState.lastEvent.find("Pilot Sync and crew discipline") != std::string::npos,
             "crew coordination smoke expected readable crew-support feedback copy");
+}
+
+bool RunBt72WeakPointComboSmoke() {
+    auto makeWorld = []() {
+        bunker::World world;
+        bunker::MapObject robot;
+        robot.registryId = "[%enemy_robot_combo_0001]";
+        robot.displayName = "Sentinel Drone";
+        robot.interaction = bunker::InteractionType::Hostile;
+        robot.category = bunker::ObjectCategory::Hostile;
+        robot.x = 4.2f;
+        robot.y = 0.0f;
+        robot.width = 1.1f;
+        robot.depth = 1.1f;
+        robot.health = 320.0f;
+        robot.scriptTag = "robot_control";
+        world.AddObject(robot);
+        return world;
+    };
+
+    auto makeProfile = []() {
+        bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+        profile.story.tankLinked = true;
+        profile.firstPlayableRoute.bt72Restored = true;
+        profile.partnerTank.secondSeatUnlocked = true;
+        return profile;
+    };
+
+    bunker::StaticEraser staticEraser;
+
+    bunker::World baselineWorld = makeWorld();
+    bunker::SessionProfile baselineProfile = makeProfile();
+    bunker::GameState baselineState;
+    bunker::PlayerState baselinePlayer;
+    baselinePlayer.insideTank = true;
+    baselinePlayer.bt72GunnerSeat = true;
+    baselinePlayer.x = 0.0f;
+    baselinePlayer.y = 0.0f;
+    baselinePlayer.facingRadians = 0.0f;
+    bunker::HandleAttack(baselineWorld, baselinePlayer, baselineProfile, staticEraser, baselineState);
+    const auto* baselineRobot = baselineWorld.FindObjectByRegistryId("[%enemy_robot_combo_0001]");
+    if (!Check(baselineRobot != nullptr, "weak-point combo smoke expected baseline robot after opening burst")) {
+        return false;
+    }
+    const float baselineBurstDamage = 320.0f - baselineRobot->health;
+
+    bunker::World comboWorld = makeWorld();
+    bunker::SessionProfile comboProfile = makeProfile();
+    bunker::GameState comboState;
+    bunker::PlayerState comboPlayer;
+    comboPlayer.insideTank = true;
+    comboPlayer.bt72GunnerSeat = true;
+    comboPlayer.x = 0.0f;
+    comboPlayer.y = 0.0f;
+    comboPlayer.facingRadians = 0.0f;
+    bunker::HandleSpecialAttack(comboWorld, comboPlayer, comboProfile, staticEraser, comboState);
+    const auto* comboRobotAfterSpecial = comboWorld.FindObjectByRegistryId("[%enemy_robot_combo_0001]");
+    if (!Check(comboRobotAfterSpecial != nullptr, "weak-point combo smoke expected robot after opening special")) {
+        return false;
+    }
+    const float healthBeforeFollowUp = comboRobotAfterSpecial->health;
+
+    bunker::HandleAttack(comboWorld, comboPlayer, comboProfile, staticEraser, comboState);
+    const auto* comboRobotAfterFollowUp = comboWorld.FindObjectByRegistryId("[%enemy_robot_combo_0001]");
+    if (!Check(comboRobotAfterFollowUp != nullptr, "weak-point combo smoke expected robot after follow-up burst")) {
+        return false;
+    }
+    const float comboBurstDamage = healthBeforeFollowUp - comboRobotAfterFollowUp->health;
+
+    return Check(comboBurstDamage > baselineBurstDamage + 4.0f,
+            "weak-point combo smoke expected damaged robot subsystems to amplify BT-72 follow-up damage") &&
+        Check(comboState.lastEvent.find("Weak-point") != std::string::npos,
+            "weak-point combo smoke expected readable weak-point follow-through copy");
 }
 
 bool RunBt72SeatPolicySmoke() {
@@ -3952,7 +4106,7 @@ bool RunLegacyWorldAliasMigrationSmoke() {
 }  // namespace
 
 int main() {
-    const fs::path sandboxRoot = fs::temp_directory_path() / "bunker_smoke_checks";
+    const fs::path sandboxRoot = fs::current_path() / ".bunker_smoke_checks";
     std::error_code ec;
     fs::remove_all(sandboxRoot, ec);
     fs::create_directories(sandboxRoot, ec);
@@ -3968,6 +4122,7 @@ int main() {
         RunProfileRoundtrip() &&
         RunFirstPlayableRouteStorySmoke() &&
         RunRouteBeatPresentationSmoke() &&
+        RunFirstPlayableRouteReadoutSmoke() &&
         RunSurfaceArrivalWorldEventSmoke() &&
         RunFirstCombatWorldEventSmoke() &&
         RunWorkshopServiceRouteHandoffSmoke() &&
@@ -3987,6 +4142,7 @@ int main() {
         RunMechanicalHostileDamageSmoke() &&
         RunFieldReflexRpgWeightSmoke() &&
         RunBt72CrewCoordinationWeightSmoke() &&
+        RunBt72WeakPointComboSmoke() &&
         RunBt72SeatPolicySmoke() &&
         RunServiceChoiceWeightSmoke() &&
         RunLauncherAnnouncementSmoke() &&
