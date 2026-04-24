@@ -20,6 +20,7 @@ struct HostileAwarenessState {
     std::string registryId;
     float awareness = 0.0f;
     float lostTimer = 0.0f;
+    float attackWindup = 0.0f;
 };
 
 struct MechanicalHostileDamageState {

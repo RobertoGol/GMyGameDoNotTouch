@@ -197,6 +197,17 @@ float HostileAttackRange(HostileRole role, bool insideTank) {
     }
 }
 
+float HostileAttackWindupDuration(HostileRole role, bool insideTank) {
+    switch (role) {
+        case HostileRole::VerminRush: return insideTank ? 0.28f : 0.18f;
+        case HostileRole::GhoulRush: return insideTank ? 0.36f : 0.22f;
+        case HostileRole::HumanTactical: return insideTank ? 0.72f : 0.54f;
+        case HostileRole::RobotControl: return insideTank ? 0.86f : 0.64f;
+        case HostileRole::Unknown:
+        default: return insideTank ? 0.42f : 0.30f;
+    }
+}
+
 float HostilePreferredMinRange(HostileRole role) {
     switch (role) {
         case HostileRole::HumanTactical: return 2.6f;
@@ -1092,6 +1103,54 @@ bool TankHasBulwarkSync(const SessionProfile& profile) {
 
 bool TankHasStabilizerSync(const SessionProfile& profile) {
     return CurrentTankSyncMode(profile.partnerTank) == "Stabilizer Sync";
+}
+
+float Bt72ReturnFireMitigation(const SessionProfile& profile) {
+    float damageScale = 1.0f;
+    if (TankHasBulwarkSync(profile)) {
+        damageScale *= 0.82f;
+    }
+    if (TankUsesRamShield(profile)) {
+        damageScale *= 0.85f;
+    }
+    return 1.0f - damageScale;
+}
+
+std::string Bt72DefenseStatusLabel(const SessionProfile& profile) {
+    const bool bulwark = TankHasBulwarkSync(profile);
+    const bool ramShield = TankUsesRamShield(profile);
+    if (bulwark && ramShield) {
+        return "Bulwark Sync + Ram Shield";
+    }
+    if (bulwark) {
+        return "Bulwark Sync";
+    }
+    if (ramShield) {
+        return "Ram Shield Mk.I";
+    }
+    return "Baseline armor";
+}
+
+std::string DescribeBt72DefenseImpact(const SessionProfile& profile,
+    float hullBefore,
+    float hullAfter,
+    float sensorsBefore,
+    float sensorsAfter,
+    float cockpitBefore,
+    float cockpitAfter) {
+    const std::string defenseState = Bt72DefenseStatusLabel(profile);
+    char buffer[224];
+    std::snprintf(
+        buffer,
+        sizeof(buffer),
+        " Guard: %s // %.0f%% return-fire cut. Hull -%.1f, Sensors -%.1f, Cockpit -%.1f. Hull state: %s.",
+        defenseState.c_str(),
+        Bt72ReturnFireMitigation(profile) * 100.0f,
+        std::max(0.0f, hullBefore - hullAfter),
+        std::max(0.0f, sensorsBefore - sensorsAfter),
+        std::max(0.0f, cockpitBefore - cockpitAfter),
+        TankIntegrityBand(hullAfter));
+    return buffer;
 }
 
 bool HasBt72CrewSupport(const SessionProfile& profile) {
@@ -4694,23 +4753,46 @@ void UpdateHostiles(World& world,
         const float updatedDy = player.y - object.y;
         const float updatedDistance = std::sqrt((updatedDx * updatedDx) + (updatedDy * updatedDy));
         const float attackRange = HostileAttackRange(role, player.insideTank) * HostileWeaponRangeScale(role, mechanicalDamage);
-        shotLineBlocked = rangedDiscipline && HasBlockingGeometryOnLine(world, object, player.x, player.y);
+        const bool lineBlockedAfterMove = HasBlockingGeometryOnLine(world, object, player.x, player.y);
+        const bool postMoveVisualContact = updatedDistance > 0.2f &&
+            updatedDistance <= visualRadius &&
+            !lineBlockedAfterMove;
+        shotLineBlocked = rangedDiscipline && lineBlockedAfterMove;
         friendlyInLine = rangedDiscipline && HasFriendlyOnShotLine(world, object, player.x, player.y);
+        const bool attackOpportunity = updatedDistance < attackRange &&
+            engaged &&
+            gameState.damageCooldown <= 0.0f &&
+            profile.character.hp > 0.0f &&
+            (!rangedDiscipline || (!shotLineBlocked && !friendlyInLine && postMoveVisualContact));
+        if (!attackOpportunity) {
+            awareness.attackWindup = std::max(0.0f, awareness.attackWindup - dt * (rangedDiscipline ? 2.2f : 2.8f));
+            continue;
+        }
+
+        const float attackWindupDuration = HostileAttackWindupDuration(role, player.insideTank);
+        if (awareness.attackWindup < attackWindupDuration) {
+            awareness.attackWindup = std::min(attackWindupDuration, awareness.attackWindup + dt);
+            continue;
+        }
+
+        awareness.attackWindup = 0.0f;
         if (updatedDistance < attackRange &&
             engaged &&
             gameState.damageCooldown <= 0.0f &&
             profile.character.hp > 0.0f) {
-            if (rangedDiscipline && (shotLineBlocked || friendlyInLine || !visualContact)) {
-                continue;
-            }
             if (player.insideTank) {
+                const bool bulwarkSync = TankHasBulwarkSync(profile);
+                const bool ramShield = TankUsesRamShield(profile);
                 float tankDamage = HostileTankDamage(role) * HostileWeaponDamageScale(role, mechanicalDamage);
-                if (TankHasBulwarkSync(profile)) {
+                if (bulwarkSync) {
                     tankDamage *= 0.82f;
                 }
-                if (TankUsesRamShield(profile)) {
+                if (ramShield) {
                     tankDamage *= 0.85f;
                 }
+                const float hullBefore = profile.partnerTank.damage.hull;
+                const float sensorsBefore = profile.partnerTank.damage.sensors;
+                const float cockpitBefore = profile.partnerTank.damage.cockpit;
                 profile.partnerTank.damage.hull = std::max(0.0f, profile.partnerTank.damage.hull - tankDamage);
                 profile.partnerTank.damage.sensors = std::max(0.0f, profile.partnerTank.damage.sensors - (tankDamage * 0.35f));
                 profile.partnerTank.damage.cockpit = std::max(0.0f, profile.partnerTank.damage.cockpit - (tankDamage * 0.2f));
@@ -4718,7 +4800,15 @@ void UpdateHostiles(World& world,
                     object,
                     role,
                     true,
-                    TankHasBulwarkSync(profile) || TankUsesRamShield(profile));
+                    bulwarkSync || ramShield);
+                gameState.lastEvent += DescribeBt72DefenseImpact(
+                    profile,
+                    hullBefore,
+                    profile.partnerTank.damage.hull,
+                    sensorsBefore,
+                    profile.partnerTank.damage.sensors,
+                    cockpitBefore,
+                    profile.partnerTank.damage.cockpit);
             } else {
                 const float incomingDamage = HostileFootDamage(role, profile, gameState) * HostileWeaponDamageScale(role, mechanicalDamage);
                 profile.character.hp = std::max(0.0f, profile.character.hp - incomingDamage);
@@ -5767,9 +5857,13 @@ void DrawPipPadDataTab(PlayerState& player, SessionProfile& profile, GameState& 
     ImGui::BulletText("Repair Recipe: %s", HasInventoryItem(profile, "recipe_repair_patch") ? "awakened" : "still dormant");
     ImGui::Separator();
     ImGui::Text("Tank Integrity");
+    ImGui::BulletText("Defensive State: %s", Bt72DefenseStatusLabel(profile).c_str());
+    ImGui::BulletText("Return-Fire Cut: %.0f%%", Bt72ReturnFireMitigation(profile) * 100.0f);
+    ImGui::BulletText("Hull Band: %s", TankIntegrityBand(profile.partnerTank.damage.hull));
     ImGui::ProgressBar(profile.partnerTank.damage.hull / 100.0f, ImVec2(-1.0f, 16.0f), "Hull");
     ImGui::ProgressBar(profile.partnerTank.damage.bucket / 100.0f, ImVec2(-1.0f, 16.0f), "Bucket");
     ImGui::ProgressBar(profile.partnerTank.damage.sensors / 100.0f, ImVec2(-1.0f, 16.0f), "Sensors");
+    ImGui::ProgressBar(profile.partnerTank.damage.cockpit / 100.0f, ImVec2(-1.0f, 16.0f), "Cockpit");
     ImGui::Separator();
     ImGui::Text("Passive Skills");
     for (auto& skill : profile.character.passiveSkills) {
