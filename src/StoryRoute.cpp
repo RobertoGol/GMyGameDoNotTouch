@@ -935,7 +935,7 @@ std::vector<StoryRouteEntry> BuildFirstPlayableRouteSlice(const SessionProfile& 
     return {
         {"Wake from cryostasis.", profile.story.awakenedFromCryo},
         {"Recover the bunker access card and paper trail.", HasAccessCardRecovered(profile) &&
-                profile.firstPlayableRoute.prePipPadClueCount >= 2},
+                (profile.firstPlayableRoute.prePipPadClueCount >= 2 || profile.story.pipPadRecovered)},
         {"Recover the missing Pip-Pad.", profile.story.pipPadRecovered},
         {"Sync the archive corridor and clear the first vermin gate.", profile.story.archiveRecovered &&
                 ArchiveCorridorCleared(profile)},
