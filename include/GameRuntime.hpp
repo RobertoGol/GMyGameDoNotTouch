@@ -1,8 +1,8 @@
 #pragma once
-
+#include <cstddef>
 #include <string>
 #include <vector>
-
+#include <string_view>
 #include <GLFW/glfw3.h>
 
 #include "Renderer.hpp"

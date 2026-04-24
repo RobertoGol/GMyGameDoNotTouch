@@ -1,0 +1,5 @@
+build/
+build_verify_ninja/
+build_verify_ninja_fresh/
+.vscode/
+.bunker_smoke_checks/
