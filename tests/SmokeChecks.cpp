@@ -1512,7 +1512,7 @@ bool RunMechanicalHostileDamageSmoke() {
     baselinePlayer.y = 0.0f;
     baselinePlayer.facingRadians = 0.0f;
     bunker::GameState baselineState;
-    baselineState.hostileAwareness.push_back({"[%enemy_robot_modular_0001]", 80.0f, 0.0f});
+    baselineState.hostileAwareness.push_back({"[%enemy_robot_modular_0001]", 80.0f, 0.0f, 1.0f});
     const float baselineHullBefore = baselineProfile.partnerTank.damage.hull;
     bunker::UpdateHostiles(baselineWorld, baselinePlayer, baselineProfile, staticEraser, baselineState, 0.1f);
     const float baselineHullLoss = baselineHullBefore - baselineProfile.partnerTank.damage.hull;
@@ -1540,7 +1540,7 @@ bool RunMechanicalHostileDamageSmoke() {
 
     const std::string impactEvent = damagedState.lastEvent;
     const std::string readability = bunker::DescribeHostileReadability(*damagedRobot, damagedState);
-    damagedState.hostileAwareness.push_back({"[%enemy_robot_modular_0001]", 80.0f, 0.0f});
+    damagedState.hostileAwareness.push_back({"[%enemy_robot_modular_0001]", 80.0f, 0.0f, 1.0f});
     const float damagedHullBefore = damagedProfile.partnerTank.damage.hull;
     bunker::UpdateHostiles(damagedWorld, damagedPlayer, damagedProfile, staticEraser, damagedState, 0.1f);
     const float damagedHullLoss = damagedHullBefore - damagedProfile.partnerTank.damage.hull;
