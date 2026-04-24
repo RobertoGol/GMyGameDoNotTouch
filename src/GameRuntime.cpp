@@ -827,6 +827,84 @@ bool HasFriendlyOnShotLine(const World& world,
 bool WouldOverlapBlockingObject(const World& world,
     const MapObject& movingObject,
     float targetX,
+    float targetY);
+
+bool FindHumanCoverTarget(const World& world,
+    const MapObject& object,
+    float playerX,
+    float playerY,
+    float& outTargetX,
+    float& outTargetY) {
+    float bestScore = 1.0e9f;
+    bool found = false;
+
+    for (const auto& blocker : world.objects) {
+        if (blocker.registryId == object.registryId ||
+            !blocker.blocksMovement ||
+            blocker.interaction == InteractionType::Hostile) {
+            continue;
+        }
+
+        const float blockerDx = blocker.x - object.x;
+        const float blockerDy = blocker.y - object.y;
+        const float blockerDistanceSq = blockerDx * blockerDx + blockerDy * blockerDy;
+        if (blockerDistanceSq > 4.8f * 4.8f) {
+            continue;
+        }
+
+        const float awayFromPlayerX = blocker.x - playerX;
+        const float awayFromPlayerY = blocker.y - playerY;
+        const float awayFromPlayerLength = std::sqrt(awayFromPlayerX * awayFromPlayerX + awayFromPlayerY * awayFromPlayerY);
+        if (awayFromPlayerLength <= 0.0001f) {
+            continue;
+        }
+
+        const float awayNormalizedX = awayFromPlayerX / awayFromPlayerLength;
+        const float awayNormalizedY = awayFromPlayerY / awayFromPlayerLength;
+        const float flankX = -awayNormalizedY;
+        const float flankY = awayNormalizedX;
+        const float coverPadding =
+            std::max(blocker.width, blocker.depth) * 0.5f +
+            std::max(object.width, object.depth) * 0.58f +
+            0.16f;
+        const float flankPadding =
+            std::max(blocker.width, blocker.depth) * 0.34f +
+            std::max(object.width, object.depth) * 0.24f +
+            0.08f;
+        for (const float flankOffset : std::array<float, 3>{0.0f, flankPadding, -flankPadding}) {
+            const float candidateX = blocker.x + awayNormalizedX * coverPadding + flankX * flankOffset;
+            const float candidateY = blocker.y + awayNormalizedY * coverPadding + flankY * flankOffset;
+            if (WouldOverlapBlockingObject(world, object, candidateX, candidateY)) {
+                continue;
+            }
+
+            MapObject coverProbe = object;
+            coverProbe.x = candidateX;
+            coverProbe.y = candidateY;
+            if (!HasBlockingGeometryOnLine(world, coverProbe, playerX, playerY)) {
+                continue;
+            }
+
+            const float moveDx = candidateX - object.x;
+            const float moveDy = candidateY - object.y;
+            const float playerDistanceSq = (candidateX - playerX) * (candidateX - playerX) +
+                (candidateY - playerY) * (candidateY - playerY);
+            const float score = moveDx * moveDx + moveDy * moveDy - playerDistanceSq * 0.08f;
+            if (score < bestScore) {
+                bestScore = score;
+                outTargetX = candidateX;
+                outTargetY = candidateY;
+                found = true;
+            }
+        }
+    }
+
+    return found;
+}
+
+bool WouldOverlapBlockingObject(const World& world,
+    const MapObject& movingObject,
+    float targetX,
     float targetY) {
     for (const auto& blocker : world.objects) {
         if (blocker.registryId == movingObject.registryId ||
@@ -882,6 +960,28 @@ void TryMoveHostile(World& world, MapObject& object, float deltaX, float deltaY)
         object.x -= lateralX;
         object.y -= lateralY;
     }
+}
+
+bool TryMoveHostileAdaptive(World& world, MapObject& object, float deltaX, float deltaY) {
+    const float targetX = object.x + deltaX;
+    const float targetY = object.y + deltaY;
+    if (!WouldOverlapBlockingObject(world, object, targetX, targetY)) {
+        object.x = targetX;
+        object.y = targetY;
+        return true;
+    }
+
+    for (const float scale : std::array<float, 4>{0.72f, 0.54f, 0.38f, 0.24f}) {
+        const float scaledTargetX = object.x + deltaX * scale;
+        const float scaledTargetY = object.y + deltaY * scale;
+        if (!WouldOverlapBlockingObject(world, object, scaledTargetX, scaledTargetY)) {
+            object.x = scaledTargetX;
+            object.y = scaledTargetY;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool IsRangedDisciplineRole(HostileRole role) {
@@ -3873,6 +3973,31 @@ std::string RouteEventStartText(std::string_view routeEventType) {
     return "ROUTE EVENT OFFERED: A field incident was tagged on the active recovery route.";
 }
 
+std::string RouteEventWeatherText(std::string_view routeEventType, WeatherAnomaly weather) {
+    if (weather == WeatherAnomaly::AcidRain) {
+        if (routeEventType == "service_call") {
+            return " Acid rain is chewing through exposed BT-72 systems.";
+        }
+        if (routeEventType == "field_refuel") {
+            return " Acid rain is burning reserve stock off the route.";
+        }
+        if (routeEventType == "blocked_route") {
+            return " Acid rain is turning the cleared lane into fresh slurry and debris drag.";
+        }
+    } else if (weather == WeatherAnomaly::EtherFog) {
+        if (routeEventType == "relay_instability") {
+            return " Ether fog is smearing the relay packet across the route.";
+        }
+        if (routeEventType == "blocked_route") {
+            return " Ether fog is hiding the lane edges and accelerating route drift.";
+        }
+        if (routeEventType == "damaged_convoy") {
+            return " Ether fog is swallowing convoy traces before crews can lock them.";
+        }
+    }
+    return {};
+}
+
 std::string RouteEventActivationText(std::string_view routeEventType) {
     return std::string("ROUTE EVENT ACTIVE: ") + RouteEventLabel(routeEventType) + " is now live on the active recovery route.";
 }
@@ -3897,6 +4022,39 @@ std::string RouteEventEscalationText(std::string_view routeEventType) {
         return "ROUTE EVENT ESCALATING: The merchant trace is thinning out and the broker is about to cut the channel.";
     }
     return "ROUTE EVENT ESCALATING: The field incident is worsening.";
+}
+
+int RouteEventWeatherWeightBonus(std::string_view routeEventType, const GameState& gameState) {
+    if (gameState.weather == WeatherAnomaly::AcidRain) {
+        if (routeEventType == "service_call") {
+            return 3;
+        }
+        if (routeEventType == "field_refuel") {
+            return 2;
+        }
+        if (routeEventType == "blocked_route") {
+            return 1;
+        }
+    } else if (gameState.weather == WeatherAnomaly::EtherFog) {
+        if (routeEventType == "relay_instability") {
+            return 4;
+        }
+        if (routeEventType == "blocked_route") {
+            return 1;
+        }
+        if (routeEventType == "damaged_convoy") {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+bool RouteEventBlockedByWeather(std::string_view routeEventType, const GameState& gameState) {
+    if (routeEventType == "merchant_window") {
+        return gameState.weather == WeatherAnomaly::AcidRain ||
+            gameState.weather == WeatherAnomaly::EtherFog;
+    }
+    return false;
 }
 
 int RouteEventProgress(const SessionProfile& profile, const WorldFieldState& worldState) {
@@ -4108,38 +4266,38 @@ struct RouteEventCandidate {
     int weight = 0;
 };
 
-std::string PickRouteEventType(const SessionProfile& profile, const WorldFieldState& worldState) {
+std::string PickRouteEventType(const SessionProfile& profile, const WorldFieldState& worldState, const GameState& gameState) {
     std::vector<RouteEventCandidate> candidates;
     if (profile.firstPlayableRoute.firstServicePerformed &&
         !worldState.serviceBayActive &&
         (TankNeedsRepair(profile) || worldState.serviceCyclesCompleted == 0)) {
-        candidates.push_back({"service_call", 5});
+        candidates.push_back({"service_call", 5 + RouteEventWeatherWeightBonus("service_call", gameState)});
     }
     if (profile.story.tankLinked &&
         (profile.partnerTank.energyReserve < 80.0f ||
             profile.partnerTank.ammoReserve < 70.0f ||
             InventoryCount(profile, "power_cell") == 0)) {
-        candidates.push_back({"field_refuel", 4});
+        candidates.push_back({"field_refuel", 4 + RouteEventWeatherWeightBonus("field_refuel", gameState)});
     }
     if (profile.firstPlayableRoute.firstRecoveryNodeActivated &&
         !worldState.relaySubstationActive &&
         (worldState.routeContamination >= 10.0f ||
             !worldState.localRelayAvailable ||
             !worldState.regionalGridOnline)) {
-        candidates.push_back({"relay_instability", 3});
+        candidates.push_back({"relay_instability", 3 + RouteEventWeatherWeightBonus("relay_instability", gameState)});
     }
     if (profile.story.outerRoadCleared &&
         (worldState.routeOverrun ||
             worldState.routeContamination >= 16.0f ||
             worldState.infrastructureDecay >= 18.0f)) {
-        candidates.push_back({"blocked_route", 3});
+        candidates.push_back({"blocked_route", 3 + RouteEventWeatherWeightBonus("blocked_route", gameState)});
     }
     if ((worldState.caravanRouteActive ||
             worldState.droneStationsActive ||
             worldState.tradeNetworkActive ||
             worldState.railFreightActive) &&
         worldState.serviceCyclesCompleted == 0) {
-        candidates.push_back({"damaged_convoy", 2});
+        candidates.push_back({"damaged_convoy", 2 + RouteEventWeatherWeightBonus("damaged_convoy", gameState)});
     }
     if (!worldState.routeOverrun &&
         worldState.routeContamination < 10.0f &&
@@ -4150,11 +4308,12 @@ std::string PickRouteEventType(const SessionProfile& profile, const WorldFieldSt
             worldState.railFreightActive ||
             worldState.serviceBayActive) &&
         (profile.lanlineServices.relayCredits >= 90 ||
-            InventoryCount(profile, "trade_voucher") > 0)) {
-        candidates.push_back({"merchant_window", 1});
+            InventoryCount(profile, "trade_voucher") > 0) &&
+        !RouteEventBlockedByWeather("merchant_window", gameState)) {
+        candidates.push_back({"merchant_window", 1 + RouteEventWeatherWeightBonus("merchant_window", gameState)});
     }
     if (candidates.empty() && profile.story.tankLinked && TankNeedsRepair(profile)) {
-        candidates.push_back({"service_call", 1});
+        candidates.push_back({"service_call", 1 + RouteEventWeatherWeightBonus("service_call", gameState)});
     }
     if (candidates.empty()) {
         return {};
@@ -4185,7 +4344,8 @@ void BeginRouteEvent(WorldFieldState& worldState, std::string routeEventType, Ga
     worldState.lastRouteEventType = worldState.activeRouteEventType;
     worldState.lastRouteEventOutcome.clear();
     worldState.routeEventSerial += 1;
-    gameState.lastEvent = RouteEventStartText(worldState.activeRouteEventType);
+    gameState.lastEvent = RouteEventStartText(worldState.activeRouteEventType) +
+        RouteEventWeatherText(worldState.activeRouteEventType, gameState.weather);
 }
 
 void EndRouteEvent(WorldFieldState& worldState, bool success, std::string_view outcome) {
@@ -4266,7 +4426,7 @@ void UpdateRouteRandomEvents(SessionProfile& profile, GameState& gameState, floa
         return;
     }
 
-    const std::string routeEventType = PickRouteEventType(profile, *worldState);
+    const std::string routeEventType = PickRouteEventType(profile, *worldState, gameState);
     if (routeEventType.empty()) {
         worldState->routeEventCooldown = 30.0f;
         return;
@@ -4368,12 +4528,30 @@ void UpdateHostiles(World& world,
             role == HostileRole::HumanTactical &&
             (object.health <= HostileMaxHealthHint(role) * 0.45f ||
                 (player.insideTank && distance < preferredMaxRange + 0.35f));
+        float coverTargetX = 0.0f;
+        float coverTargetY = 0.0f;
+        const bool shouldSeekCover =
+            role == HostileRole::HumanTactical &&
+            engaged &&
+            shouldRetreat &&
+            FindHumanCoverTarget(world, object, player.x, player.y, coverTargetX, coverTargetY);
         if (suspicious && distance > 0.2f) {
             const float step = dt * HostileAdvanceSpeed(role) * HostileMovementScale(role, mechanicalDamage) * (engaged ? 1.0f : 0.72f);
             float moveX = 0.0f;
             float moveY = 0.0f;
+            bool adaptiveCoverMove = false;
 
-            if (usesStandoffMovement && (distance < preferredMinRange || shouldRetreat)) {
+            if (shouldSeekCover) {
+                const float coverDx = coverTargetX - object.x;
+                const float coverDy = coverTargetY - object.y;
+                const float coverDistance = std::sqrt(coverDx * coverDx + coverDy * coverDy);
+                if (coverDistance > 0.001f) {
+                    const float stepScale = std::min(step, coverDistance) / coverDistance;
+                    moveX = coverDx * stepScale;
+                    moveY = coverDy * stepScale;
+                    adaptiveCoverMove = true;
+                }
+            } else if (usesStandoffMovement && (distance < preferredMinRange || shouldRetreat)) {
                 moveX = -(dx / distance) * step;
                 moveY = -(dy / distance) * step;
             } else if (usesStandoffMovement && (shotLineBlocked || friendlyInLine)) {
@@ -4389,7 +4567,13 @@ void UpdateHostiles(World& world,
                 moveY = (dy / distance) * step;
             }
 
-            TryMoveHostile(world, object, moveX, moveY);
+            if (adaptiveCoverMove) {
+                if (!TryMoveHostileAdaptive(world, object, moveX, moveY)) {
+                    TryMoveHostile(world, object, moveX, moveY);
+                }
+            } else {
+                TryMoveHostile(world, object, moveX, moveY);
+            }
         }
 
         const float updatedDx = player.x - object.x;

@@ -891,6 +891,108 @@ bool RunMerchantRouteEventSmoke() {
             "merchant route event smoke expected merchant success summary with cooldown");
 }
 
+bool RunWeatherWeightedRouteEventSmoke() {
+    bunker::SessionProfile acidProfile = bunker::MakeDefaultSessionProfile();
+    acidProfile.selectedWorld = "weather_weighted_route_event_acid_smoke.bwld";
+    acidProfile.story.awakenedFromCryo = true;
+    acidProfile.story.pipPadRecovered = true;
+    acidProfile.story.archiveRecovered = true;
+    acidProfile.firstPlayableRoute.bt72Restored = true;
+    acidProfile.story.tankLinked = true;
+    acidProfile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    acidProfile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    acidProfile.firstPlayableRoute.clearanceModuleInstalled = true;
+    acidProfile.story.exitedBunker = true;
+    acidProfile.firstPlayableRoute.surfaceArrivalReached = true;
+    acidProfile.story.outerRoadCleared = true;
+    acidProfile.firstPlayableRoute.firstTankCombatResolved = true;
+    acidProfile.firstPlayableRoute.firstServicePerformed = true;
+    acidProfile.story.relayRecovered = true;
+    acidProfile.firstPlayableRoute.firstRecoveryNodeActivated = true;
+    acidProfile.story.returnedToBase = true;
+    acidProfile.firstPlayableRoute.debriefSummaryViewed = true;
+    acidProfile.lanlineServices.relayCredits = 150;
+    acidProfile.character.inventory.push_back({"trade_voucher", 1, 0.0f});
+    acidProfile.character.inventory.push_back({"power_cell", 1, 0.3f});
+    acidProfile.partnerTank.damage.hull = 54.0f;
+    acidProfile.partnerTank.energyReserve = 94.0f;
+    acidProfile.partnerTank.ammoReserve = 91.0f;
+
+    auto* acidWorld = bunker::FindWorldFieldState(acidProfile, acidProfile.selectedWorld, true);
+    if (!Check(acidWorld != nullptr, "weather-weighted route event smoke expected acid world field state")) {
+        return false;
+    }
+    acidWorld->tradeNetworkActive = true;
+    acidWorld->serviceCyclesCompleted = 0;
+    acidWorld->routeContamination = 4.0f;
+    acidWorld->infrastructureDecay = 8.0f;
+    acidWorld->routeEventSerial = 5;
+
+    bunker::GameState acidState;
+    acidState.weather = bunker::WeatherAnomaly::AcidRain;
+    acidState.weatherIntensity = 0.85f;
+    bunker::UpdateRouteRandomEvents(acidProfile, acidState, 1.0f);
+
+    if (!Check(acidWorld->activeRouteEventType == "service_call",
+            "weather-weighted route event smoke expected acid rain to bias into service_call instead of merchant")) {
+        return false;
+    }
+    if (!Check(acidState.lastEvent.find("Acid rain") != std::string::npos,
+            "weather-weighted route event smoke expected acid-rain offer copy")) {
+        return false;
+    }
+
+    bunker::SessionProfile fogProfile = bunker::MakeDefaultSessionProfile();
+    fogProfile.selectedWorld = "weather_weighted_route_event_fog_smoke.bwld";
+    fogProfile.story.awakenedFromCryo = true;
+    fogProfile.story.pipPadRecovered = true;
+    fogProfile.story.archiveRecovered = true;
+    fogProfile.firstPlayableRoute.bt72Restored = true;
+    fogProfile.story.tankLinked = true;
+    fogProfile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    fogProfile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    fogProfile.firstPlayableRoute.clearanceModuleInstalled = true;
+    fogProfile.story.exitedBunker = true;
+    fogProfile.firstPlayableRoute.surfaceArrivalReached = true;
+    fogProfile.story.outerRoadCleared = true;
+    fogProfile.firstPlayableRoute.firstTankCombatResolved = true;
+    fogProfile.firstPlayableRoute.firstServicePerformed = true;
+    fogProfile.story.relayRecovered = true;
+    fogProfile.firstPlayableRoute.firstRecoveryNodeActivated = true;
+    fogProfile.story.returnedToBase = true;
+    fogProfile.firstPlayableRoute.debriefSummaryViewed = true;
+    fogProfile.lanlineServices.relayCredits = 150;
+    fogProfile.character.inventory.push_back({"trade_voucher", 1, 0.0f});
+    fogProfile.character.inventory.push_back({"power_cell", 1, 0.3f});
+    fogProfile.partnerTank.damage.hull = 100.0f;
+    fogProfile.partnerTank.energyReserve = 94.0f;
+    fogProfile.partnerTank.ammoReserve = 92.0f;
+
+    auto* fogWorld = bunker::FindWorldFieldState(fogProfile, fogProfile.selectedWorld, true);
+    if (!Check(fogWorld != nullptr, "weather-weighted route event smoke expected fog world field state")) {
+        return false;
+    }
+    fogWorld->tradeNetworkActive = true;
+    fogWorld->serviceBayActive = true;
+    fogWorld->serviceCyclesCompleted = 1;
+    fogWorld->routeContamination = 4.0f;
+    fogWorld->infrastructureDecay = 7.0f;
+    fogWorld->localRelayAvailable = false;
+    fogWorld->regionalGridOnline = false;
+    fogWorld->routeEventSerial = 3;
+
+    bunker::GameState fogState;
+    fogState.weather = bunker::WeatherAnomaly::EtherFog;
+    fogState.weatherIntensity = 0.9f;
+    bunker::UpdateRouteRandomEvents(fogProfile, fogState, 1.0f);
+
+    return Check(fogWorld->activeRouteEventType == "relay_instability",
+            "weather-weighted route event smoke expected ether fog to bias into relay_instability instead of merchant; got " +
+                fogWorld->activeRouteEventType) &&
+        Check(fogState.lastEvent.find("Ether fog") != std::string::npos,
+            "weather-weighted route event smoke expected ether-fog offer copy");
+}
+
 bool RunWorldScopedRouteSummarySmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     profile.selectedWorld = "route_summary_alpha.bwld";
@@ -1098,6 +1200,56 @@ bool RunHumanTriggerDisciplineSmoke() {
             "trigger discipline smoke expected raider to hold fire through blocked line") &&
         Check(!almostEqual(updatedRaider->y, 0.0f),
             "trigger discipline smoke expected raider to reposition instead of shooting through the wall");
+}
+
+bool RunHumanCoverSeekingSmoke() {
+    bunker::World world;
+
+    bunker::MapObject cover;
+    cover.registryId = "[%cover_cargo_0001]";
+    cover.displayName = "Cargo Bastion";
+    cover.interaction = bunker::InteractionType::Static;
+    cover.category = bunker::ObjectCategory::Structure;
+    cover.x = 3.0f;
+    cover.y = 0.8f;
+    cover.width = 1.6f;
+    cover.depth = 1.4f;
+    world.AddObject(cover);
+
+    bunker::MapObject raider;
+    raider.registryId = "[%enemy_raider_cover_0001]";
+    raider.displayName = "Raider Breacher";
+    raider.interaction = bunker::InteractionType::Hostile;
+    raider.category = bunker::ObjectCategory::Hostile;
+    raider.x = 3.0f;
+    raider.y = 2.6f;
+    raider.width = 1.0f;
+    raider.depth = 1.0f;
+    raider.health = 16.0f;
+    raider.scriptTag = "human_tactical";
+    world.AddObject(raider);
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+
+    bunker::PlayerState player;
+    player.insideTank = true;
+    player.x = 0.0f;
+    player.y = 0.0f;
+
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    gameState.hostileAwareness.push_back({"[%enemy_raider_cover_0001]", 72.0f, 0.0f});
+    bunker::UpdateHostiles(world, player, profile, staticEraser, gameState, 1.0f);
+
+    const auto* updatedRaider = world.FindObjectByRegistryId("[%enemy_raider_cover_0001]");
+    const std::string positionText = updatedRaider == nullptr
+        ? "missing"
+        : ("x=" + std::to_string(updatedRaider->x) + ", y=" + std::to_string(updatedRaider->y));
+    return Check(updatedRaider != nullptr, "human cover smoke expected raider after update") &&
+        Check(updatedRaider->y < 2.3f,
+            "human cover smoke expected wounded raider to drop toward cover instead of backing straight off the lane; got " + positionText) &&
+        Check(updatedRaider->x > 3.3f,
+            "human cover smoke expected wounded raider to tuck behind the cargo bastion; got " + positionText);
 }
 
 bool RunBt72CombatFeedbackSmoke() {
@@ -3824,9 +3976,11 @@ int main() {
         RunRecoveryBackboneStatusSmoke() &&
         RunRouteEventLifecycleSmoke() &&
         RunMerchantRouteEventSmoke() &&
+        RunWeatherWeightedRouteEventSmoke() &&
         RunWorldScopedRouteSummarySmoke() &&
         RunHostileAwarenessSmoke() &&
         RunHumanTriggerDisciplineSmoke() &&
+        RunHumanCoverSeekingSmoke() &&
         RunBt72CombatFeedbackSmoke() &&
         RunReactiveBreakableGlassSmoke() &&
         RunReactiveBreakableFoliageSmoke() &&

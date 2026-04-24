@@ -13,13 +13,27 @@ namespace bunker {
 namespace {
 
 std::string TrimCopy(std::string_view value) {
-    const auto first = value.find_first_not_of(" \t\r\n");
-    if (first == std::string_view::npos) {
+    std::size_t first = 0;
+    while (first < value.size()) {
+        const char ch = value[first];
+        if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') {
+            break;
+        }
+        ++first;
+    }
+    if (first >= value.size()) {
         return {};
     }
 
-    const auto last = value.find_last_not_of(" \t\r\n");
-    return std::string(value.substr(first, last - first + 1));
+    std::size_t last = value.size();
+    while (last > first) {
+        const char ch = value[last - 1];
+        if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') {
+            break;
+        }
+        --last;
+    }
+    return std::string(value.substr(first, last - first));
 }
 
 std::string ToLowerCopy(std::string_view value) {

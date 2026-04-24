@@ -47,13 +47,19 @@ bool ReadString(std::ifstream& file, std::string& value) {
 }
 
 std::string TrimLayerCopy(std::string_view value) {
-    const auto first = value.find_first_not_of(" \t\r\n");
-    if (first == std::string_view::npos) {
+    std::size_t first = 0;
+    while (first < value.size() && std::isspace(static_cast<unsigned char>(value[first]))) {
+        ++first;
+    }
+    if (first == value.size()) {
         return {};
     }
 
-    const auto last = value.find_last_not_of(" \t\r\n");
-    return std::string(value.substr(first, last - first + 1));
+    std::size_t last = value.size();
+    while (last > first && std::isspace(static_cast<unsigned char>(value[last - 1]))) {
+        --last;
+    }
+    return std::string(value.substr(first, last - first));
 }
 
 std::string ToLowerCopy(std::string_view value) {
