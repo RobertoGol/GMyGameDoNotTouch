@@ -544,7 +544,7 @@ bool RunFirstCombatWorldEventSmoke() {
     return Check(gameState.zoneEventFirstCombat, "first combat smoke expected first-contact event to trigger") &&
         Check(gameState.lastEvent.find("CONTACT:") != std::string::npos,
             "first combat smoke expected contact event copy") &&
-        Check(gameState.lastEvent.find("Service halt") != std::string::npos,
+        Check(gameState.lastEvent.find("service halt") != std::string::npos,
             "first combat smoke expected service-halt cue in contact event") &&
         Check(gameState.lastEvent.find("Route beat: First Contact") != std::string::npos,
             "first combat smoke expected first-contact route beat");
