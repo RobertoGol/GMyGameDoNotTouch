@@ -13,6 +13,17 @@
 
 Он не хранит активный todo-список и не является backlog-файлом.
 
+## 0.1 `v0.1-showable` validation checkpoint
+
+- рабочая ветка: `finish-v0.1-showable`;
+- human-run build command:
+  `cmake --build build_finish_msvc --config Debug`
+- human-run smoke command:
+  `ctest --test-dir build_finish_msvc -C Debug --output-on-failure`
+- `BunkerSmokeChecks` passed;
+- map/layout/world geometry остается human-owned и не должна трогаться агентами;
+- новые gameplay systems не открывать, если только человек не сообщил о конкретном build/smoke/vertical-slice blocker.
+
 ## 1. Источники правды
 
 Приоритет истины:
