@@ -2031,11 +2031,13 @@ void ApplyStarterBt72Restoration(SessionProfile& profile) {
 std::string ResolveFirstPlayableRouteKill(const MapObject& object, bool insideTank, SessionProfile& profile) {
     if (object.registryId == "[%enemy_laska_0001]") {
         profile.firstPlayableRoute.earlyVerminEncounterResolved = true;
-        return "Archive corridor vermin cleared.";
+        return "Archive corridor vermin cleared. The archive sync window is now open.";
     }
     if (object.registryId == "[%enemy_ghoul_0001]" && !profile.firstPlayableRoute.firstTankCombatResolved) {
         profile.firstPlayableRoute.firstTankCombatResolved = true;
-        return insideTank ? "First BT-72 combat contact resolved." : "Outer route combat contact resolved.";
+        return insideTank
+            ? "First BT-72 combat contact resolved. Service halt window is now open before relay sync."
+            : "First surface contact resolved. Run a BT-72 service halt before relay sync.";
     }
     return {};
 }
@@ -4989,6 +4991,7 @@ void HandleAttack(World& world,
             }
             if (!routeEvent.empty()) {
                 gameState.lastEvent += " " + routeEvent;
+                AppendObjectiveRuntimeHint(gameState.lastEvent, profile, staticEraser);
                 AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
             }
         } else {
@@ -5180,6 +5183,8 @@ void HandleSpecialAttack(World& world,
             }
             if (!routeEvent.empty()) {
                 gameState.lastEvent += " " + routeEvent;
+                AppendObjectiveRuntimeHint(gameState.lastEvent, profile, staticEraser);
+                AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
             }
         } else {
             gameState.lastEvent = player.insideTank
@@ -5347,6 +5352,8 @@ void HandleInteraction(const MapObject* nearest,
             profile.partnerTank.secondSeatUnlocked = true;
             player.bucketRaised = false;
             gameState.lastEvent = "BT-72 restored to partial field condition. Cockpit link and training HUD are now available.";
+            AppendObjectivePreviewHint(gameState.lastEvent, profile);
+            AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
             return;
         }
         if (!player.insideTank && profile.partnerTank.damage.hull <= 0.0f) {
@@ -5386,6 +5393,10 @@ void HandleInteraction(const MapObject* nearest,
                     ? "BT-72 link established. Cockpit channel synchronized and first-drive diagnostics are live."
                     : "BT-72 link re-established. Cockpit channel synchronized.")
             : "BT-72 link suspended. Returning to foot movement.";
+        if (player.insideTank) {
+            AppendObjectivePreviewHint(gameState.lastEvent, profile);
+            AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
+        }
         return;
     }
 
@@ -5437,6 +5448,8 @@ void HandleInteraction(const MapObject* nearest,
         staticEraser.Save(profile.selectedWorld);
         world.RemoveObject(nearest->registryId);
         gameState.lastEvent = "Clearance module installed on BT-72. Heavy debris routes can now be challenged.";
+        AppendObjectivePreviewHint(gameState.lastEvent, profile);
+        AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
         return;
     }
 
@@ -5446,6 +5459,7 @@ void HandleInteraction(const MapObject* nearest,
         } else {
             profile.story.exitedBunker = true;
             gameState.lastEvent = "Outer bulkhead cycled and the lift route unlocks to the surface approach. BT-72 can now enter the first blocked recovery corridor.";
+            AppendObjectiveRuntimeHint(gameState.lastEvent, profile, staticEraser);
             AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
         }
         return;
@@ -5486,7 +5500,8 @@ void HandleInteraction(const MapObject* nearest,
                 profile.story.outerRoadCleared = true;
                 std::string progressionEvent;
                 AwardExperience(profile, 50, &progressionEvent);
-                gameState.lastEvent = "Outer debris barrier cleared. BT-72 punched open the route to the first recovery node. " + progressionEvent;
+                gameState.lastEvent = "Outer debris barrier cleared. BT-72 punched open the combat lane toward the first recovery node. " + progressionEvent;
+                AppendObjectiveRuntimeHint(gameState.lastEvent, profile, staticEraser);
                 AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
             } else {
                 gameState.lastEvent = "Debris impact registered. Keep pushing the barrier.";
@@ -5593,6 +5608,7 @@ void HandleInteraction(const MapObject* nearest,
         if (erosionCleared > 0) {
             gameState.lastEvent += " Ether bloom reduced by " + std::to_string(erosionCleared) + "%.";
         }
+        AppendObjectiveRuntimeHint(gameState.lastEvent, profile, staticEraser);
         AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
         return;
     }

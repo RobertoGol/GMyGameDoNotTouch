@@ -12,6 +12,26 @@ bool IsNear(const PlayerState& player, float x, float y, float radius) {
     return (dx * dx) + (dy * dy) <= radius * radius;
 }
 
+void AppendObjectiveHint(std::string& message, const std::string& objective) {
+    if (!objective.empty() && message.find(objective) == std::string::npos) {
+        message += " Next: " + objective;
+    }
+}
+
+void AppendObjectivePreviewHint(std::string& message, const SessionProfile& profile) {
+    AppendObjectiveHint(message, CurrentStoryObjectivePreview(profile));
+}
+
+void AppendRouteBeatReadabilityHint(std::string& message, const SessionProfile& profile) {
+    const auto beat = CurrentFirstPlayableRouteBeat(profile);
+    if (!beat.label.empty() && message.find("Route beat: " + beat.label) == std::string::npos) {
+        message += " Route beat: " + beat.label + ".";
+    }
+    if (!beat.payoff.empty() && message.find(beat.payoff) == std::string::npos) {
+        message += " Readable payoff: " + beat.payoff;
+    }
+}
+
 bool IsAtSurfaceArrivalAnchor(const World& world, const PlayerState& player) {
     if (const auto* campMarker = world.FindObjectByRegistryId("[%camp_0001]"); campMarker != nullptr) {
         return IsNear(player, campMarker->x, campMarker->y, 5.0f);
@@ -62,8 +82,8 @@ void ProcessScriptedWorldEvents(const World& world, const PlayerState& player, S
         profile.firstPlayableRoute.surfaceArrivalReached = true;
         gameState.zoneEventExterior = true;
         gameState.lastEvent = "SURFACE ARRIVAL: 'BT-72 reached the first exterior foothold. Skyline active, debris barrier ahead, and the first hostile contact is forming beyond the lift route.'";
-        const auto beat = CurrentFirstPlayableRouteBeat(profile);
-        gameState.lastEvent += " Route beat: " + beat.label + ". Readable payoff: " + beat.payoff;
+        AppendObjectivePreviewHint(gameState.lastEvent, profile);
+        AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
         return;
     }
 
@@ -75,6 +95,7 @@ void ProcessScriptedWorldEvents(const World& world, const PlayerState& player, S
         gameState.lastEvent = player.insideTank
             ? "CONTACT: 'Outer Ghoul charging the cleared lane. Hold BT-72 through the rush, then take one service halt before syncing the relay.'"
             : "CONTACT: 'Outer Ghoul detected beyond the cleared debris lane. BT-72 is the intended answer for the first surface contact.'";
+        AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
         return;
     }
 
@@ -82,8 +103,7 @@ void ProcessScriptedWorldEvents(const World& world, const PlayerState& player, S
         IsNear(player, -2.5f, 3.2f, 3.0f)) {
         gameState.zoneEventReturn = true;
         gameState.lastEvent = "DEBRIEF: 'Recovery node recognized. Upload the route summary and authorize Shelter 17 planning: rail, orbital, fabrication, then the inner spur.'";
-        const auto beat = CurrentFirstPlayableRouteBeat(profile);
-        gameState.lastEvent += " Route beat: " + beat.label + ". Readable payoff: " + beat.payoff;
+        AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
         return;
     }
 

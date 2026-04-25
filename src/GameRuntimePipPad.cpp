@@ -218,6 +218,26 @@ bool TankNeedsRepair(const SessionProfile& profile) {
         profile.partnerTank.energyReserve < 99.0f || profile.partnerTank.ammoReserve < 99.0f;
 }
 
+void AppendObjectiveHint(std::string& message, const std::string& objective) {
+    if (!objective.empty() && message.find(objective) == std::string::npos) {
+        message += " Next: " + objective;
+    }
+}
+
+void AppendObjectivePreviewHint(std::string& message, const SessionProfile& profile) {
+    AppendObjectiveHint(message, CurrentStoryObjectivePreview(profile));
+}
+
+void AppendRouteBeatReadabilityHint(std::string& message, const SessionProfile& profile) {
+    const auto beat = CurrentFirstPlayableRouteBeat(profile);
+    if (!beat.label.empty() && message.find("Route beat: " + beat.label) == std::string::npos) {
+        message += " Route beat: " + beat.label + ".";
+    }
+    if (!beat.payoff.empty() && message.find(beat.payoff) == std::string::npos) {
+        message += " Readable payoff: " + beat.payoff;
+    }
+}
+
 TankModuleSlot* FindTankModule(SessionProfile& profile, TankModuleSlotType type) {
     for (auto& module : profile.partnerTank.loadout.modules) {
         if (module.type == type) {
@@ -407,6 +427,8 @@ bool TryRunFieldWorkbench(PlayerState& player,
     if (profile.firstPlayableRoute.firstTankCombatResolved && !profile.firstPlayableRoute.firstServicePerformed) {
         profile.firstPlayableRoute.firstServicePerformed = true;
         gameState.lastEvent += " First service halt logged for the route.";
+        AppendObjectivePreviewHint(gameState.lastEvent, profile);
+        AppendRouteBeatReadabilityHint(gameState.lastEvent, profile);
     }
     if (!recipeEvent.empty()) {
         gameState.lastEvent += " " + recipeEvent;

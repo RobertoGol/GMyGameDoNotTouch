@@ -506,6 +506,8 @@ bool RunSurfaceArrivalWorldEventSmoke() {
             "surface arrival smoke expected exterior event copy") &&
         Check(gameState.lastEvent.find("first exterior foothold") != std::string::npos,
             "surface arrival smoke expected foothold payoff text") &&
+        Check(gameState.lastEvent.find("Next: Use the clearance module to break the outer debris barrier.") != std::string::npos,
+            "surface arrival smoke expected explicit next-objective handoff") &&
         Check(gameState.lastEvent.find("Route beat: Exterior Exposure") != std::string::npos,
             "surface arrival smoke expected exterior-exposure beat copy");
 }
@@ -543,7 +545,54 @@ bool RunFirstCombatWorldEventSmoke() {
         Check(gameState.lastEvent.find("CONTACT:") != std::string::npos,
             "first combat smoke expected contact event copy") &&
         Check(gameState.lastEvent.find("service halt") != std::string::npos,
-            "first combat smoke expected service-halt cue in contact event");
+            "first combat smoke expected service-halt cue in contact event") &&
+        Check(gameState.lastEvent.find("Route beat: First Contact") != std::string::npos,
+            "first combat smoke expected first-contact route beat");
+}
+
+bool RunFirstCombatResolutionHandoffSmoke() {
+    bunker::World world;
+
+    bunker::MapObject ghoul;
+    ghoul.registryId = "[%enemy_ghoul_0001]";
+    ghoul.displayName = "Outer Ghoul";
+    ghoul.interaction = bunker::InteractionType::Hostile;
+    ghoul.category = bunker::ObjectCategory::Hostile;
+    ghoul.health = 1.0f;
+    world.AddObject(ghoul);
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.selectedWorld = "first_contact_handoff_smoke.bwld";
+    profile.story.awakenedFromCryo = true;
+    profile.story.pipPadRecovered = true;
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.partnerTank.deployed = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    profile.story.outerRoadCleared = true;
+
+    bunker::PlayerState player;
+    player.insideTank = true;
+    player.x = ghoul.x;
+    player.y = ghoul.y;
+
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    bunker::HandleAttack(world, player, profile, staticEraser, gameState);
+
+    return Check(profile.firstPlayableRoute.firstTankCombatResolved,
+            "first combat handoff smoke expected combat-resolution flag") &&
+        Check(gameState.lastEvent.find("service halt") != std::string::npos,
+            "first combat handoff smoke expected service-halt resolution cue") &&
+        Check(gameState.lastEvent.find("Run a first service cycle before pushing the relay node.") != std::string::npos,
+            "first combat handoff smoke expected first-service runtime objective hint") &&
+        Check(gameState.lastEvent.find("Route beat: Service Halt") != std::string::npos,
+            "first combat handoff smoke expected service-halt route beat");
 }
 
 bool RunWorkshopServiceRouteHandoffSmoke() {
@@ -4125,6 +4174,7 @@ int main() {
         RunFirstPlayableRouteReadoutSmoke() &&
         RunSurfaceArrivalWorldEventSmoke() &&
         RunFirstCombatWorldEventSmoke() &&
+        RunFirstCombatResolutionHandoffSmoke() &&
         RunWorkshopServiceRouteHandoffSmoke() &&
         RunDebriefIndustrialHandoffSmoke() &&
         RunRecoveryHandoffSummarySmoke() &&
