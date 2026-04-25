@@ -1,19 +1,19 @@
-Start testing: Apr 24 22:32 RTZ 2 (çèìà)
+Start testing: Apr 25 10:43 RTZ 2 (çèìà)
 ----------------------------------------------------------
 1/1 Testing: BunkerSmokeChecks
 1/1 Test: BunkerSmokeChecks
 Command: "D:/Projects/Game_Project/build_verify_ninja_fresh/BunkerSmokeChecks.exe"
 Directory: D:/Projects/Game_Project/build_verify_ninja_fresh
-"BunkerSmokeChecks" start time: Apr 24 22:32 RTZ 2 (çèìà)
+"BunkerSmokeChecks" start time: Apr 25 10:43 RTZ 2 (çèìà)
 Output:
 ----------------------------------------------------------
-[smoke] mechanical damage smoke expected intact robot to pressure BT-72 at baseline range
+[smoke] first combat handoff smoke expected service-halt resolution cue
 <end of output>
-Test time =   1.85 sec
+Test time =   0.10 sec
 ----------------------------------------------------------
 Test Failed.
-"BunkerSmokeChecks" end time: Apr 24 22:32 RTZ 2 (çèìà)
-"BunkerSmokeChecks" time elapsed: 00:00:01
+"BunkerSmokeChecks" end time: Apr 25 10:43 RTZ 2 (çèìà)
+"BunkerSmokeChecks" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-End testing: Apr 24 22:32 RTZ 2 (çèìà)
+End testing: Apr 25 10:43 RTZ 2 (çèìà)
