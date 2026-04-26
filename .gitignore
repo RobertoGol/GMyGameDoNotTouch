@@ -1,0 +1,46 @@
+# Build directories
+build/
+build_finish_msvc/
+build_verify_ninja/
+build_verify_ninja_fresh/
+out/
+CMakeFiles/
+profiles/
+
+# IDE / editor
+.vscode/
+.vs/
+Edit.md
+
+# Local smoke/runtime state
+.bunker_smoke_checks/
+
+# Visual Studio / MSVC artifacts
+*.user
+*.suo
+*.VC.db
+*.ilk
+*.pdb
+*.exe
+*.obj
+*.lib
+*.dll
+
+# Local external assets - do not push copyrighted game files
+LocalAssets/
+ExternalAssets/
+Fallout4Assets/
+AssetsExternal/
+*.ba2
+*.bsa
+
+# CMake generated files
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+DartConfiguration.tcl
+Testing/
+imgui.ini
+
+# Local authored/runtime world workspace
+world/

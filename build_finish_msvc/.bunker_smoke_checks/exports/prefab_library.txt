@@ -1,2 +1,0 @@
-# BUNKER_PREFABS_V4
-"Relay Service" "[%relay_prefab_usage_0001]" "Relay Service Seed" "relay_substation" "shelter17_backbone" "Service" 3 2 0 0 0 1 1 1 100 1 0 0 0 0 "" "" "" "" "prefab_relay_service" "Structure" "Smoke prefab usage" "Captured"
