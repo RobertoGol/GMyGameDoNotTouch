@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <fstream>
+#include <system_error>
 
 #include <GLFW/glfw3.h>
 
@@ -158,6 +160,80 @@ std::filesystem::path FindSiblingExecutable(const char* executableName) {
         }
     }
     return {};
+}
+
+bool PathExists(const std::filesystem::path& candidate) {
+    if (candidate.empty()) {
+        return false;
+    }
+    std::error_code errorCode;
+    return std::filesystem::exists(candidate, errorCode);
+}
+
+std::filesystem::path FindProjectRootFrom(std::filesystem::path startPath) {
+    if (startPath.empty()) {
+        return {};
+    }
+
+    startPath = startPath.lexically_normal();
+    for (;;) {
+        if (PathExists(startPath / "CMakeLists.txt")) {
+            return startPath;
+        }
+        const auto parentPath = startPath.parent_path();
+        if (parentPath.empty() || parentPath == startPath) {
+            return {};
+        }
+        startPath = parentPath;
+    }
+}
+
+std::filesystem::path SafeCurrentPath() {
+    std::error_code errorCode;
+    return std::filesystem::current_path(errorCode);
+}
+
+std::filesystem::path ResolveSiblingLaunchWorkingDirectory(const std::filesystem::path& candidatePath) {
+    const auto currentPath = SafeCurrentPath();
+    const auto projectRootFromCurrentPath = FindProjectRootFrom(currentPath);
+    if (!projectRootFromCurrentPath.empty()) {
+        return projectRootFromCurrentPath;
+    }
+
+    const auto candidateDirectory = candidatePath.parent_path();
+    const auto projectRootFromCandidateDirectory = FindProjectRootFrom(candidateDirectory);
+    if (!projectRootFromCandidateDirectory.empty()) {
+        return projectRootFromCandidateDirectory;
+    }
+
+    if (!currentPath.empty()) {
+        return currentPath;
+    }
+
+    return candidateDirectory;
+}
+
+void AppendSiblingLaunchDiagnostic(const char* executableName,
+    const std::filesystem::path& candidatePath,
+    const std::filesystem::path& workingDirectory) {
+    const auto candidateDirectory = candidatePath.parent_path();
+    const auto logPath = workingDirectory / "Log.md";
+    std::ofstream logFile(logPath, std::ios::app);
+    if (!logFile.is_open()) {
+        return;
+    }
+
+    logFile << '\n';
+    logFile << "Runtime launch diagnostic:\n";
+    logFile << "- executableName: " << executableName << '\n';
+    logFile << "- candidate path: " << candidatePath.string() << '\n';
+    logFile << "- resolved workingDirectory: " << workingDirectory.string() << '\n';
+    logFile << "- workingDirectory/CMakeLists.txt exists: "
+            << (PathExists(workingDirectory / "CMakeLists.txt") ? "true" : "false") << '\n';
+    logFile << "- workingDirectory/profiles/launch.ticket exists at launch time: "
+            << (PathExists(workingDirectory / "profiles" / "launch.ticket") ? "true" : "false") << '\n';
+    logFile << "- candidate.parent_path()/profiles/launch.ticket exists: "
+            << (PathExists(candidateDirectory / "profiles" / "launch.ticket") ? "true" : "false") << '\n';
 }
 
 std::filesystem::path SelectedWorldPath(const std::vector<std::filesystem::path>& worlds, int selectedWorldIndex) {
@@ -469,17 +545,20 @@ bool TryLaunchSiblingExecutable(const char* executableName, std::string& statusT
     STARTUPINFOA startupInfo{};
     startupInfo.cb = sizeof(startupInfo);
     PROCESS_INFORMATION processInfo{};
-    std::string commandLine = "\"" + executablePath.string() + "\"";
-    const std::string workingDirectory = executablePath.parent_path().string();
+    const auto workingDirectory = ResolveSiblingLaunchWorkingDirectory(executablePath);
+    const std::string executablePathString = executablePath.string();
+    const std::string workingDirectoryString = workingDirectory.string();
+    std::string commandLine = "\"" + executablePathString + "\"";
+    AppendSiblingLaunchDiagnostic(executableName, executablePath, workingDirectory);
     const BOOL created = CreateProcessA(
-        executablePath.string().c_str(),
+        executablePathString.c_str(),
         commandLine.data(),
         nullptr,
         nullptr,
         FALSE,
         0,
         nullptr,
-        workingDirectory.c_str(),
+        workingDirectoryString.c_str(),
         &startupInfo,
         &processInfo);
     if (!created) {
@@ -489,7 +568,7 @@ bool TryLaunchSiblingExecutable(const char* executableName, std::string& statusT
 
     CloseHandle(processInfo.hThread);
     CloseHandle(processInfo.hProcess);
-    statusText = std::string("Launch request issued for ") + executableName + ".";
+    statusText = std::string("Launch request issued for ") + executableName + " from cwd " + workingDirectoryString + ".";
     return true;
 }
 

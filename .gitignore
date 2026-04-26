@@ -5,10 +5,12 @@ build_verify_ninja/
 build_verify_ninja_fresh/
 out/
 CMakeFiles/
+profiles/
 
 # IDE / editor
 .vscode/
 .vs/
+Edit.md
 
 # Local smoke/runtime state
 .bunker_smoke_checks/
@@ -38,3 +40,4 @@ cmake_install.cmake
 CTestTestfile.cmake
 DartConfiguration.tcl
 Testing/
+imgui.ini
