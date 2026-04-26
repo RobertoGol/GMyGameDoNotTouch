@@ -41,3 +41,6 @@ CTestTestfile.cmake
 DartConfiguration.tcl
 Testing/
 imgui.ini
+
+# Local authored/runtime world workspace
+world/
