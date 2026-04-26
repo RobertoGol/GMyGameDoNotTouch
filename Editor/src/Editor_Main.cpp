@@ -1111,6 +1111,7 @@ int main() {
     int targetTypeIndex = 0;
     int completionIndex = 1;
     bool showAssetPalette = true;
+    bool showObjectWindow = true;
     bool showWorldAuthoring = true;
     bool showCellView = true;
     bool showRenderWindow = true;
@@ -1221,6 +1222,7 @@ int main() {
     float worldSpawnY = editorWorld.metadata.playerSpawnY;
     char exportWorldFileInput[128] = "";
     char objectSearchInput[128] = "";
+    char objectWindowFilterInput[128] = "";
     char prefabLabelInput[128] = "New Prefab";
     CopyStringToBuffer(editorWorld.metadata.name, worldNameInput, IM_ARRAYSIZE(worldNameInput));
     CopyStringToBuffer(editorWorld.metadata.biome, worldBiomeInput, IM_ARRAYSIZE(worldBiomeInput));
@@ -1666,6 +1668,7 @@ int main() {
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu("Windows")) {
                 ImGui::MenuItem("Asset Palette", nullptr, &showAssetPalette);
+                ImGui::MenuItem("Object Window", nullptr, &showObjectWindow);
                 ImGui::MenuItem("World Authoring", nullptr, &showWorldAuthoring);
                 ImGui::MenuItem("Cell View", nullptr, &showCellView);
                 ImGui::MenuItem("Render Window / Viewport", nullptr, &showRenderWindow);
@@ -1674,6 +1677,7 @@ int main() {
                 ImGui::Separator();
                 if (ImGui::MenuItem("Show All Windows")) {
                     showAssetPalette = true;
+                    showObjectWindow = true;
                     showWorldAuthoring = true;
                     showCellView = true;
                     showRenderWindow = true;
@@ -1698,7 +1702,7 @@ int main() {
         };
 
         if (showAssetPalette) {
-            setTopLevelWindowDefaults(ImVec2(16.0f, 40.0f), ImVec2(320.0f, 844.0f));
+            setTopLevelWindowDefaults(ImVec2(16.0f, 476.0f), ImVec2(320.0f, 408.0f));
             ImGui::Begin("Asset Palette", &showAssetPalette, ImGuiWindowFlags_NoCollapse);
             ImGui::Text("Creation Kit Style Toolset");
             ImGui::Separator();
@@ -1912,6 +1916,130 @@ int main() {
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::EndPopup();
+            }
+            ImGui::End();
+        }
+
+        if (showObjectWindow) {
+            setTopLevelWindowDefaults(ImVec2(16.0f, 40.0f), ImVec2(320.0f, 420.0f));
+            ImGui::Begin("Object Window", &showObjectWindow, ImGuiWindowFlags_NoCollapse);
+            ImGui::TextDisabled("Content browser shell; drag/drop placement path is not final.");
+            ImGui::InputTextWithHint(
+                "Filter",
+                "Search presets, prefab labels, IDs, or target types",
+                objectWindowFilterInput,
+                IM_ARRAYSIZE(objectWindowFilterInput));
+            ImGui::Separator();
+
+            std::vector<std::string> prefabTargetTypes;
+            prefabTargetTypes.reserve(savedPrefabs.size());
+            for (const auto& prefab : savedPrefabs) {
+                if (prefab.targetType.empty()) {
+                    continue;
+                }
+                const bool alreadyPresent = std::any_of(
+                    prefabTargetTypes.begin(),
+                    prefabTargetTypes.end(),
+                    [&](const std::string& targetType) { return targetType == prefab.targetType; });
+                if (!alreadyPresent) {
+                    prefabTargetTypes.push_back(prefab.targetType);
+                }
+            }
+
+            ImGui::BeginChild("ObjectWindowCategories", ImVec2(0.0f, 112.0f), true);
+            ImGui::Text("Categories");
+            if (ImGui::TreeNodeEx("Draft Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
+                for (int presetCategoryIndex = 0; presetCategoryIndex < IM_ARRAYSIZE(objectPresetLabels); ++presetCategoryIndex) {
+                    const bool selected = (presetIndex == presetCategoryIndex);
+                    if (ImGui::Selectable((std::string("Preset :: ") + objectPresetLabels[presetCategoryIndex]).c_str(), selected)) {
+                        presetIndex = presetCategoryIndex;
+                        selectedPrefabIndex = -1;
+                        refreshDraftLayerForPreset();
+                        statusText = "Object Window selected base object. Placement path pending.";
+                    }
+                }
+                ImGui::TreePop();
+            }
+            if (ImGui::TreeNodeEx("Prefab Library", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (savedPrefabs.empty()) {
+                    ImGui::TextDisabled("No prefab records loaded.");
+                } else {
+                    for (const auto& targetType : prefabTargetTypes) {
+                        ImGui::BulletText("%s", targetType.c_str());
+                    }
+                }
+                ImGui::TreePop();
+            }
+            ImGui::EndChild();
+
+            ImGui::Text("Base Objects / Prefabs");
+            ImGui::BeginChild("ObjectWindowList", ImVec2(0.0f, 158.0f), true);
+            for (int index = 0; index < IM_ARRAYSIZE(objectPresetLabels); ++index) {
+                const auto& preset = objectPresets[static_cast<std::size_t>(index)];
+                const std::string presetSearchText =
+                    std::string(objectPresetLabels[index]) + " " +
+                    ToLabel(preset.category) + " " +
+                    ToLabel(preset.interaction);
+                if (!ContainsCaseInsensitive(presetSearchText, objectWindowFilterInput)) {
+                    continue;
+                }
+                const bool selected = (presetIndex == index);
+                std::string presetRowLabel =
+                    std::string("[Preset] ") + objectPresetLabels[index] +
+                    " | " + ToLabel(preset.category) +
+                    " | " + ToLabel(preset.interaction);
+                if (ImGui::Selectable((presetRowLabel + "##object_window_preset_" + std::to_string(index)).c_str(), selected)) {
+                    presetIndex = index;
+                    selectedPrefabIndex = -1;
+                    refreshDraftLayerForPreset();
+                    statusText = "Object Window selected base object. Placement path pending.";
+                }
+            }
+            for (int index = 0; index < static_cast<int>(savedPrefabs.size()); ++index) {
+                const auto& prefab = savedPrefabs[static_cast<std::size_t>(index)];
+                const std::string prefabSearchText =
+                    prefab.label + " " +
+                    prefab.id + " " +
+                    prefab.targetType + " " +
+                    prefab.object.displayName;
+                if (!ContainsCaseInsensitive(prefabSearchText, objectWindowFilterInput)) {
+                    continue;
+                }
+                const bool selected = (selectedPrefabIndex == index);
+                std::string prefabRowLabel =
+                    "[Prefab] " + prefab.label +
+                    " | " + prefab.targetType +
+                    " | " + prefab.id;
+                if (ImGui::Selectable((prefabRowLabel + "##object_window_prefab_" + std::to_string(index)).c_str(), selected)) {
+                    selectedPrefabIndex = index;
+                    CopyStringToBuffer(prefab.label, prefabLabelInput, IM_ARRAYSIZE(prefabLabelInput));
+                    statusText = "Object Window selected base object. Placement path pending.";
+                }
+            }
+            ImGui::EndChild();
+
+            ImGui::Separator();
+            ImGui::Text("Selected Base Object / Prefab");
+            if (selectedPrefabIndex >= 0 && selectedPrefabIndex < static_cast<int>(savedPrefabs.size())) {
+                const auto& prefab = savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)];
+                ImGui::TextWrapped("Name: %s", prefab.label.c_str());
+                ImGui::TextDisabled("Prefab ID: %s", prefab.id.c_str());
+                ImGui::TextDisabled("Target: %s", prefab.targetType.c_str());
+                ImGui::TextWrapped("Seed Object: %s", prefab.object.displayName.c_str());
+                ImGui::TextDisabled(
+                    "Interaction: %s | Category: %s",
+                    ToLabel(prefab.object.interaction),
+                    ToLabel(prefab.object.category));
+            } else {
+                const auto& preset = objectPresets[static_cast<std::size_t>(presetIndex)];
+                ImGui::TextWrapped("Preset: %s", objectPresetLabels[presetIndex]);
+                ImGui::TextDisabled("Category: %s", ToLabel(preset.category));
+                ImGui::TextDisabled("Interaction: %s", ToLabel(preset.interaction));
+                ImGui::TextDisabled(
+                    "Footprint: %.1f x %.1f x %.1f",
+                    preset.width,
+                    preset.depth,
+                    preset.height);
             }
             ImGui::End();
         }
