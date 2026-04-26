@@ -1112,6 +1112,7 @@ int main() {
     int completionIndex = 1;
     bool showAssetPalette = true;
     bool showWorldAuthoring = true;
+    bool showRenderWindow = true;
     bool showExportRuntime = true;
     bool showImportAssistant = true;
     bool resetWorkspaceLayout = false;
@@ -1665,12 +1666,14 @@ int main() {
             if (ImGui::BeginMenu("Windows")) {
                 ImGui::MenuItem("Asset Palette", nullptr, &showAssetPalette);
                 ImGui::MenuItem("World Authoring", nullptr, &showWorldAuthoring);
+                ImGui::MenuItem("Render Window / Viewport", nullptr, &showRenderWindow);
                 ImGui::MenuItem("Export / Runtime", nullptr, &showExportRuntime);
                 ImGui::MenuItem("Import Assistant", nullptr, &showImportAssistant);
                 ImGui::Separator();
                 if (ImGui::MenuItem("Show All Windows")) {
                     showAssetPalette = true;
                     showWorldAuthoring = true;
+                    showRenderWindow = true;
                     showExportRuntime = true;
                     showImportAssistant = true;
                 }
@@ -1911,7 +1914,7 @@ int main() {
         }
 
         if (showWorldAuthoring) {
-            setTopLevelWindowDefaults(ImVec2(352.0f, 40.0f), ImVec2(720.0f, 844.0f));
+            setTopLevelWindowDefaults(ImVec2(352.0f, 40.0f), ImVec2(720.0f, 410.0f));
             ImGui::Begin("World Authoring", &showWorldAuthoring, ImGuiWindowFlags_NoCollapse);
             ImGui::Text("Current workspace");
             ImGui::BulletText("Map: %s", editorWorld.metadata.name.c_str());
@@ -3301,6 +3304,13 @@ int main() {
             } else {
                 ImGui::TextDisabled("Semantic overlay is idle.");
             }
+            ImGui::End();
+        }
+
+        if (showRenderWindow) {
+            setTopLevelWindowDefaults(ImVec2(352.0f, 466.0f), ImVec2(720.0f, 418.0f));
+            ImGui::Begin("Render Window / Viewport", &showRenderWindow, ImGuiWindowFlags_NoCollapse);
+            ImGui::TextDisabled("Temporary 2D viewport placeholder; final target is a real 3D Render Window.");
             ImGui::Separator();
             const PreviewRenderOptions previewRenderOptions = {
                 showInteractionHelpers,
