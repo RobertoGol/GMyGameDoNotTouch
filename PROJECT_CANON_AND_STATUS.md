@@ -172,6 +172,29 @@
 
 Editor не является player-facing world editor.
 
+### Product / UI presentation split
+`BunkerLauncher` split:
+- `Admin / Moderator Launcher` - один launcher class/product для admin и moderator; текущий operations-deck / terminal-style launcher сохраняется для этого use-case и может показывать route state, profile/world/session state, LAN/session status, recovery/industry/backbone state, editor launch и debug/admin readouts;
+- future `Player Launcher` - отдельный player-facing launcher для обычных игроков; это atmospheric world-entry UI с tonal/UI-IA опорой на `Log Horizon` / `Elder Tale`, без admin/debug/internal state.
+
+`BunkerEditor` target:
+- `Creation Kit`-style authoring tool;
+- independent floating/movable windows;
+- multi-monitor use;
+- не single rigid dashboard.
+
+`BunkerGame` presentation:
+- текущий grid / tactical / runtime view принят как debug gameplay shell и tactical prototype view;
+- финальный player-facing runtime должен быть immersive, а не detached debug grid UI.
+
+`Pip-Pad` direction:
+- in-world / diegetic device, а не detached debug/admin window;
+- игрок выбирает device shell/model из: `Pipboy 1.0`, `Pip-Boy 3000 Mark IV`, `Pip-Boy 2000 Mark VI`, `Pip-Pad 3500`;
+- `Pip-Boy 3000 Mark V` - heavy failed model из crude steel / heavy metal, discarded в wire trash bin среди papers/workshop waste; rejected/unwanted и не входит в normal selectable set;
+- canonical top tabs: `STAT`, `ITEM`, `DATA`, `MAP`, `RADIO`;
+- `DATA` работает как live activity journal: `MAIN`, `SIDE`, `DAILY`, `EVENTS`, `OPS`, `ARCHIVE`;
+- `Fallout 4/76` использовать только как information-architecture и diegetic-device inspiration; не копировать proprietary visuals, assets, logos, exact UI art или branding; сохранять original bunker-survival identity.
+
 ### Lanline / service boundary
 `Lanline`, `Lanline Services` и `Fey Ring` - это не полноценный MMO/backend слой.
 
