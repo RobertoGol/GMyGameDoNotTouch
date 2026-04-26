@@ -1,0 +1,9 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/Projects/Game_Project/build_verify_ninja/cmake_install.cmake",
+		"D:/Projects/Game_Project/build_verify_ninja/external/glfw/cmake_install.cmake",
+		"D:/Projects/Game_Project/build_verify_ninja/external/glfw/src/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

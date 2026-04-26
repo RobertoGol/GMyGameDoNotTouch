@@ -1,0 +1,39 @@
+World Validation Report
+Generated: 2026-04-26 18:34:53
+Target: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\start_zone.bwld
+Format: BWL5
+Policy: prototype / allow warnings
+Decision: exported
+Summary: World validation passed with warnings: 6.
+Errors: 0
+Warnings: 6
+Auto-created semantic anchors: 0
+Audit trail: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\start_zone.export-history.txt
+Validation snapshot: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\start_zone.validation-snapshot-20260426_183453_034818.txt
+Shipping baseline: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\start_zone.shipping-baseline.txt
+Shipping baseline updated: no
+Objects: 2
+Semantic objects: 2
+Layers: 1
+Prefab-derived objects: 2
+Broken prefab references: 1
+Prefab library entries: 1
+Prefab library loaded: yes
+Message: Exported with warnings (6, auto semantic anchors: 0). Report: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\start_zone.validation.txt Audit: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\start_zone.export-history.txt
+Layer names:
+- Service
+Broken prefab reference objects:
+- [%relay_usage_0002] :: prefabSourceId=prefab_missing_service
+Issues:
+- [Warning] missing_authored_dependency :: [%relay_usage_0001] :: scriptTag=relay_substation :: related=capacitor_bank
+  scriptTag 'relay_substation' is authored without required anchor 'capacitor_bank' in this world.
+- [Warning] missing_authored_dependency :: [%relay_usage_0001] :: scriptTag=relay_substation :: related=reactor_yard
+  scriptTag 'relay_substation' is authored without required anchor 'reactor_yard' in this world.
+- [Warning] missing_authored_dependency :: [%relay_usage_0001] :: scriptTag=relay_substation :: related=industrial_outpost
+  scriptTag 'relay_substation' is authored without required anchor 'industrial_outpost' in this world.
+- [Warning] missing_authored_dependency :: [%relay_usage_0002] :: scriptTag=relay_substation :: related=capacitor_bank
+  scriptTag 'relay_substation' is authored without required anchor 'capacitor_bank' in this world.
+- [Warning] missing_authored_dependency :: [%relay_usage_0002] :: scriptTag=relay_substation :: related=reactor_yard
+  scriptTag 'relay_substation' is authored without required anchor 'reactor_yard' in this world.
+- [Warning] missing_authored_dependency :: [%relay_usage_0002] :: scriptTag=relay_substation :: related=industrial_outpost
+  scriptTag 'relay_substation' is authored without required anchor 'industrial_outpost' in this world.

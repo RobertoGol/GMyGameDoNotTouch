@@ -1,0 +1,26 @@
+World Validation Report
+Generated: 2026-04-26 18:34:53
+Target: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_baseline_diff_smoke.bwld
+Format: BWL5
+Policy: shipping-safe
+Decision: exported
+Summary: World validation passed: no issues found.
+Errors: 0
+Warnings: 0
+Auto-created semantic anchors: 0
+Audit trail: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_baseline_diff_smoke.export-history.txt
+Validation snapshot: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_baseline_diff_smoke.validation-snapshot-20260426_183453_212324.txt
+Shipping baseline: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_baseline_diff_smoke.shipping-baseline.txt
+Shipping baseline updated: yes
+Objects: 8
+Semantic objects: 8
+Layers: 2
+Prefab-derived objects: 0
+Broken prefab references: 0
+Prefab library entries: 1
+Prefab library loaded: yes
+Message: Exported world. Report: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_baseline_diff_smoke.validation.txt Audit: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_baseline_diff_smoke.export-history.txt Snapshot: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_baseline_diff_smoke.validation-snapshot-20260426_183453_212324.txt Baseline: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_baseline_diff_smoke.shipping-baseline.txt
+Layer names:
+- Service
+- Industrial
+Issues: none

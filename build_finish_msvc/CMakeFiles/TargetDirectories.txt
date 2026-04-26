@@ -1,0 +1,12 @@
+D:/Projects/Game_Project/build_finish_msvc/CMakeFiles/BunkerGame.dir
+D:/Projects/Game_Project/build_finish_msvc/CMakeFiles/BunkerLauncher.dir
+D:/Projects/Game_Project/build_finish_msvc/CMakeFiles/BunkerEditor.dir
+D:/Projects/Game_Project/build_finish_msvc/CMakeFiles/BunkerSmokeChecks.dir
+D:/Projects/Game_Project/build_finish_msvc/CMakeFiles/RUN_TESTS.dir
+D:/Projects/Game_Project/build_finish_msvc/CMakeFiles/ALL_BUILD.dir
+D:/Projects/Game_Project/build_finish_msvc/CMakeFiles/ZERO_CHECK.dir
+D:/Projects/Game_Project/build_finish_msvc/external/glfw/CMakeFiles/RUN_TESTS.dir
+D:/Projects/Game_Project/build_finish_msvc/external/glfw/CMakeFiles/ALL_BUILD.dir
+D:/Projects/Game_Project/build_finish_msvc/external/glfw/src/CMakeFiles/glfw.dir
+D:/Projects/Game_Project/build_finish_msvc/external/glfw/src/CMakeFiles/update_mappings.dir
+D:/Projects/Game_Project/build_finish_msvc/external/glfw/src/CMakeFiles/RUN_TESTS.dir

@@ -1,0 +1,26 @@
+=== 2026-04-26 18:34:53 ===
+Target: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.bwld
+Policy: shipping-safe
+Decision: blocked by policy
+Errors: 0
+Warnings: 7
+Auto-created semantic anchors: 7
+Report: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.validation.txt
+Snapshot: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.validation-snapshot-20260426_183453_062616.txt
+Baseline: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.shipping-baseline.txt
+Baseline updated: no
+Message: Export blocked by policy: auto-created semantic anchors still present: 7. Report: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.validation.txt Audit: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.export-history.txt
+
+=== 2026-04-26 18:34:53 ===
+Target: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.bwld
+Policy: shipping-safe
+Decision: exported
+Errors: 0
+Warnings: 0
+Auto-created semantic anchors: 0
+Report: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.validation.txt
+Snapshot: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.validation-snapshot-20260426_183453_068933.txt
+Baseline: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.shipping-baseline.txt
+Baseline updated: yes
+Message: Exported world. Report: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.validation.txt Audit: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.export-history.txt Snapshot: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.validation-snapshot-20260426_183453_068933.txt Baseline: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\shipping_export_smoke.shipping-baseline.txt
+

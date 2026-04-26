@@ -1,0 +1,13 @@
+=== 2026-04-26 18:34:53 ===
+Target: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\prototype_export_smoke.bwld
+Policy: prototype / allow warnings
+Decision: exported
+Errors: 0
+Warnings: 7
+Auto-created semantic anchors: 7
+Report: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\prototype_export_smoke.validation.txt
+Snapshot: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\prototype_export_smoke.validation-snapshot-20260426_183453_054844.txt
+Baseline: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\prototype_export_smoke.shipping-baseline.txt
+Baseline updated: no
+Message: Exported with warnings (7, auto semantic anchors: 7). Report: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\prototype_export_smoke.validation.txt Audit: D:\Projects\Game_Project\build_finish_msvc\.bunker_smoke_checks\world\prototype_export_smoke.export-history.txt
+

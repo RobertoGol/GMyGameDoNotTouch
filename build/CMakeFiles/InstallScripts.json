@@ -1,0 +1,9 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/Projects/Game_Project/build/cmake_install.cmake",
+		"D:/Projects/Game_Project/build/external/glfw/cmake_install.cmake",
+		"D:/Projects/Game_Project/build/external/glfw/src/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
