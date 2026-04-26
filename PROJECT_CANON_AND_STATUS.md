@@ -191,16 +191,32 @@ Editor не является player-facing world editor.
   - без admin/debug/internal state.
 
 `BunkerEditor` target:
-- `Creation Kit`-style authoring tool;
+- не `2D`-only editor;
+- `Creation Kit`-style `3D` authored-world editor;
 - independent floating/movable windows;
 - multi-monitor use;
 - не single rigid dashboard.
+- canonical tool windows:
+  - `3D Render Window / viewport`;
+  - `Object Window`;
+  - `Cell View`;
+  - `Reference / Inspector`;
+  - `Layers`;
+  - `Warnings / Validation`;
+  - `Log / Export`;
+  - `Main toolbar/menu`.
 
 `BunkerGame` presentation:
-- текущий grid / tactical / runtime view принят как debug gameplay shell и tactical prototype view;
-- финальный player-facing runtime должен быть immersive, а не detached debug grid UI.
+- игра не intended as `2D`;
+- текущий grid / tactical / runtime view - temporary debug/prototype shell;
+- финальный `BunkerGame` target - `3D` immersive runtime;
+- broad presentation category ближе к `Fallout 3 / New Vegas / 4 / 76`;
+- при этом сохранять original bunker-survival identity.
 
 `Pip-Pad` direction:
+- `Pip-Pad` diegetic-device work - separate larger refactor/work package;
+- не фиксировать `Pip-Pad` в этом small correction patch;
+- это может потребовать broad code changes и не должно смешиваться с этим small correction patch;
 - in-world / diegetic device, а не detached debug/admin window;
 - selectable device shell/model:
   - `Pipboy 1.0`;
