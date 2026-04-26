@@ -1112,6 +1112,7 @@ int main() {
     int completionIndex = 1;
     bool showAssetPalette = true;
     bool showWorldAuthoring = true;
+    bool showCellView = true;
     bool showRenderWindow = true;
     bool showExportRuntime = true;
     bool showImportAssistant = true;
@@ -1666,6 +1667,7 @@ int main() {
             if (ImGui::BeginMenu("Windows")) {
                 ImGui::MenuItem("Asset Palette", nullptr, &showAssetPalette);
                 ImGui::MenuItem("World Authoring", nullptr, &showWorldAuthoring);
+                ImGui::MenuItem("Cell View", nullptr, &showCellView);
                 ImGui::MenuItem("Render Window / Viewport", nullptr, &showRenderWindow);
                 ImGui::MenuItem("Export / Runtime", nullptr, &showExportRuntime);
                 ImGui::MenuItem("Import Assistant", nullptr, &showImportAssistant);
@@ -1673,6 +1675,7 @@ int main() {
                 if (ImGui::MenuItem("Show All Windows")) {
                     showAssetPalette = true;
                     showWorldAuthoring = true;
+                    showCellView = true;
                     showRenderWindow = true;
                     showExportRuntime = true;
                     showImportAssistant = true;
@@ -3307,6 +3310,54 @@ int main() {
             ImGui::End();
         }
 
+        if (showCellView) {
+            setTopLevelWindowDefaults(ImVec2(1088.0f, 40.0f), ImVec2(316.0f, 250.0f));
+            ImGui::Begin("Cell View", &showCellView, ImGuiWindowFlags_NoCollapse);
+            ImGui::TextDisabled("Active authored world / temporary single-cell workspace");
+            ImGui::Separator();
+            ImGui::Text("Worldspace / Cell");
+            ImGui::BulletText("World Name: %s", editorWorld.metadata.name.c_str());
+            ImGui::BulletText("Biome: %s", editorWorld.metadata.biome.c_str());
+            ImGui::BulletText(
+                "Workspace Label: %s",
+                editorWorld.metadata.objective.empty()
+                    ? "No active workspace label"
+                    : editorWorld.metadata.objective.c_str());
+            ImGui::BulletText("Object Count: %d", static_cast<int>(editorWorld.objects.size()));
+            ImGui::Separator();
+            ImGui::Text("References");
+            ImGui::TextDisabled("Index | Reference | Category | Layer | Position");
+            ImGui::BeginChild("CellViewReferences", ImVec2(0.0f, 0.0f), true);
+            if (editorWorld.objects.empty()) {
+                ImGui::TextDisabled("No references in the active workspace.");
+            } else {
+                for (int index = 0; index < static_cast<int>(editorWorld.objects.size()); ++index) {
+                    const auto& object = editorWorld.objects[static_cast<std::size_t>(index)];
+                    const std::string resolvedLayer = bunker::NormalizeEditorLayerName(object.editorLayer).empty()
+                        ? bunker::DefaultEditorLayerName(object)
+                        : bunker::NormalizeEditorLayerName(object.editorLayer);
+                    const std::string rowSummary =
+                        "#" + std::to_string(index) +
+                        " " + object.displayName +
+                        " | " + ToLabel(object.category) +
+                        " | " + resolvedLayer +
+                        " | (" + std::to_string(object.x) + ", " + std::to_string(object.y) + ")";
+                    std::string rowLabel = rowSummary + "##cellview_" + object.registryId;
+                    const bool selected = (selectedObjectIndex == index);
+                    if (ImGui::Selectable(rowLabel.c_str(), selected)) {
+                        if (focusObjectInEditor(index, 1.45f)) {
+                            statusText = "Cell View focused selected reference.";
+                        } else {
+                            selectedObjectIndex = index;
+                            statusText = "Cell View selected reference. Viewport focus path pending.";
+                        }
+                    }
+                }
+            }
+            ImGui::EndChild();
+            ImGui::End();
+        }
+
         if (showRenderWindow) {
             setTopLevelWindowDefaults(ImVec2(352.0f, 466.0f), ImVec2(720.0f, 418.0f));
             ImGui::Begin("Render Window / Viewport", &showRenderWindow, ImGuiWindowFlags_NoCollapse);
@@ -3397,7 +3448,7 @@ int main() {
         }
 
         if (showExportRuntime) {
-            setTopLevelWindowDefaults(ImVec2(1088.0f, 40.0f), ImVec2(316.0f, 396.0f));
+            setTopLevelWindowDefaults(ImVec2(1088.0f, 306.0f), ImVec2(316.0f, 190.0f));
             ImGui::Begin("Export / Runtime", &showExportRuntime, ImGuiWindowFlags_NoCollapse);
             ImGui::Text("Export targets");
             ImGui::BulletText("World -> .bwld");
@@ -4095,7 +4146,7 @@ int main() {
         }
 
         if (showImportAssistant) {
-            setTopLevelWindowDefaults(ImVec2(1088.0f, 454.0f), ImVec2(316.0f, 430.0f));
+            setTopLevelWindowDefaults(ImVec2(1088.0f, 512.0f), ImVec2(316.0f, 372.0f));
             ImGui::Begin("Import Assistant", &showImportAssistant, ImGuiWindowFlags_NoCollapse);
             ImGui::TextWrapped("Drop or describe a concept reference here. The assistant converts it into a prefab draft and optionally seeds the current object draft, without generating a finished world.");
             ImGui::InputText("Source", conceptInput, IM_ARRAYSIZE(conceptInput));
