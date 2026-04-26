@@ -15,7 +15,9 @@
 
 ## 0.1 `v0.1-showable` validation checkpoint
 
-- рабочая ветка: `finish-v0.1-showable`;
+- canonical active branch: `master`;
+- `finish-v0.1-showable` fast-forward merged into `master`;
+- validation-tip commit: `6f94974` `editor: make workspace windows movable`;
 - human-run build command:
   `cmake --build build_finish_msvc --config Debug`
 - human-run smoke command:
@@ -236,6 +238,34 @@ Editor не является player-facing world editor.
   - diegetic-device inspiration.
 - не копировать proprietary visuals, assets, logos, exact UI art или branding;
 - сохранять original bunker-survival identity.
+
+### Current presentation status after workspace shell step
+- canonical active branch is now `master`;
+- `editor: make workspace windows movable` - только first `BunkerEditor` workspace-shell step;
+- это не завершает `Creation Kit` parity;
+- `BunkerEditor` не finished; target остается `Creation Kit`-style `3D` authored-world editor;
+- current `WorldPreviewCanvas` остается temporary `2D` placeholder, а не real `3D Render Window / viewport`;
+- future `Editor` work делать small safe milestones, а не one giant rewrite:
+  - explicit `Render Window / viewport` window;
+  - real `3D` viewport prototype;
+  - `Object Window` separation;
+  - `Cell View` separation;
+  - `Reference / Inspector` separation;
+  - `Warnings / Validation` separation;
+  - `Log / Export` separation;
+  - persistent workspace layout;
+  - multi-monitor friendly defaults.
+- `BunkerGame` не finished и не `3D` yet;
+- текущий grid / tactical / runtime view остается temporary debug/prototype shell;
+- final `BunkerGame` target остается `3D` immersive runtime;
+- future `Game` work делать small safe milestones, а не one giant rewrite:
+  - `3D` renderer/runtime prototype;
+  - player camera/controller;
+  - `3D` authored-world loading path;
+  - collision/navigation baseline;
+  - interaction raycast/use system;
+  - `3D` presentation bridge for existing story/world/runtime state.
+- не помечать `BunkerEditor` или `BunkerGame` as finished, пока эти milestone layers не реализованы и не validated.
 
 ### Lanline / service boundary
 `Lanline`, `Lanline Services` и `Fey Ring` - это не полноценный MMO/backend слой.
