@@ -1,11 +1,13 @@
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
 #include <cctype>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -1083,6 +1085,1052 @@ using editor_support::ToIndex;
 using editor_support::ToLabel;
 using editor_support::TryExportValidatedWorld;
 
+struct ViewportPreviewVec3 {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+
+struct ViewportPreviewCamera {
+    ViewportPreviewVec3 position{};
+    ViewportPreviewVec3 forward{};
+    ViewportPreviewVec3 right{};
+    ViewportPreviewVec3 up{};
+    float aspect = 1.0f;
+    float tanHalfFov = 1.0f;
+    float distance = 24.0f;
+};
+
+struct ViewportPreviewProjectedPoint {
+    ImVec2 screen{};
+    float depth = 0.0f;
+    bool visible = false;
+};
+
+struct ViewportPreviewObjectVisual {
+    int index = -1;
+    bool selected = false;
+    bool layerLocked = false;
+    bool semanticOverlayObject = false;
+    bool semanticOverlayRoot = false;
+    ImU32 color = 0;
+    ImVec2 boundsMin{};
+    ImVec2 boundsMax{};
+    ImVec2 topCenter{};
+    float averageDepth = 0.0f;
+    std::array<ViewportPreviewProjectedPoint, 8> corners{};
+};
+
+struct ViewportPreviewOrbitState {
+    bool initialized = false;
+    float targetWorldX = 0.0f;
+    float targetWorldY = 0.0f;
+};
+
+struct ViewportPreviewCameraDragState {
+    bool active = false;
+};
+
+enum class ViewportPreviewTool {
+    None,
+    MovePreview,
+    RotatePreview
+};
+
+enum class ViewportPreviewOrientation {
+    Global,
+    Local,
+    View,
+    Grid,
+    Floor
+};
+
+enum class ViewportPreviewAxis {
+    None,
+    X,
+    Y,
+    Z
+};
+
+struct ViewportPreviewToolState {
+    ViewportPreviewTool activeTool = ViewportPreviewTool::None;
+    ViewportPreviewOrientation orientation = ViewportPreviewOrientation::Global;
+    ViewportPreviewAxis activeAxis = ViewportPreviewAxis::None;
+    float objectOrientationPreviewDegrees = 0.0f;
+    double orientationPreviewExpiresAt = 0.0;
+};
+
+struct ViewportPreviewTransientState {
+    std::string overlayMessage;
+    double overlayMessageExpiresAt = 0.0;
+    int moveGizmoObjectIndex = -1;
+    int rotationGizmoObjectIndex = -1;
+    int orientationPreviewObjectIndex = -1;
+    bool moveGizmoStatusRequested = false;
+    bool rotationGizmoStatusRequested = false;
+    bool orientationPreviewStatusRequested = false;
+};
+
+constexpr float kViewportPreviewPi = 3.1415926535f;
+constexpr float kViewportPreviewBaseHeight = 1.15f;
+
+ViewportPreviewOrbitState gViewportPreviewOrbitState{};
+ViewportPreviewCameraDragState gViewportPreviewCameraDragState{};
+ViewportPreviewToolState gViewportPreviewToolState{};
+ViewportPreviewTransientState gViewportPreviewTransientState{};
+
+void ViewportPreviewShowOverlayMessage(const char* message, double durationSeconds = 2.75) {
+    gViewportPreviewTransientState.overlayMessage = message;
+    gViewportPreviewTransientState.overlayMessageExpiresAt = ImGui::GetTime() + durationSeconds;
+}
+
+const char* ViewportPreviewOrientationName(ViewportPreviewOrientation orientation) {
+    switch (orientation) {
+        case ViewportPreviewOrientation::Global: return "Global";
+        case ViewportPreviewOrientation::Local: return "Local";
+        case ViewportPreviewOrientation::View: return "View";
+        case ViewportPreviewOrientation::Grid: return "Grid";
+        case ViewportPreviewOrientation::Floor: return "Floor";
+    }
+    return "Global";
+}
+
+ViewportPreviewOrientation ViewportPreviewCycleOrientation(ViewportPreviewOrientation orientation, int direction) {
+    int index = 0;
+    switch (orientation) {
+        case ViewportPreviewOrientation::Global: index = 0; break;
+        case ViewportPreviewOrientation::Local: index = 1; break;
+        case ViewportPreviewOrientation::View: index = 2; break;
+        case ViewportPreviewOrientation::Grid: index = 3; break;
+        case ViewportPreviewOrientation::Floor: index = 4; break;
+    }
+    index = (index + direction + 5) % 5;
+    switch (index) {
+        case 1: return ViewportPreviewOrientation::Local;
+        case 2: return ViewportPreviewOrientation::View;
+        case 3: return ViewportPreviewOrientation::Grid;
+        case 4: return ViewportPreviewOrientation::Floor;
+        default: return ViewportPreviewOrientation::Global;
+    }
+}
+
+float ViewportPreviewRadians(float degrees) {
+    return degrees * (kViewportPreviewPi / 180.0f);
+}
+
+ViewportPreviewVec3 operator+(const ViewportPreviewVec3& lhs, const ViewportPreviewVec3& rhs) {
+    return {lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z};
+}
+
+ViewportPreviewVec3 operator-(const ViewportPreviewVec3& lhs, const ViewportPreviewVec3& rhs) {
+    return {lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
+}
+
+ViewportPreviewVec3 operator*(const ViewportPreviewVec3& value, float scalar) {
+    return {value.x * scalar, value.y * scalar, value.z * scalar};
+}
+
+float ViewportPreviewDot(const ViewportPreviewVec3& lhs, const ViewportPreviewVec3& rhs) {
+    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
+}
+
+ViewportPreviewVec3 ViewportPreviewCross(const ViewportPreviewVec3& lhs, const ViewportPreviewVec3& rhs) {
+    return {
+        lhs.y * rhs.z - lhs.z * rhs.y,
+        lhs.z * rhs.x - lhs.x * rhs.z,
+        lhs.x * rhs.y - lhs.y * rhs.x
+    };
+}
+
+float ViewportPreviewLength(const ViewportPreviewVec3& value) {
+    return std::sqrt(ViewportPreviewDot(value, value));
+}
+
+ViewportPreviewVec3 ViewportPreviewNormalize(const ViewportPreviewVec3& value) {
+    const float length = ViewportPreviewLength(value);
+    if (length <= 0.0001f) {
+        return {};
+    }
+    return value * (1.0f / length);
+}
+
+ImU32 ViewportPreviewColorForCategory(bunker::ObjectCategory category) {
+    switch (category) {
+        case bunker::ObjectCategory::Structure: return IM_COL32(110, 120, 140, 255);
+        case bunker::ObjectCategory::ResourceNode: return IM_COL32(180, 140, 60, 255);
+        case bunker::ObjectCategory::Terminal: return IM_COL32(40, 170, 210, 255);
+        case bunker::ObjectCategory::Vehicle: return IM_COL32(170, 170, 80, 255);
+        case bunker::ObjectCategory::Landmark: return IM_COL32(80, 180, 110, 255);
+        case bunker::ObjectCategory::Container: return IM_COL32(170, 80, 60, 255);
+        case bunker::ObjectCategory::Hangar: return IM_COL32(150, 120, 70, 255);
+        case bunker::ObjectCategory::Hostile: return IM_COL32(200, 60, 60, 255);
+    }
+    return IM_COL32(150, 150, 150, 255);
+}
+
+const char* ViewportPreviewInteractionMarker(bunker::InteractionType interaction) {
+    switch (interaction) {
+        case bunker::InteractionType::Static: return "S";
+        case bunker::InteractionType::Container: return "C";
+        case bunker::InteractionType::Resource: return "R";
+        case bunker::InteractionType::Terminal: return "T";
+        case bunker::InteractionType::Transition: return "X";
+        case bunker::InteractionType::VehicleAnchor: return "V";
+        case bunker::InteractionType::Workshop: return "W";
+        case bunker::InteractionType::Hostile: return "H";
+    }
+    return "?";
+}
+
+ImU32 ViewportPreviewInteractionMarkerColor(bunker::InteractionType interaction) {
+    switch (interaction) {
+        case bunker::InteractionType::Static: return IM_COL32(190, 190, 190, 220);
+        case bunker::InteractionType::Container: return IM_COL32(214, 120, 90, 235);
+        case bunker::InteractionType::Resource: return IM_COL32(212, 178, 90, 235);
+        case bunker::InteractionType::Terminal: return IM_COL32(80, 210, 230, 235);
+        case bunker::InteractionType::Transition: return IM_COL32(110, 220, 140, 235);
+        case bunker::InteractionType::VehicleAnchor: return IM_COL32(220, 210, 90, 235);
+        case bunker::InteractionType::Workshop: return IM_COL32(255, 170, 70, 235);
+        case bunker::InteractionType::Hostile: return IM_COL32(230, 80, 80, 235);
+    }
+    return IM_COL32(220, 220, 220, 220);
+}
+
+bool ViewportPreviewContainsSemanticObject(const PreviewViewportState& viewportState, int objectIndex) {
+    return std::find(
+               viewportState.semanticObjectIndices.begin(),
+               viewportState.semanticObjectIndices.end(),
+               objectIndex) != viewportState.semanticObjectIndices.end();
+}
+
+float ViewportPreviewClampZoom(float zoom) {
+    return std::clamp(zoom, 0.35f, 3.5f);
+}
+
+float ViewportPreviewClampPitch(float pitch) {
+    return std::clamp(pitch, ViewportPreviewRadians(18.0f), ViewportPreviewRadians(78.0f));
+}
+
+float ViewportPreviewDistanceFromZoom(float zoom) {
+    return std::clamp(32.0f / ViewportPreviewClampZoom(zoom), 9.0f, 90.0f);
+}
+
+float ViewportPreviewGridStep(float baseStep, float cameraDistance) {
+    float step = std::max(0.5f, baseStep);
+    while (step * 18.0f < cameraDistance) {
+        step *= 2.0f;
+    }
+    while (step > baseStep && step * 7.0f > cameraDistance) {
+        step *= 0.5f;
+    }
+    return step;
+}
+
+ImU32 ViewportPreviewWithAlpha(ImU32 color, int alpha) {
+    return (color & ~IM_COL32_A_MASK) | (static_cast<ImU32>(alpha) << IM_COL32_A_SHIFT);
+}
+
+void EnsureViewportPreviewDefaults(PreviewViewportState& viewportState,
+                                   ViewportPreviewOrbitState& orbitState,
+                                   float worldCenterX,
+                                   float worldCenterY) {
+    const bool looksReset =
+        viewportState.zoom == 1.0f &&
+        viewportState.offsetX == 0.0f &&
+        viewportState.offsetY == 0.0f &&
+        !viewportState.hasFocusRequest &&
+        viewportState.focusWorldX == 0.0f &&
+        viewportState.focusWorldY == 0.0f;
+    if (!looksReset && orbitState.initialized) {
+        return;
+    }
+
+    viewportState.offsetX = ViewportPreviewRadians(-38.0f);
+    viewportState.offsetY = ViewportPreviewRadians(34.0f);
+    viewportState.zoom = 1.0f;
+    orbitState.targetWorldX = worldCenterX;
+    orbitState.targetWorldY = worldCenterY;
+    orbitState.initialized = true;
+}
+
+ViewportPreviewCamera BuildViewportPreviewCamera(const PreviewViewportState& viewportState,
+                                                 const ViewportPreviewOrbitState& orbitState,
+                                                 const ImVec2& size) {
+    const ViewportPreviewVec3 target{
+        orbitState.targetWorldX,
+        kViewportPreviewBaseHeight,
+        orbitState.targetWorldY
+    };
+    const float distance = ViewportPreviewDistanceFromZoom(viewportState.zoom);
+    const float horizontalDistance = std::cos(viewportState.offsetY) * distance;
+    ViewportPreviewCamera camera{};
+    camera.distance = distance;
+    camera.position = {
+        target.x + std::cos(viewportState.offsetX) * horizontalDistance,
+        target.y + std::sin(viewportState.offsetY) * distance,
+        target.z + std::sin(viewportState.offsetX) * horizontalDistance
+    };
+    camera.forward = ViewportPreviewNormalize(target - camera.position);
+    camera.right = ViewportPreviewNormalize(ViewportPreviewCross(camera.forward, ViewportPreviewVec3{0.0f, 1.0f, 0.0f}));
+    if (ViewportPreviewLength(camera.right) <= 0.0001f) {
+        camera.right = {1.0f, 0.0f, 0.0f};
+    }
+    camera.up = ViewportPreviewNormalize(ViewportPreviewCross(camera.right, camera.forward));
+    camera.aspect = std::max(0.65f, size.x / std::max(1.0f, size.y));
+    camera.tanHalfFov = std::tan(ViewportPreviewRadians(27.5f));
+    return camera;
+}
+
+bool ProjectViewportPreviewPoint(const ViewportPreviewCamera& camera,
+                                 const ImVec2& origin,
+                                 const ImVec2& size,
+                                 const ViewportPreviewVec3& point,
+                                 ImVec2& screenPoint,
+                                 float& depth) {
+    const ViewportPreviewVec3 relative = point - camera.position;
+    const float cameraX = ViewportPreviewDot(relative, camera.right);
+    const float cameraY = ViewportPreviewDot(relative, camera.up);
+    const float cameraZ = ViewportPreviewDot(relative, camera.forward);
+    if (cameraZ <= 0.08f) {
+        return false;
+    }
+
+    const float ndcX = cameraX / (cameraZ * camera.tanHalfFov * camera.aspect);
+    const float ndcY = cameraY / (cameraZ * camera.tanHalfFov);
+    screenPoint = ImVec2(
+        origin.x + (0.5f + ndcX * 0.5f) * size.x,
+        origin.y + (0.5f - ndcY * 0.5f) * size.y);
+    depth = cameraZ;
+    return true;
+}
+
+bool ViewportPreviewRaycastGround(const ViewportPreviewCamera& camera,
+                                  const ImVec2& origin,
+                                  const ImVec2& size,
+                                  const ImVec2& mousePos,
+                                  float& worldX,
+                                  float& worldY) {
+    if (mousePos.x < origin.x || mousePos.x > origin.x + size.x ||
+        mousePos.y < origin.y || mousePos.y > origin.y + size.y) {
+        return false;
+    }
+
+    const float ndcX = ((mousePos.x - origin.x) / std::max(1.0f, size.x)) * 2.0f - 1.0f;
+    const float ndcY = 1.0f - (((mousePos.y - origin.y) / std::max(1.0f, size.y)) * 2.0f);
+    const ViewportPreviewVec3 cameraRay = ViewportPreviewNormalize({
+        ndcX * camera.aspect * camera.tanHalfFov,
+        ndcY * camera.tanHalfFov,
+        1.0f
+    });
+    const ViewportPreviewVec3 worldRay = ViewportPreviewNormalize(
+        camera.right * cameraRay.x +
+        camera.up * cameraRay.y +
+        camera.forward * cameraRay.z);
+    if (std::abs(worldRay.y) <= 0.0001f) {
+        return false;
+    }
+
+    const float distance = -camera.position.y / worldRay.y;
+    if (distance <= 0.0f) {
+        return false;
+    }
+
+    const ViewportPreviewVec3 hitPoint = camera.position + worldRay * distance;
+    worldX = hitPoint.x;
+    worldY = hitPoint.z;
+    return true;
+}
+
+PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
+                                      int selectedObjectIndex,
+                                      bool previewAsPlayer,
+                                      PreviewViewportState& viewportState,
+                                      const std::vector<EditorLayerViewState>& layerStates,
+                                      const PreviewRenderOptions& options) {
+    PreviewInteraction interactionResult;
+    if (!gViewportPreviewTransientState.overlayMessage.empty() &&
+        ImGui::GetTime() > gViewportPreviewTransientState.overlayMessageExpiresAt) {
+        gViewportPreviewTransientState.overlayMessage.clear();
+        gViewportPreviewTransientState.overlayMessageExpiresAt = 0.0;
+    }
+    gViewportPreviewTransientState.moveGizmoObjectIndex = -1;
+    gViewportPreviewTransientState.rotationGizmoObjectIndex = -1;
+    gViewportPreviewTransientState.orientationPreviewObjectIndex = -1;
+    gViewportPreviewTransientState.moveGizmoStatusRequested = false;
+    gViewportPreviewTransientState.rotationGizmoStatusRequested = false;
+    gViewportPreviewTransientState.orientationPreviewStatusRequested = false;
+    ImGui::Text("3D World Preview");
+    ImGui::TextDisabled(previewAsPlayer ? "Perspective shell: player readability preview" : "Perspective shell: editor overview");
+
+    const float controlsReserve = ImGui::GetFrameHeightWithSpacing() + 10.0f;
+    const ImVec2 availableBeforeCanvas = ImGui::GetContentRegionAvail();
+    const float canvasHeight = std::max(240.0f, availableBeforeCanvas.y - controlsReserve);
+    ImGui::BeginChild("WorldPreviewCanvas3D", ImVec2(0.0f, canvasHeight), true);
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    const ImVec2 size = ImGui::GetContentRegionAvail();
+    ImGui::InvisibleButton(
+        "WorldPreviewCanvas3DInput",
+        size,
+        ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle | ImGuiButtonFlags_MouseButtonRight);
+    const bool canvasHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+    const bool canvasActive = ImGui::IsItemActive();
+    const bool canvasContainsMouse = ImGui::IsMouseHoveringRect(
+        origin,
+        ImVec2(origin.x + size.x, origin.y + size.y),
+        true);
+    const bool canvasInput = canvasHovered || canvasActive || canvasContainsMouse;
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    drawList->AddRectFilledMultiColor(
+        origin,
+        ImVec2(origin.x + size.x, origin.y + size.y),
+        IM_COL32(24, 31, 39, 255),
+        IM_COL32(24, 31, 39, 255),
+        IM_COL32(11, 14, 18, 255),
+        IM_COL32(11, 14, 18, 255));
+    drawList->AddRect(origin, ImVec2(origin.x + size.x, origin.y + size.y), IM_COL32(72, 92, 108, 255));
+
+    float minX = world.metadata.playerSpawnX;
+    float maxX = world.metadata.playerSpawnX;
+    float minY = world.metadata.playerSpawnY;
+    float maxY = world.metadata.playerSpawnY;
+    bool hasVisibleObjects = false;
+    for (const auto& object : world.objects) {
+        if (!IsObjectVisibleInEditorLayerView(object, layerStates)) {
+            continue;
+        }
+        hasVisibleObjects = true;
+        minX = std::min(minX, object.x - object.width);
+        maxX = std::max(maxX, object.x + object.width);
+        minY = std::min(minY, object.y - object.depth);
+        maxY = std::max(maxY, object.y + object.depth);
+    }
+    if (!hasVisibleObjects) {
+        minX -= 6.0f;
+        maxX += 6.0f;
+        minY -= 6.0f;
+        maxY += 6.0f;
+    }
+
+    const float worldCenterX = (minX + maxX) * 0.5f;
+    const float worldCenterY = (minY + maxY) * 0.5f;
+    EnsureViewportPreviewDefaults(viewportState, gViewportPreviewOrbitState, worldCenterX, worldCenterY);
+    if (viewportState.hasFocusRequest) {
+        gViewportPreviewOrbitState.targetWorldX = viewportState.focusWorldX;
+        gViewportPreviewOrbitState.targetWorldY = viewportState.focusWorldY;
+        viewportState.zoom = ViewportPreviewClampZoom(viewportState.focusZoom);
+        viewportState.hasFocusRequest = false;
+    }
+    viewportState.zoom = ViewportPreviewClampZoom(viewportState.zoom);
+    viewportState.offsetY = ViewportPreviewClampPitch(viewportState.offsetY);
+
+    ViewportPreviewCamera camera = BuildViewportPreviewCamera(viewportState, gViewportPreviewOrbitState, size);
+    ImGuiIO& io = ImGui::GetIO();
+    const ImVec2 mousePos = io.MousePos;
+    const bool shift = io.KeyShift;
+    const bool leftClicked = canvasInput && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+    const bool leftDown = canvasInput && ImGui::IsMouseDown(ImGuiMouseButton_Left);
+    const bool middleClicked = canvasInput && ImGui::IsMouseClicked(ImGuiMouseButton_Middle);
+    const bool middleDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
+    const bool rightClicked = canvasInput && ImGui::IsMouseClicked(ImGuiMouseButton_Right);
+    const bool rightDown = canvasInput && ImGui::IsMouseDown(ImGuiMouseButton_Right);
+    (void)leftDown;
+    (void)rightClicked;
+    (void)rightDown;
+
+    if (middleClicked) {
+        gViewportPreviewCameraDragState.active = true;
+    }
+    if (gViewportPreviewCameraDragState.active && !middleDown) {
+        gViewportPreviewCameraDragState.active = false;
+    }
+    if (canvasInput && io.MouseWheel != 0.0f) {
+        viewportState.zoom = ViewportPreviewClampZoom(viewportState.zoom + io.MouseWheel * 0.12f);
+    }
+
+    const bool hasSelectedObject =
+        selectedObjectIndex >= 0 &&
+        selectedObjectIndex < static_cast<int>(world.objects.size());
+    if (hasSelectedObject && gViewportPreviewToolState.activeTool == ViewportPreviewTool::MovePreview) {
+        gViewportPreviewTransientState.moveGizmoObjectIndex = selectedObjectIndex;
+        gViewportPreviewTransientState.moveGizmoStatusRequested = true;
+    }
+    if (hasSelectedObject && gViewportPreviewToolState.activeTool == ViewportPreviewTool::RotatePreview) {
+        gViewportPreviewTransientState.rotationGizmoObjectIndex = selectedObjectIndex;
+        gViewportPreviewTransientState.rotationGizmoStatusRequested = true;
+    }
+    if (hasSelectedObject && ImGui::GetTime() < gViewportPreviewToolState.orientationPreviewExpiresAt) {
+        gViewportPreviewTransientState.orientationPreviewObjectIndex = selectedObjectIndex;
+        gViewportPreviewTransientState.orientationPreviewStatusRequested = true;
+    }
+    if (gViewportPreviewCameraDragState.active && middleDown) {
+        const ImVec2 drag = io.MouseDelta;
+        if (shift) {
+            const ViewportPreviewVec3 forwardGround = ViewportPreviewNormalize({camera.forward.x, 0.0f, camera.forward.z});
+            const ViewportPreviewVec3 rightGround = ViewportPreviewNormalize({camera.right.x, 0.0f, camera.right.z});
+            const float panScale = camera.distance * 0.012f;
+            gViewportPreviewOrbitState.targetWorldX -= rightGround.x * drag.x * panScale;
+            gViewportPreviewOrbitState.targetWorldY -= rightGround.z * drag.x * panScale;
+            gViewportPreviewOrbitState.targetWorldX += forwardGround.x * drag.y * panScale;
+            gViewportPreviewOrbitState.targetWorldY += forwardGround.z * drag.y * panScale;
+        } else {
+            viewportState.offsetX -= drag.x * 0.0105f;
+            viewportState.offsetY = ViewportPreviewClampPitch(viewportState.offsetY - drag.y * 0.008f);
+        }
+    }
+
+    camera = BuildViewportPreviewCamera(viewportState, gViewportPreviewOrbitState, size);
+
+    auto drawLine3D = [&](const ViewportPreviewVec3& start,
+                          const ViewportPreviewVec3& end,
+                          ImU32 color,
+                          float thickness) {
+        ImVec2 startScreen{};
+        ImVec2 endScreen{};
+        float startDepth = 0.0f;
+        float endDepth = 0.0f;
+        if (!ProjectViewportPreviewPoint(camera, origin, size, start, startScreen, startDepth) ||
+            !ProjectViewportPreviewPoint(camera, origin, size, end, endScreen, endDepth)) {
+            return;
+        }
+        drawList->AddLine(startScreen, endScreen, color, thickness);
+    };
+
+    auto projectGroundCircle = [&](float centerX,
+                                   float centerY,
+                                   float radius,
+                                   ImU32 color,
+                                   float thickness) {
+        constexpr int kSegments = 36;
+        std::array<ImVec2, kSegments> points{};
+        int pointCount = 0;
+        for (int segment = 0; segment < kSegments; ++segment) {
+            const float angle = (static_cast<float>(segment) / static_cast<float>(kSegments)) * (kViewportPreviewPi * 2.0f);
+            ImVec2 projectedPoint{};
+            float depth = 0.0f;
+            if (!ProjectViewportPreviewPoint(
+                    camera,
+                    origin,
+                    size,
+                    ViewportPreviewVec3{centerX + std::cos(angle) * radius, 0.02f, centerY + std::sin(angle) * radius},
+                    projectedPoint,
+                    depth)) {
+                return;
+            }
+            points[static_cast<std::size_t>(pointCount++)] = projectedPoint;
+        }
+        drawList->AddPolyline(points.data(), pointCount, color, ImDrawFlags_Closed, thickness);
+    };
+
+    auto drawRotationRing3D = [&](const ViewportPreviewVec3& center,
+                                  float radius,
+                                  int plane,
+                                  ImU32 color,
+                                  float thickness) {
+        constexpr int kSegments = 48;
+        std::array<ImVec2, kSegments> points{};
+        int pointCount = 0;
+        for (int segment = 0; segment < kSegments; ++segment) {
+            const float angle = (static_cast<float>(segment) / static_cast<float>(kSegments)) * (kViewportPreviewPi * 2.0f);
+            ViewportPreviewVec3 point = center;
+            if (plane == 0) {
+                point.y += std::cos(angle) * radius;
+                point.z += std::sin(angle) * radius;
+            } else if (plane == 1) {
+                point.x += std::cos(angle) * radius;
+                point.z += std::sin(angle) * radius;
+            } else {
+                point.x += std::cos(angle) * radius;
+                point.y += std::sin(angle) * radius;
+            }
+            ImVec2 projectedPoint{};
+            float depth = 0.0f;
+            if (!ProjectViewportPreviewPoint(camera, origin, size, point, projectedPoint, depth)) {
+                return;
+            }
+            points[static_cast<std::size_t>(pointCount++)] = projectedPoint;
+        }
+        drawList->AddPolyline(points.data(), pointCount, color, ImDrawFlags_Closed, thickness);
+    };
+
+    if (options.showGrid) {
+        float gridStep = ViewportPreviewGridStep(options.gridStep, camera.distance);
+        float gridRadius = std::clamp(camera.distance * 1.9f, 16.0f, 180.0f);
+        int minGridX = static_cast<int>(std::floor((gViewportPreviewOrbitState.targetWorldX - gridRadius) / gridStep));
+        int maxGridX = static_cast<int>(std::ceil((gViewportPreviewOrbitState.targetWorldX + gridRadius) / gridStep));
+        int minGridY = static_cast<int>(std::floor((gViewportPreviewOrbitState.targetWorldY - gridRadius) / gridStep));
+        int maxGridY = static_cast<int>(std::ceil((gViewportPreviewOrbitState.targetWorldY + gridRadius) / gridStep));
+        while ((maxGridX - minGridX > 72) || (maxGridY - minGridY > 72)) {
+            gridStep *= 2.0f;
+            minGridX = static_cast<int>(std::floor((gViewportPreviewOrbitState.targetWorldX - gridRadius) / gridStep));
+            maxGridX = static_cast<int>(std::ceil((gViewportPreviewOrbitState.targetWorldX + gridRadius) / gridStep));
+            minGridY = static_cast<int>(std::floor((gViewportPreviewOrbitState.targetWorldY - gridRadius) / gridStep));
+            maxGridY = static_cast<int>(std::ceil((gViewportPreviewOrbitState.targetWorldY + gridRadius) / gridStep));
+        }
+
+        std::array<ImVec2, 4> floorPoints{};
+        bool floorVisible = true;
+        for (int pointIndex = 0; pointIndex < 4; ++pointIndex) {
+            const float pointX = (pointIndex == 0 || pointIndex == 3)
+                                     ? gViewportPreviewOrbitState.targetWorldX - gridRadius
+                                     : gViewportPreviewOrbitState.targetWorldX + gridRadius;
+            const float pointY = (pointIndex == 0 || pointIndex == 1)
+                                     ? gViewportPreviewOrbitState.targetWorldY - gridRadius
+                                     : gViewportPreviewOrbitState.targetWorldY + gridRadius;
+            float depth = 0.0f;
+            floorVisible = floorVisible &&
+                ProjectViewportPreviewPoint(
+                    camera,
+                    origin,
+                    size,
+                    {pointX, 0.0f, pointY},
+                    floorPoints[pointIndex],
+                    depth);
+        }
+        if (floorVisible) {
+            drawList->AddConvexPolyFilled(floorPoints.data(), 4, IM_COL32(20, 28, 36, 124));
+        }
+
+        for (int gridX = minGridX; gridX <= maxGridX; ++gridX) {
+            const float worldGridX = static_cast<float>(gridX) * gridStep;
+            const bool isMajor = (gridX % 4) == 0;
+            const bool isAxis = std::abs(worldGridX) <= 0.001f;
+            drawLine3D(
+                {worldGridX, 0.0f, gViewportPreviewOrbitState.targetWorldY - gridRadius},
+                {worldGridX, 0.0f, gViewportPreviewOrbitState.targetWorldY + gridRadius},
+                isAxis ? IM_COL32(196, 88, 88, 235) : (isMajor ? IM_COL32(94, 112, 132, 190) : IM_COL32(60, 72, 86, 152)),
+                isAxis ? 2.4f : (isMajor ? 1.4f : 1.0f));
+        }
+        for (int gridY = minGridY; gridY <= maxGridY; ++gridY) {
+            const float worldGridY = static_cast<float>(gridY) * gridStep;
+            const bool isMajor = (gridY % 4) == 0;
+            const bool isAxis = std::abs(worldGridY) <= 0.001f;
+            drawLine3D(
+                {gViewportPreviewOrbitState.targetWorldX - gridRadius, 0.0f, worldGridY},
+                {gViewportPreviewOrbitState.targetWorldX + gridRadius, 0.0f, worldGridY},
+                isAxis ? IM_COL32(96, 176, 244, 235) : (isMajor ? IM_COL32(94, 112, 132, 190) : IM_COL32(60, 72, 86, 152)),
+                isAxis ? 2.4f : (isMajor ? 1.4f : 1.0f));
+        }
+
+        const std::string gridLabel = "3D grid " + std::to_string(gridStep);
+        drawList->AddText(
+            ImVec2(origin.x + size.x - 110.0f, origin.y + 10.0f),
+            IM_COL32(142, 160, 178, 230),
+            gridLabel.c_str());
+        projectGroundCircle(
+            gViewportPreviewOrbitState.targetWorldX,
+            gViewportPreviewOrbitState.targetWorldY,
+            gridStep * 2.0f,
+            IM_COL32(116, 144, 170, 112),
+            1.1f);
+    }
+
+    drawLine3D({0.0f, 0.0f, 0.0f}, {0.0f, 5.0f, 0.0f}, IM_COL32(102, 210, 150, 235), 2.0f);
+
+    std::vector<ViewportPreviewObjectVisual> objectVisuals;
+    objectVisuals.reserve(world.objects.size());
+    for (int index = 0; index < static_cast<int>(world.objects.size()); ++index) {
+        const auto& object = world.objects[static_cast<std::size_t>(index)];
+        if (!IsObjectVisibleInEditorLayerView(object, layerStates)) {
+            continue;
+        }
+
+        const float halfWidth = std::max(0.6f, object.width * 0.5f);
+        const float halfDepth = std::max(0.6f, object.depth * 0.5f);
+        const float height = std::max(1.2f, object.height);
+        const bool rotateObjectPreview =
+            index == selectedObjectIndex &&
+            gViewportPreviewToolState.activeTool == ViewportPreviewTool::RotatePreview;
+        const float previewAngle = rotateObjectPreview
+            ? ViewportPreviewRadians(gViewportPreviewToolState.objectOrientationPreviewDegrees)
+            : 0.0f;
+        const float previewCos = std::cos(previewAngle);
+        const float previewSin = std::sin(previewAngle);
+        auto rotatedCorner = [&](float localX, float localY, float localZ) {
+            return ViewportPreviewVec3{
+                object.x + localX * previewCos - localZ * previewSin,
+                localY,
+                object.y + localX * previewSin + localZ * previewCos
+            };
+        };
+        const std::array<ViewportPreviewVec3, 8> worldCorners{{
+            rotatedCorner(-halfWidth, 0.0f, -halfDepth),
+            rotatedCorner(halfWidth, 0.0f, -halfDepth),
+            rotatedCorner(halfWidth, 0.0f, halfDepth),
+            rotatedCorner(-halfWidth, 0.0f, halfDepth),
+            rotatedCorner(-halfWidth, height, -halfDepth),
+            rotatedCorner(halfWidth, height, -halfDepth),
+            rotatedCorner(halfWidth, height, halfDepth),
+            rotatedCorner(-halfWidth, height, halfDepth)
+        }};
+
+        ViewportPreviewObjectVisual visual{};
+        visual.index = index;
+        visual.selected = index == selectedObjectIndex;
+        visual.layerLocked = IsObjectLockedInEditorLayerView(object, layerStates);
+        visual.semanticOverlayObject = ViewportPreviewContainsSemanticObject(viewportState, index);
+        visual.semanticOverlayRoot = index == viewportState.semanticOverlayRootIndex;
+        visual.color = visual.layerLocked ? IM_COL32(96, 104, 116, 255) : ViewportPreviewColorForCategory(object.category);
+        visual.boundsMin = ImVec2(origin.x + size.x, origin.y + size.y);
+        visual.boundsMax = origin;
+
+        int visibleCorners = 0;
+        for (std::size_t cornerIndex = 0; cornerIndex < worldCorners.size(); ++cornerIndex) {
+            ImVec2 projectedCorner{};
+            float depth = 0.0f;
+            visual.corners[cornerIndex].visible =
+                ProjectViewportPreviewPoint(camera, origin, size, worldCorners[cornerIndex], projectedCorner, depth);
+            visual.corners[cornerIndex].screen = projectedCorner;
+            visual.corners[cornerIndex].depth = depth;
+            if (!visual.corners[cornerIndex].visible) {
+                continue;
+            }
+            ++visibleCorners;
+            visual.averageDepth += depth;
+            visual.boundsMin.x = std::min(visual.boundsMin.x, projectedCorner.x);
+            visual.boundsMin.y = std::min(visual.boundsMin.y, projectedCorner.y);
+            visual.boundsMax.x = std::max(visual.boundsMax.x, projectedCorner.x);
+            visual.boundsMax.y = std::max(visual.boundsMax.y, projectedCorner.y);
+        }
+        if (visibleCorners == 0) {
+            continue;
+        }
+        visual.averageDepth /= static_cast<float>(visibleCorners);
+
+        ImVec2 topCenter{};
+        float topCenterDepth = 0.0f;
+        if (!ProjectViewportPreviewPoint(
+                camera,
+                origin,
+                size,
+                {object.x, height + 0.5f, object.y},
+                topCenter,
+                topCenterDepth)) {
+            topCenter = ImVec2(visual.boundsMin.x, visual.boundsMin.y - 14.0f);
+        }
+        visual.topCenter = topCenter;
+        objectVisuals.push_back(visual);
+    }
+
+    std::sort(
+        objectVisuals.begin(),
+        objectVisuals.end(),
+        [](const ViewportPreviewObjectVisual& lhs, const ViewportPreviewObjectVisual& rhs) {
+            return lhs.averageDepth > rhs.averageDepth;
+        });
+
+    auto findVisualByIndex = [&](int objectIndex) -> const ViewportPreviewObjectVisual* {
+        for (const auto& visual : objectVisuals) {
+            if (visual.index == objectIndex) {
+                return &visual;
+            }
+        }
+        return nullptr;
+    };
+
+    if (!viewportState.semanticOverlayLabel.empty()) {
+        drawList->AddText(
+            ImVec2(origin.x + 10.0f, origin.y + 8.0f),
+            IM_COL32(132, 220, 240, 255),
+            viewportState.semanticOverlayLabel.c_str());
+    }
+
+    for (const auto& edge : viewportState.semanticLinks) {
+        const ViewportPreviewObjectVisual* sourceVisual = findVisualByIndex(edge.sourceObjectIndex);
+        if (sourceVisual == nullptr) {
+            continue;
+        }
+        if (edge.resolved) {
+            const ViewportPreviewObjectVisual* targetVisual = findVisualByIndex(edge.targetObjectIndex);
+            if (targetVisual == nullptr) {
+                continue;
+            }
+            drawList->AddLine(sourceVisual->topCenter, targetVisual->topCenter, IM_COL32(74, 190, 220, 210), 2.0f);
+            drawList->AddText(
+                ImVec2((sourceVisual->topCenter.x + targetVisual->topCenter.x) * 0.5f + 4.0f,
+                       (sourceVisual->topCenter.y + targetVisual->topCenter.y) * 0.5f - 12.0f),
+                IM_COL32(140, 220, 235, 230),
+                edge.label.c_str());
+        } else {
+            const ImVec2 unresolvedPoint(sourceVisual->topCenter.x + 28.0f, sourceVisual->topCenter.y - 18.0f);
+            drawList->AddLine(sourceVisual->topCenter, unresolvedPoint, IM_COL32(240, 174, 78, 220), 2.0f);
+            drawList->AddCircleFilled(unresolvedPoint, 4.0f, IM_COL32(240, 174, 78, 255), 12);
+            drawList->AddText(ImVec2(unresolvedPoint.x + 6.0f, unresolvedPoint.y - 10.0f), IM_COL32(250, 206, 122, 240), edge.label.c_str());
+        }
+    }
+
+    constexpr int kBaseEdges[4][2] = {{0, 1}, {1, 2}, {2, 3}, {3, 0}};
+    constexpr int kTopEdges[4][2] = {{4, 5}, {5, 6}, {6, 7}, {7, 4}};
+    constexpr int kVerticalEdges[4][2] = {{0, 4}, {1, 5}, {2, 6}, {3, 7}};
+    for (const auto& visual : objectVisuals) {
+        std::array<ImVec2, 4> topFace{};
+        std::array<ImVec2, 4> groundFace{};
+        bool topFaceVisible = true;
+        bool groundFaceVisible = true;
+        for (int faceIndex = 0; faceIndex < 4; ++faceIndex) {
+            topFace[faceIndex] = visual.corners[4 + faceIndex].screen;
+            groundFace[faceIndex] = visual.corners[faceIndex].screen;
+            topFaceVisible = topFaceVisible && visual.corners[4 + faceIndex].visible;
+            groundFaceVisible = groundFaceVisible && visual.corners[faceIndex].visible;
+        }
+
+        if (groundFaceVisible) {
+            drawList->AddConvexPolyFilled(groundFace.data(), 4, IM_COL32(0, 0, 0, 38));
+        }
+        if (topFaceVisible) {
+            drawList->AddConvexPolyFilled(topFace.data(), 4, ViewportPreviewWithAlpha(visual.color, visual.selected ? 116 : 84));
+        }
+
+        const ImU32 baseEdgeColor = ViewportPreviewWithAlpha(visual.color, visual.selected ? 255 : 210);
+        const float edgeThickness = visual.selected ? 2.4f : 1.5f;
+        for (const auto& edge : kBaseEdges) {
+            if (visual.corners[edge[0]].visible && visual.corners[edge[1]].visible) {
+                drawList->AddLine(
+                    visual.corners[edge[0]].screen,
+                    visual.corners[edge[1]].screen,
+                    IM_COL32(26, 32, 40, 180),
+                    1.0f);
+            }
+        }
+        for (const auto& edge : kVerticalEdges) {
+            if (visual.corners[edge[0]].visible && visual.corners[edge[1]].visible) {
+                drawList->AddLine(
+                    visual.corners[edge[0]].screen,
+                    visual.corners[edge[1]].screen,
+                    baseEdgeColor,
+                    edgeThickness);
+            }
+        }
+        for (const auto& edge : kTopEdges) {
+            if (visual.corners[edge[0]].visible && visual.corners[edge[1]].visible) {
+                drawList->AddLine(
+                    visual.corners[edge[0]].screen,
+                    visual.corners[edge[1]].screen,
+                    baseEdgeColor,
+                    edgeThickness);
+            }
+        }
+
+        if (visual.semanticOverlayObject) {
+            drawList->AddRect(
+                ImVec2(visual.boundsMin.x - 4.0f, visual.boundsMin.y - 4.0f),
+                ImVec2(visual.boundsMax.x + 4.0f, visual.boundsMax.y + 4.0f),
+                visual.semanticOverlayRoot ? IM_COL32(84, 230, 255, 255) : IM_COL32(92, 196, 214, 235),
+                4.0f,
+                0,
+                visual.semanticOverlayRoot ? 2.6f : 1.6f);
+        }
+        if (visual.selected) {
+            const auto& selectedObject = world.objects[static_cast<std::size_t>(visual.index)];
+            constexpr int kSelectedEdges[12][2] = {
+                {0, 1}, {1, 2}, {2, 3}, {3, 0},
+                {4, 5}, {5, 6}, {6, 7}, {7, 4},
+                {0, 4}, {1, 5}, {2, 6}, {3, 7}
+            };
+            for (const auto& edge : kSelectedEdges) {
+                if (visual.corners[edge[0]].visible && visual.corners[edge[1]].visible) {
+                    drawList->AddLine(
+                        visual.corners[edge[0]].screen,
+                        visual.corners[edge[1]].screen,
+                        IM_COL32(255, 228, 132, 240),
+                        2.2f);
+                }
+            }
+            projectGroundCircle(
+                selectedObject.x,
+                selectedObject.y,
+                std::max(0.8f, std::max(selectedObject.width, selectedObject.depth) * 0.55f),
+                IM_COL32(255, 214, 120, 210),
+                1.5f);
+            drawList->AddCircleFilled(visual.topCenter, 4.0f, IM_COL32(255, 232, 140, 240), 12);
+        }
+
+        if (gViewportPreviewTransientState.moveGizmoObjectIndex == visual.index) {
+            const auto& object = world.objects[static_cast<std::size_t>(visual.index)];
+            const float height = std::max(1.2f, object.height);
+            const float gizmoLength = std::clamp(camera.distance * 0.08f, 1.8f, 6.0f);
+            const ViewportPreviewVec3 gizmoOrigin{object.x, height + 0.55f, object.y};
+            const ViewportPreviewVec3 gizmoXAxis{object.x + gizmoLength, height + 0.55f, object.y};
+            const ViewportPreviewVec3 gizmoYAxis{object.x, height + 0.55f, object.y + gizmoLength};
+            const ViewportPreviewVec3 gizmoZAxis{object.x, height + 0.55f + gizmoLength, object.y};
+            const float xThickness = gViewportPreviewToolState.activeAxis == ViewportPreviewAxis::X ? 4.0f : 2.6f;
+            const float yThickness = gViewportPreviewToolState.activeAxis == ViewportPreviewAxis::Y ? 4.0f : 2.6f;
+            const float zThickness = gViewportPreviewToolState.activeAxis == ViewportPreviewAxis::Z ? 4.0f : 2.6f;
+            drawLine3D(gizmoOrigin, gizmoXAxis, IM_COL32(228, 90, 90, 255), xThickness);
+            drawLine3D(gizmoOrigin, gizmoYAxis, IM_COL32(92, 204, 138, 255), yThickness);
+            drawLine3D(gizmoOrigin, gizmoZAxis, IM_COL32(110, 174, 255, 255), zThickness);
+
+            ImVec2 gizmoOriginScreen{};
+            ImVec2 xLabelPoint{};
+            ImVec2 yLabelPoint{};
+            ImVec2 zLabelPoint{};
+            float gizmoOriginDepth = 0.0f;
+            float xLabelDepth = 0.0f;
+            float yLabelDepth = 0.0f;
+            float zLabelDepth = 0.0f;
+            if (ProjectViewportPreviewPoint(camera, origin, size, gizmoOrigin, gizmoOriginScreen, gizmoOriginDepth)) {
+                drawList->AddCircleFilled(gizmoOriginScreen, 4.5f, IM_COL32(240, 242, 246, 235), 16);
+            }
+            if (ProjectViewportPreviewPoint(camera, origin, size, gizmoXAxis, xLabelPoint, xLabelDepth)) {
+                drawList->AddText(
+                    ImVec2(xLabelPoint.x + 4.0f, xLabelPoint.y - 10.0f),
+                    gViewportPreviewToolState.activeAxis == ViewportPreviewAxis::X ? IM_COL32(255, 220, 170, 255) : IM_COL32(236, 118, 118, 255),
+                    "X");
+            }
+            if (ProjectViewportPreviewPoint(camera, origin, size, gizmoYAxis, yLabelPoint, yLabelDepth)) {
+                drawList->AddText(
+                    ImVec2(yLabelPoint.x + 4.0f, yLabelPoint.y - 10.0f),
+                    gViewportPreviewToolState.activeAxis == ViewportPreviewAxis::Y ? IM_COL32(255, 220, 170, 255) : IM_COL32(116, 218, 154, 255),
+                    "Y");
+            }
+            if (ProjectViewportPreviewPoint(camera, origin, size, gizmoZAxis, zLabelPoint, zLabelDepth)) {
+                drawList->AddText(
+                    ImVec2(zLabelPoint.x + 4.0f, zLabelPoint.y - 10.0f),
+                    gViewportPreviewToolState.activeAxis == ViewportPreviewAxis::Z ? IM_COL32(255, 220, 170, 255) : IM_COL32(134, 192, 255, 255),
+                    "Z");
+            }
+        }
+
+        if (gViewportPreviewTransientState.rotationGizmoObjectIndex == visual.index) {
+            const auto& object = world.objects[static_cast<std::size_t>(visual.index)];
+            const float height = std::max(1.2f, object.height);
+            const float ringRadius = std::clamp(
+                std::max({object.width, object.depth, height}) * 0.72f,
+                1.2f,
+                std::clamp(camera.distance * 0.12f, 2.0f, 8.0f));
+            const ViewportPreviewVec3 ringCenter{object.x, height * 0.5f, object.y};
+            drawRotationRing3D(ringCenter, ringRadius, 0, IM_COL32(236, 96, 96, 245), 2.0f);
+            drawRotationRing3D(ringCenter, ringRadius * 1.04f, 1, IM_COL32(98, 214, 146, 245), 2.0f);
+            drawRotationRing3D(ringCenter, ringRadius * 1.08f, 2, IM_COL32(116, 176, 255, 245), 2.0f);
+            const float orientationRadians = ViewportPreviewRadians(gViewportPreviewToolState.objectOrientationPreviewDegrees);
+            drawLine3D(
+                ringCenter,
+                {
+                    ringCenter.x + std::cos(orientationRadians) * ringRadius * 1.35f,
+                    ringCenter.y,
+                    ringCenter.z + std::sin(orientationRadians) * ringRadius * 1.35f
+                },
+                IM_COL32(255, 226, 120, 255),
+                3.0f);
+            drawList->AddText(
+                ImVec2(visual.topCenter.x + 12.0f, visual.topCenter.y + 22.0f),
+                IM_COL32(236, 220, 150, 245),
+                "Rotation preview");
+        }
+
+        if (gViewportPreviewTransientState.orientationPreviewObjectIndex == visual.index) {
+            const ImVec2 panelMin(visual.topCenter.x + 12.0f, visual.topCenter.y + 22.0f);
+            const ImVec2 panelMax(panelMin.x + 132.0f, panelMin.y + 92.0f);
+            drawList->AddRectFilled(panelMin, panelMax, IM_COL32(18, 24, 31, 232), 4.0f);
+            drawList->AddRect(panelMin, panelMax, IM_COL32(108, 136, 168, 225), 4.0f);
+            drawList->AddText(ImVec2(panelMin.x + 8.0f, panelMin.y + 6.0f), IM_COL32(236, 220, 150, 245), "Transform Orientation");
+            drawList->AddText(
+                ImVec2(panelMin.x + 86.0f, panelMin.y + 24.0f),
+                IM_COL32(246, 216, 126, 245),
+                ViewportPreviewOrientationName(gViewportPreviewToolState.orientation));
+            drawList->AddText(ImVec2(panelMin.x + 8.0f, panelMin.y + 24.0f), IM_COL32(220, 226, 232, 235), "Global");
+            drawList->AddText(ImVec2(panelMin.x + 8.0f, panelMin.y + 38.0f), IM_COL32(220, 226, 232, 235), "Local");
+            drawList->AddText(ImVec2(panelMin.x + 8.0f, panelMin.y + 52.0f), IM_COL32(220, 226, 232, 235), "View");
+            drawList->AddText(ImVec2(panelMin.x + 8.0f, panelMin.y + 66.0f), IM_COL32(220, 226, 232, 235), "Grid");
+            drawList->AddText(ImVec2(panelMin.x + 8.0f, panelMin.y + 80.0f), IM_COL32(220, 226, 232, 235), "Floor");
+        }
+
+        if (options.showInteractionHelpers) {
+            const auto& object = world.objects[static_cast<std::size_t>(visual.index)];
+            drawList->AddCircleFilled(visual.topCenter, 9.0f, ViewportPreviewInteractionMarkerColor(object.interaction), 18);
+            drawList->AddText(
+                ImVec2(visual.topCenter.x - 3.0f, visual.topCenter.y - 6.0f),
+                IM_COL32(20, 20, 20, 255),
+                ViewportPreviewInteractionMarker(object.interaction));
+        }
+
+        if (options.showObjectLabels || visual.selected) {
+            const auto& object = world.objects[static_cast<std::size_t>(visual.index)];
+            drawList->AddText(
+                ImVec2(visual.topCenter.x + 12.0f, visual.topCenter.y - 6.0f),
+                IM_COL32(220, 220, 220, 240),
+                object.displayName.c_str());
+            if (visual.layerLocked) {
+                drawList->AddText(
+                    ImVec2(visual.topCenter.x + 12.0f, visual.topCenter.y + 8.0f),
+                    IM_COL32(206, 186, 120, 220),
+                    "[locked]");
+            } else if (visual.selected && !object.scriptTag.empty()) {
+                drawList->AddText(
+                    ImVec2(visual.topCenter.x + 12.0f, visual.topCenter.y + 8.0f),
+                    IM_COL32(150, 210, 180, 220),
+                    object.scriptTag.c_str());
+            }
+        }
+    }
+
+    drawLine3D(
+        {world.metadata.playerSpawnX, 0.0f, world.metadata.playerSpawnY},
+        {world.metadata.playerSpawnX, 2.4f, world.metadata.playerSpawnY},
+        IM_COL32(120, 210, 255, 255),
+        2.0f);
+    ImVec2 spawnLabelPoint{};
+    float spawnLabelDepth = 0.0f;
+    if (ProjectViewportPreviewPoint(
+            camera,
+            origin,
+            size,
+            {world.metadata.playerSpawnX, 2.8f, world.metadata.playerSpawnY},
+            spawnLabelPoint,
+            spawnLabelDepth)) {
+        drawList->AddCircleFilled(spawnLabelPoint, 5.0f, IM_COL32(120, 210, 255, 255), 14);
+        drawList->AddText(ImVec2(spawnLabelPoint.x + 8.0f, spawnLabelPoint.y - 10.0f), IM_COL32(180, 220, 255, 255), "SPAWN");
+    }
+
+    if (leftClicked && !shift) {
+        float worldX = 0.0f;
+        float worldY = 0.0f;
+        if (ViewportPreviewRaycastGround(camera, origin, size, mousePos, worldX, worldY)) {
+            interactionResult.clicked = true;
+            interactionResult.worldX = worldX;
+            interactionResult.worldY = worldY;
+        }
+
+        float bestDepth = std::numeric_limits<float>::max();
+        for (const auto& visual : objectVisuals) {
+            if (visual.layerLocked) {
+                continue;
+            }
+            if (mousePos.x < visual.boundsMin.x - 6.0f || mousePos.x > visual.boundsMax.x + 6.0f ||
+                mousePos.y < visual.boundsMin.y - 6.0f || mousePos.y > visual.boundsMax.y + 6.0f) {
+                continue;
+            }
+            if (visual.averageDepth >= bestDepth) {
+                continue;
+            }
+            bestDepth = visual.averageDepth;
+            interactionResult.clicked = true;
+            interactionResult.clickedObject = true;
+            interactionResult.clickedObjectIndex = visual.index;
+            interactionResult.doubleClickedObject = ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+        }
+    }
+
+    if (!gViewportPreviewTransientState.overlayMessage.empty()) {
+        const ImVec2 overlayMin(origin.x + 10.0f, origin.y + 34.0f);
+        const ImVec2 overlayMax(origin.x + size.x - 10.0f, origin.y + 62.0f);
+        drawList->AddRectFilled(overlayMin, overlayMax, IM_COL32(16, 22, 28, 224), 4.0f);
+        drawList->AddRect(overlayMin, overlayMax, IM_COL32(102, 128, 154, 210), 4.0f);
+        drawList->AddText(
+            ImVec2(overlayMin.x + 8.0f, overlayMin.y + 6.0f),
+            IM_COL32(242, 214, 126, 245),
+            gViewportPreviewTransientState.overlayMessage.c_str());
+    }
+
+    drawList->AddText(
+        ImVec2(origin.x + 10.0f, origin.y + size.y - 22.0f),
+        IM_COL32(150, 164, 180, 215),
+        "LMB select | G+NumPad move | O+NumPad orient | Tab select | X/Y/Z axis | Arrows camera | Shift+P drop | Esc clear");
+
+    ImGui::EndChild();
+    return interactionResult;
+}
+
 }  // namespace
 
 int main() {
@@ -1104,6 +2152,7 @@ int main() {
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigWindowsMoveFromTitleBarOnly = true;
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 130");
@@ -1118,6 +2167,8 @@ int main() {
     bool showWorldAuthoring = true;
     bool showCellView = true;
     bool showRenderWindow = true;
+    bool showLevelsWindow = true;
+    bool showLocationsWindow = true;
     bool showExportRuntime = true;
     bool showImportAssistant = true;
     bool resetWorkspaceLayout = false;
@@ -1246,6 +2297,46 @@ int main() {
     const char* interactionLabels[] = {"Static", "Container", "Resource", "Terminal", "Transition", "Vehicle Anchor", "Workshop", "Hostile"};
     const char* categoryLabels[] = {"Structure", "Resource Node", "Terminal", "Vehicle", "Landmark", "Container", "Hangar", "Hostile"};
     const char* objectFilterLabels[] = {"All Categories", "Structure", "Resource Node", "Terminal", "Vehicle", "Landmark", "Container", "Hangar", "Hostile"};
+    const char* levelPlanningLabels[] = {"Bunker Level 0 / Ground", "Bunker Level +1", "Bunker Level -1", "Double-height / Arena volume"};
+    const char* floorSurfacePresetLabels[] = {"Concrete", "Metal grate", "Tile", "Dirt / rough", "Industrial plate"};
+    const char* wallSurfacePresetLabels[] = {"Concrete", "Metal panel", "Reinforced bunker wall", "Service wall"};
+    const char* ceilingSurfacePresetLabels[] = {"Concrete", "Pipes / service ceiling", "Industrial plate", "Open / double-height"};
+    const char* transitionLengthLabels[] = {"Short", "Medium", "Long"};
+    const char* transitionWidthLabels[] = {"Narrow", "Wide"};
+    const char* transitionSlopeLabels[] = {"Steep", "Gentle"};
+    const char* magneticAnchorLabels[] = {
+        "Floor edge",
+        "Wall edge",
+        "Doorway",
+        "Stair top",
+        "Stair bottom",
+        "Ramp top",
+        "Ramp bottom",
+        "Vehicle lane",
+        "Centerline",
+        "Grid intersection"
+    };
+    const char* locationPlanningLabels[] = {
+        "Current Bunker Interior",
+        "Future Exterior Entry",
+        "Future Service Tunnel"
+    };
+    int selectedPlanningLevelIndex = 0;
+    int selectedFloorSurfacePresetIndex = 0;
+    int selectedWallSurfacePresetIndex = 2;
+    int selectedCeilingSurfacePresetIndex = 1;
+    int selectedStairLengthIndex = 1;
+    int selectedStairWidthIndex = 0;
+    int selectedStairSlopeIndex = 1;
+    int selectedRampLengthIndex = 1;
+    int selectedRampWidthIndex = 1;
+    int selectedRampSlopeIndex = 1;
+    bool planDoubleHeightRoom = false;
+    bool planUpperOpeningPlaceholder = false;
+    bool enableMagneticPlacementPreview = true;
+    int selectedMagneticAnchorIndex = 9;
+    int selectedLocationPlanningIndex = 0;
+    char verticalClearancePlanningNote[160] = "Future shell: review stacked-deck clearance, balconies, and arena sightlines.";
     SyncEditorLayerViewStates(editorWorld, editorLayerStates);
     auto clearSemanticOverlay = [&]() {
         ClearPreviewSemanticOverlay(previewViewport);
@@ -1610,6 +2701,226 @@ int main() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        if (!ImGui::GetIO().WantTextInput) {
+            ImGuiIO& frameIo = ImGui::GetIO();
+            auto selectRelativeObject = [&](int direction) {
+                if (editorWorld.objects.empty()) {
+                    selectedObjectIndex = -1;
+                    statusText = "No objects available for selection.";
+                    return;
+                }
+
+                const int objectCount = static_cast<int>(editorWorld.objects.size());
+                int startIndex = selectedObjectIndex;
+                if (startIndex < 0 || startIndex >= objectCount) {
+                    startIndex = direction > 0 ? -1 : 0;
+                }
+                for (int step = 1; step <= objectCount; ++step) {
+                    int candidate = (startIndex + direction * step) % objectCount;
+                    if (candidate < 0) {
+                        candidate += objectCount;
+                    }
+                    const auto& candidateObject = editorWorld.objects[static_cast<std::size_t>(candidate)];
+                    if (!isLayerVisibleForObject(candidateObject) || isLayerLockedForObject(candidateObject)) {
+                        continue;
+                    }
+                    selectedObjectIndex = candidate;
+                    statusText = "Selected object: " + candidateObject.displayName;
+                    return;
+                }
+
+                int fallback = (startIndex + direction + objectCount) % objectCount;
+                selectedObjectIndex = fallback;
+                statusText = "Selected object: " + editorWorld.objects[static_cast<std::size_t>(fallback)].displayName;
+            };
+
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                if (gViewportPreviewToolState.activeTool != ViewportPreviewTool::None ||
+                    gViewportPreviewToolState.orientationPreviewExpiresAt > ImGui::GetTime()) {
+                    gViewportPreviewToolState.activeTool = ViewportPreviewTool::None;
+                    gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::None;
+                    gViewportPreviewToolState.orientationPreviewExpiresAt = 0.0;
+                    statusText = "Viewport tool canceled.";
+                    ViewportPreviewShowOverlayMessage("Viewport tool canceled.");
+                } else if (selectedObjectIndex >= 0) {
+                    selectedObjectIndex = -1;
+                    statusText = "Cleared object selection.";
+                }
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_Tab)) {
+                selectRelativeObject(frameIo.KeyShift ? -1 : 1);
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_G) && selectedObjectIndex >= 0) {
+                gViewportPreviewToolState.activeTool = ViewportPreviewTool::MovePreview;
+                gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::None;
+                statusText = "Move mode: use NumPad 1-9 to move selected object on X/Y.";
+                ViewportPreviewShowOverlayMessage(statusText.c_str());
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_R) && selectedObjectIndex >= 0) {
+                gViewportPreviewToolState.activeTool = ViewportPreviewTool::RotatePreview;
+                gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::None;
+                statusText = "Rotation gizmo preview: object rotation persistence is a future transform milestone.";
+                ViewportPreviewShowOverlayMessage(statusText.c_str());
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_O) && selectedObjectIndex >= 0) {
+                gViewportPreviewToolState.activeTool = ViewportPreviewTool::RotatePreview;
+                gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::None;
+                gViewportPreviewToolState.orientationPreviewExpiresAt = ImGui::GetTime() + 2.75;
+                statusText = "Orientation mode: hold O and press NumPad to preview object facing.";
+                ViewportPreviewShowOverlayMessage(statusText.c_str());
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_O) && selectedObjectIndex < 0) {
+                gViewportPreviewToolState.orientation = ViewportPreviewCycleOrientation(
+                    gViewportPreviewToolState.orientation,
+                    frameIo.KeyShift ? -1 : 1);
+                gViewportPreviewToolState.orientationPreviewExpiresAt = ImGui::GetTime() + 2.75;
+                statusText = std::string("Transform Orientation preview: ") +
+                    ViewportPreviewOrientationName(gViewportPreviewToolState.orientation) + ".";
+                ViewportPreviewShowOverlayMessage(statusText.c_str());
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_X)) {
+                gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::X;
+                statusText = "Active gizmo axis: X.";
+                ViewportPreviewShowOverlayMessage(statusText.c_str(), 1.25);
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_Y)) {
+                gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Y;
+                statusText = "Active gizmo axis: Y.";
+                ViewportPreviewShowOverlayMessage(statusText.c_str(), 1.25);
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_Z)) {
+                gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Z;
+                statusText = "Active gizmo axis: Z.";
+                ViewportPreviewShowOverlayMessage(statusText.c_str(), 1.25);
+            }
+
+            auto keypadPressed = [](ImGuiKey key) {
+                return ImGui::IsKeyPressed(key);
+            };
+            auto keypadDirection = [&]() {
+                ImVec2 direction(0.0f, 0.0f);
+                if (keypadPressed(ImGuiKey_Keypad1)) { direction = ImVec2(-1.0f, -1.0f); }
+                if (keypadPressed(ImGuiKey_Keypad2)) { direction = ImVec2(0.0f, -1.0f); }
+                if (keypadPressed(ImGuiKey_Keypad3)) { direction = ImVec2(1.0f, -1.0f); }
+                if (keypadPressed(ImGuiKey_Keypad4)) { direction = ImVec2(-1.0f, 0.0f); }
+                if (keypadPressed(ImGuiKey_Keypad6)) { direction = ImVec2(1.0f, 0.0f); }
+                if (keypadPressed(ImGuiKey_Keypad7)) { direction = ImVec2(-1.0f, 1.0f); }
+                if (keypadPressed(ImGuiKey_Keypad8)) { direction = ImVec2(0.0f, 1.0f); }
+                if (keypadPressed(ImGuiKey_Keypad9)) { direction = ImVec2(1.0f, 1.0f); }
+                return direction;
+            };
+            auto keypadOrientationDegrees = [&]() -> std::optional<float> {
+                if (keypadPressed(ImGuiKey_Keypad8)) { return 90.0f; }
+                if (keypadPressed(ImGuiKey_Keypad9)) { return 45.0f; }
+                if (keypadPressed(ImGuiKey_Keypad6)) { return 0.0f; }
+                if (keypadPressed(ImGuiKey_Keypad3)) { return 315.0f; }
+                if (keypadPressed(ImGuiKey_Keypad2)) { return 270.0f; }
+                if (keypadPressed(ImGuiKey_Keypad1)) { return 225.0f; }
+                if (keypadPressed(ImGuiKey_Keypad4)) { return 180.0f; }
+                if (keypadPressed(ImGuiKey_Keypad7)) { return 135.0f; }
+                if (keypadPressed(ImGuiKey_Keypad5)) { return 0.0f; }
+                return std::nullopt;
+            };
+            if (selectedObjectIndex >= 0 &&
+                selectedObjectIndex < static_cast<int>(editorWorld.objects.size()) &&
+                gViewportPreviewToolState.activeTool == ViewportPreviewTool::MovePreview) {
+                const ImVec2 moveDirection = keypadDirection();
+                if (moveDirection.x != 0.0f || moveDirection.y != 0.0f) {
+                    auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+                    if (isLayerLockedForObject(selectedObject)) {
+                        statusText = "Selected object layer is locked; G+NumPad move is disabled.";
+                    } else if (!isLayerVisibleForObject(selectedObject)) {
+                        statusText = "Selected object layer is hidden; G+NumPad move is disabled.";
+                    } else {
+                        const float moveStep = resolvedSnapStep();
+                        selectedObject.x = snapCoordinate(selectedObject.x + moveDirection.x * moveStep);
+                        selectedObject.y = snapCoordinate(selectedObject.y + moveDirection.y * moveStep);
+                        placeX = selectedObject.x;
+                        placeY = selectedObject.y;
+                        if (moveDirection.x != 0.0f && moveDirection.y == 0.0f) {
+                            gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::X;
+                        } else if (moveDirection.y != 0.0f && moveDirection.x == 0.0f) {
+                            gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Y;
+                        } else {
+                            gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::None;
+                        }
+                        statusText = "Moved selected object with G+NumPad to X=" +
+                            std::to_string(selectedObject.x) + " Y=" + std::to_string(selectedObject.y) + ".";
+                        ViewportPreviewShowOverlayMessage("Moved selected object with G+NumPad.");
+                    }
+                }
+            }
+            if (selectedObjectIndex >= 0 &&
+                selectedObjectIndex < static_cast<int>(editorWorld.objects.size()) &&
+                frameIo.KeyAlt == false &&
+                ImGui::IsKeyDown(ImGuiKey_O)) {
+                const std::optional<float> orientationDegrees = keypadOrientationDegrees();
+                if (orientationDegrees.has_value()) {
+                    gViewportPreviewToolState.activeTool = ViewportPreviewTool::RotatePreview;
+                    gViewportPreviewToolState.objectOrientationPreviewDegrees = *orientationDegrees;
+                    gViewportPreviewToolState.orientationPreviewExpiresAt = ImGui::GetTime() + 2.75;
+                    statusText = "Object orientation preview: " +
+                        std::to_string(static_cast<int>(*orientationDegrees)) +
+                        " degrees. Rotation is not persisted because MapObject has no rotation field.";
+                    ViewportPreviewShowOverlayMessage(statusText.c_str());
+                }
+            }
+
+            const bool arrowLeft = ImGui::IsKeyPressed(ImGuiKey_LeftArrow) || ImGui::IsKeyDown(ImGuiKey_LeftArrow);
+            const bool arrowRight = ImGui::IsKeyPressed(ImGuiKey_RightArrow) || ImGui::IsKeyDown(ImGuiKey_RightArrow);
+            const bool arrowUp = ImGui::IsKeyPressed(ImGuiKey_UpArrow) || ImGui::IsKeyDown(ImGuiKey_UpArrow);
+            const bool arrowDown = ImGui::IsKeyPressed(ImGuiKey_DownArrow) || ImGui::IsKeyDown(ImGuiKey_DownArrow);
+            if (frameIo.KeyShift && (arrowLeft || arrowRight || arrowUp || arrowDown)) {
+                const ViewportPreviewCamera keyboardCamera = BuildViewportPreviewCamera(
+                    previewViewport,
+                    gViewportPreviewOrbitState,
+                    ImVec2(720.0f, 418.0f));
+                const ViewportPreviewVec3 forwardGround = ViewportPreviewNormalize({keyboardCamera.forward.x, 0.0f, keyboardCamera.forward.z});
+                const ViewportPreviewVec3 rightGround = ViewportPreviewNormalize({keyboardCamera.right.x, 0.0f, keyboardCamera.right.z});
+                const float panStep = keyboardCamera.distance * 0.025f;
+                if (arrowLeft) {
+                    gViewportPreviewOrbitState.targetWorldX -= rightGround.x * panStep;
+                    gViewportPreviewOrbitState.targetWorldY -= rightGround.z * panStep;
+                }
+                if (arrowRight) {
+                    gViewportPreviewOrbitState.targetWorldX += rightGround.x * panStep;
+                    gViewportPreviewOrbitState.targetWorldY += rightGround.z * panStep;
+                }
+                if (arrowUp) {
+                    gViewportPreviewOrbitState.targetWorldX += forwardGround.x * panStep;
+                    gViewportPreviewOrbitState.targetWorldY += forwardGround.z * panStep;
+                }
+                if (arrowDown) {
+                    gViewportPreviewOrbitState.targetWorldX -= forwardGround.x * panStep;
+                    gViewportPreviewOrbitState.targetWorldY -= forwardGround.z * panStep;
+                }
+            } else {
+                if (arrowLeft) {
+                    previewViewport.offsetX += 0.045f;
+                }
+                if (arrowRight) {
+                    previewViewport.offsetX -= 0.045f;
+                }
+                if (arrowUp) {
+                    previewViewport.offsetY = ViewportPreviewClampPitch(previewViewport.offsetY + 0.035f);
+                }
+                if (arrowDown) {
+                    previewViewport.offsetY = ViewportPreviewClampPitch(previewViewport.offsetY - 0.035f);
+                }
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_Equal) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd)) {
+                previewViewport.zoom = ViewportPreviewClampZoom(previewViewport.zoom + 0.12f);
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_Minus) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) {
+                previewViewport.zoom = ViewportPreviewClampZoom(previewViewport.zoom - 0.12f);
+            }
+            if (frameIo.KeyShift &&
+                ImGui::IsKeyPressed(ImGuiKey_P) &&
+                selectedObjectIndex >= 0) {
+                statusText = "Drop-to-surface requested, but vertical placement is not stored yet.";
+                ViewportPreviewShowOverlayMessage("Drop-to-surface requested, but vertical placement is not stored yet.");
+            }
+        }
 
         const bunker::WorldMetadata frameStartMetadata = editorWorld.metadata;
         const int frameStartSelectedObjectIndex = selectedObjectIndex;
@@ -1675,6 +2986,8 @@ int main() {
                 ImGui::MenuItem("World Authoring", nullptr, &showWorldAuthoring);
                 ImGui::MenuItem("Cell View", nullptr, &showCellView);
                 ImGui::MenuItem("Render Window / Viewport", nullptr, &showRenderWindow);
+                ImGui::MenuItem("Levels / Floors / Layers", nullptr, &showLevelsWindow);
+                ImGui::MenuItem("Locations / Cells", nullptr, &showLocationsWindow);
                 ImGui::MenuItem("Export / Runtime", nullptr, &showExportRuntime);
                 ImGui::MenuItem("Import Assistant", nullptr, &showImportAssistant);
                 ImGui::Separator();
@@ -1684,6 +2997,8 @@ int main() {
                     showWorldAuthoring = true;
                     showCellView = true;
                     showRenderWindow = true;
+                    showLevelsWindow = true;
+                    showLocationsWindow = true;
                     showExportRuntime = true;
                     showImportAssistant = true;
                 }
@@ -3441,6 +4756,112 @@ int main() {
             ImGui::End();
         }
 
+        if (showLevelsWindow) {
+            setTopLevelWindowDefaults(ImVec2(930.0f, 210.0f), ImVec2(468.0f, 684.0f));
+            ImGui::Begin("Levels / Floors / Layers", &showLevelsWindow, ImGuiWindowFlags_NoCollapse);
+            ImGui::TextDisabled("Drag this window by its title bar outside the main editor to detach it.");
+            ImGui::TextDisabled("Planning shell for future authored-world vertical organization. No geometry or save-format changes yet.");
+            ImGui::Separator();
+            ImGui::BeginChild("LevelsPlanningScroll", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+            ImGui::Text("Level / Floor Stack");
+            ImGui::Combo("Planning Level", &selectedPlanningLevelIndex, levelPlanningLabels, IM_ARRAYSIZE(levelPlanningLabels));
+            ImGui::TextWrapped("This planning shell tracks future bunker decks, dungeon floors, modular house levels, and authored vertical slices without persisting new floor data yet.");
+
+            ImGui::Separator();
+            ImGui::Text("Floor Modularity");
+            ImGui::Combo("Floor Surface Preset", &selectedFloorSurfacePresetIndex, floorSurfacePresetLabels, IM_ARRAYSIZE(floorSurfacePresetLabels));
+            ImGui::Combo("Wall Surface Preset", &selectedWallSurfacePresetIndex, wallSurfacePresetLabels, IM_ARRAYSIZE(wallSurfacePresetLabels));
+            ImGui::Combo("Ceiling Surface Preset", &selectedCeilingSurfacePresetIndex, ceilingSurfacePresetLabels, IM_ARRAYSIZE(ceilingSurfacePresetLabels));
+            ImGui::TextDisabled("Workflow taxonomy only for now.");
+
+            ImGui::Separator();
+            ImGui::Text("Vertical Transitions");
+            ImGui::TextDisabled("Stairs");
+            ImGui::Combo("Stair Type", &selectedStairLengthIndex, transitionLengthLabels, IM_ARRAYSIZE(transitionLengthLabels));
+            ImGui::Combo("Stair Width", &selectedStairWidthIndex, transitionWidthLabels, IM_ARRAYSIZE(transitionWidthLabels));
+            ImGui::Combo("Stair Slope", &selectedStairSlopeIndex, transitionSlopeLabels, IM_ARRAYSIZE(transitionSlopeLabels));
+            ImGui::TextDisabled("Ramp / vehicle slope");
+            ImGui::Combo("Ramp Type", &selectedRampLengthIndex, transitionLengthLabels, IM_ARRAYSIZE(transitionLengthLabels));
+            ImGui::Combo("Ramp Width", &selectedRampWidthIndex, transitionWidthLabels, IM_ARRAYSIZE(transitionWidthLabels));
+            ImGui::Combo("Ramp Slope", &selectedRampSlopeIndex, transitionSlopeLabels, IM_ARRAYSIZE(transitionSlopeLabels));
+            ImGui::TextWrapped("Runtime vehicle/tank physics and fall/forward velocity behavior are future runtime milestones.");
+
+            ImGui::Separator();
+            ImGui::Text("Double-Height Spaces");
+            ImGui::Checkbox("Double-height room / arena", &planDoubleHeightRoom);
+            ImGui::Checkbox("Upper floor opening / balcony placeholder", &planUpperOpeningPlaceholder);
+            ImGui::InputText("Vertical Clearance Note", verticalClearancePlanningNote, IM_ARRAYSIZE(verticalClearancePlanningNote));
+            ImGui::TextDisabled("Planning only. No world geometry changes yet.");
+
+            ImGui::Separator();
+            ImGui::Text("Modular Floor / Transition Planning");
+            const auto setLevelsPlanningStatus = [&](const char* actionLabel) {
+                statusText = std::string(actionLabel) +
+                    " | level=" + levelPlanningLabels[selectedPlanningLevelIndex] +
+                    " | floor=" + floorSurfacePresetLabels[selectedFloorSurfacePresetIndex] +
+                    " | wall=" + wallSurfacePresetLabels[selectedWallSurfacePresetIndex] +
+                    " | ceiling=" + ceilingSurfacePresetLabels[selectedCeilingSurfacePresetIndex] +
+                    " | shell only.";
+            };
+            if (ImGui::Button("Plan Stair Module", ImVec2(-1.0f, 0.0f))) {
+                setLevelsPlanningStatus("Planned stair module shell");
+            }
+            if (ImGui::Button("Plan Ramp Module", ImVec2(-1.0f, 0.0f))) {
+                setLevelsPlanningStatus("Planned ramp module shell");
+            }
+            if (ImGui::Button("Plan Double-Height Volume", ImVec2(-1.0f, 0.0f))) {
+                setLevelsPlanningStatus("Planned double-height volume shell");
+            }
+            if (ImGui::Button("Plan Floor Surface Change", ImVec2(-1.0f, 0.0f))) {
+                setLevelsPlanningStatus("Planned floor surface change shell");
+            }
+            if (ImGui::Button("Plan Wall/Ceiling Surface Change", ImVec2(-1.0f, 0.0f))) {
+                setLevelsPlanningStatus("Planned wall/ceiling surface change shell");
+            }
+            ImGui::TextDisabled("Buttons update planning status only and do not place geometry.");
+
+            ImGui::Separator();
+            ImGui::Text("Magnet Anchors / Snapping");
+            ImGui::Checkbox("Enable magnetic placement preview", &enableMagneticPlacementPreview);
+            ImGui::Combo("Anchor Type", &selectedMagneticAnchorIndex, magneticAnchorLabels, IM_ARRAYSIZE(magneticAnchorLabels));
+            ImGui::BulletText("Current snap step: %.2f", resolvedSnapStep());
+            ImGui::TextWrapped("Future magnet anchors will snap modules and objects to authored sockets.");
+            ImGui::EndChild();
+            ImGui::End();
+        }
+
+        if (showLocationsWindow) {
+            setTopLevelWindowDefaults(ImVec2(1020.0f, 40.0f), ImVec2(378.0f, 282.0f));
+            ImGui::Begin("Locations / Cells", &showLocationsWindow, ImGuiWindowFlags_NoCollapse);
+            ImGui::TextDisabled("Drag this window by its title bar outside the main editor to detach it.");
+            ImGui::Separator();
+            ImGui::Text("Current Active Workspace / Cell");
+            ImGui::BulletText("World Name: %s", editorWorld.metadata.name.c_str());
+            ImGui::BulletText(
+                "Workspace Label: %s",
+                editorWorld.metadata.objective.empty() ? "No active workspace label" : editorWorld.metadata.objective.c_str());
+            ImGui::BulletText("Authored Object Count: %d", static_cast<int>(editorWorld.objects.size()));
+            ImGui::Separator();
+            ImGui::Text("Planning List");
+            for (int locationIndex = 0; locationIndex < IM_ARRAYSIZE(locationPlanningLabels); ++locationIndex) {
+                if (ImGui::Selectable(locationPlanningLabels[locationIndex], selectedLocationPlanningIndex == locationIndex)) {
+                    selectedLocationPlanningIndex = locationIndex;
+                }
+            }
+            ImGui::TextWrapped("Location streaming and multi-cell persistence are future milestones.");
+            if (ImGui::Button("Plan Interior Cell", ImVec2(-1.0f, 0.0f))) {
+                statusText = "Planned interior cell shell. No location persistence or streaming changes yet.";
+            }
+            if (ImGui::Button("Plan Exterior Entry", ImVec2(-1.0f, 0.0f))) {
+                statusText = "Planned exterior entry shell. No location persistence or streaming changes yet.";
+            }
+            if (ImGui::Button("Plan Service Tunnel Link", ImVec2(-1.0f, 0.0f))) {
+                statusText = "Planned service tunnel link shell. No location persistence or streaming changes yet.";
+            }
+            ImGui::TextDisabled("Buttons update planning status only.");
+            ImGui::End();
+        }
+
         if (showCellView) {
             setTopLevelWindowDefaults(ImVec2(1088.0f, 40.0f), ImVec2(316.0f, 250.0f));
             ImGui::Begin("Cell View", &showCellView, ImGuiWindowFlags_NoCollapse);
@@ -3492,7 +4913,9 @@ int main() {
         if (showRenderWindow) {
             setTopLevelWindowDefaults(ImVec2(352.0f, 466.0f), ImVec2(720.0f, 418.0f));
             ImGui::Begin("Render Window / Viewport", &showRenderWindow, ImGuiWindowFlags_NoCollapse);
-            ImGui::TextDisabled("Temporary 2D viewport placeholder; final target is a real 3D Render Window.");
+            ImGui::TextDisabled("Minimal 3D editor viewport shell with perspective camera and object markers.");
+            ImGui::TextDisabled("Drag this window by its title bar outside the main editor to detach it.");
+            ImGui::TextDisabled("Current boxes are editor proxy markers; textured asset previews are a future rendering milestone.");
             ImGui::Separator();
             const PreviewRenderOptions previewRenderOptions = {
                 showInteractionHelpers,
@@ -3504,13 +4927,23 @@ int main() {
                 showServiceRadiusOverlay,
                 resolvedSnapStep()
             };
-            const PreviewInteraction previewInteraction = DrawWorldPreview(
+            const PreviewInteraction previewInteraction = DrawWorldPreview3D(
                 editorWorld,
                 selectedObjectIndex,
                 previewAsPlayer,
                 previewViewport,
                 editorLayerStates,
                 previewRenderOptions);
+            if (gViewportPreviewTransientState.moveGizmoStatusRequested) {
+                statusText = "Move gizmo preview: X/Y placement exists; Z placement is a future floor/elevation milestone.";
+            }
+            if (gViewportPreviewTransientState.rotationGizmoStatusRequested) {
+                statusText = "Rotation gizmo preview: object rotation persistence is a future transform milestone.";
+            }
+            if (gViewportPreviewTransientState.orientationPreviewStatusRequested) {
+                statusText = std::string("Transform Orientation preview: ") +
+                    ViewportPreviewOrientationName(gViewportPreviewToolState.orientation) + ".";
+            }
             if (previewInteraction.draggingSelectedObject &&
                 selectedObjectIndex >= 0 &&
                 selectedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
@@ -3574,7 +5007,7 @@ int main() {
                 statusText = "Preview camera reset.";
             }
             ImGui::SameLine();
-            ImGui::TextDisabled("LMB select/drag/resize | Spawn handle drag | MMB pan | Wheel zoom | Double-click focus");
+            ImGui::TextDisabled("Proxy markers only; textured asset previews are a future rendering milestone.");
             ImGui::End();
         }
 
