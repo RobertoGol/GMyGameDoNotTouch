@@ -2128,7 +2128,7 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
     drawList->AddText(
         ImVec2(origin.x + 10.0f, origin.y + size.y - 22.0f),
         IM_COL32(150, 164, 180, 215),
-        "LMB select | G+NumPad move | O+NumPad orient | Tab select | X/Y/Z axis | Arrows camera | Shift+P drop | Esc clear");
+        "LMB select | G+NumPad move | O+NumPad orient | Tab select | Arrows camera | Shift+P drop | Esc clear");
 
     ImGui::EndChild();
     return interactionResult;
