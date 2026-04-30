@@ -226,6 +226,7 @@ bool World::Load(const std::string& path) {
     const bool hasSemanticAuthoringState = (format == "BWL3" || format == "BWL4" || format == "BWL5");
     const bool hasEditorLayerData = (format == "BWL4" || format == "BWL5");
     const bool hasPrefabSourceData = (format == "BWL5");
+    const bool hasObjectZData = (format != "BWLD");
     if (format != "BWLD" && format != "BWL2" && format != "BWL3" && format != "BWL4" && format != "BWL5") {
         return false;
     }
@@ -271,7 +272,11 @@ bool World::Load(const std::string& path) {
         file.read(reinterpret_cast<char*>(&category), sizeof(category));
         file.read(reinterpret_cast<char*>(&object.x), sizeof(object.x));
         file.read(reinterpret_cast<char*>(&object.y), sizeof(object.y));
-        file.read(reinterpret_cast<char*>(&object.z), sizeof(object.z));
+        if (hasObjectZData) {
+            file.read(reinterpret_cast<char*>(&object.z), sizeof(object.z));
+        } else {
+            object.z = 0.0f;
+        }
         file.read(reinterpret_cast<char*>(&object.width), sizeof(object.width));
         file.read(reinterpret_cast<char*>(&object.depth), sizeof(object.depth));
         file.read(reinterpret_cast<char*>(&object.height), sizeof(object.height));

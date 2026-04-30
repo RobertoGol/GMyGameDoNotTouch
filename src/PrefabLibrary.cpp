@@ -244,9 +244,16 @@ bool LoadPrefabLibrary(std::vector<PrefabRecord>& prefabs) {
         return false;
     }
 
+    bool prefabLinesHaveZ = true;
     std::string line;
     while (std::getline(file, line)) {
-        if (line.empty() || line.starts_with('#')) {
+        if (line.empty()) {
+            continue;
+        }
+        if (line.starts_with('#')) {
+            if (line.find("BUNKER_PREFABS_V") != std::string::npos) {
+                prefabLinesHaveZ = line.find("BUNKER_PREFABS_V4") != std::string::npos;
+            }
             continue;
         }
 
@@ -274,16 +281,35 @@ bool LoadPrefabLibrary(std::vector<PrefabRecord>& prefabs) {
         if (!(lineStream >> interaction
                 >> category
                 >> prefab.object.x
-                >> prefab.object.y
-                >> prefab.object.z
+                >> prefab.object.y)) {
+            return false;
+        }
+        const std::streampos objectShapePos = lineStream.tellg();
+        const bool readObjectShapeWithZ =
+            prefabLinesHaveZ &&
+            static_cast<bool>(lineStream >> prefab.object.z
                 >> prefab.object.width
                 >> prefab.object.depth
                 >> prefab.object.height
                 >> prefab.object.health
                 >> prefab.object.blocksMovement
                 >> prefab.object.discovered
-                >> prefab.object.manualLoot)) {
-            return false;
+                >> prefab.object.manualLoot);
+        if (!readObjectShapeWithZ) {
+            lineStream.clear();
+            if (objectShapePos != std::streampos(-1)) {
+                lineStream.seekg(objectShapePos);
+            }
+            prefab.object.z = 0.0f;
+            if (!(lineStream >> prefab.object.width
+                    >> prefab.object.depth
+                    >> prefab.object.height
+                    >> prefab.object.health
+                    >> prefab.object.blocksMovement
+                    >> prefab.object.discovered
+                    >> prefab.object.manualLoot)) {
+                return false;
+            }
         }
 
         prefab.object.interaction = static_cast<InteractionType>(interaction);

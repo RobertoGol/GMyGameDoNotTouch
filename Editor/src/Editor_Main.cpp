@@ -1737,7 +1737,7 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
 
         const float halfWidth = std::max(0.6f, object.width * 0.5f);
         const float halfDepth = std::max(0.6f, object.depth * 0.5f);
-        const float height = std::max(1.2f, object.height);
+        const float height = object.height;
         const bool rotateObjectPreview =
             index == selectedObjectIndex &&
             gViewportPreviewToolState.activeTool == ViewportPreviewTool::RotatePreview;
@@ -1746,6 +1746,8 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
             : 0.0f;
         const float previewCos = std::cos(previewAngle);
         const float previewSin = std::sin(previewAngle);
+        const float baseZ = object.z;
+        const float topZ = object.z + height;
         auto rotatedCorner = [&](float localX, float localY, float localZ) {
             return ViewportPreviewVec3{
                 object.x + localX * previewCos - localZ * previewSin,
@@ -1754,14 +1756,14 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
             };
         };
         const std::array<ViewportPreviewVec3, 8> worldCorners{{
-            rotatedCorner(-halfWidth, 0.0f, -halfDepth),
-            rotatedCorner(halfWidth, 0.0f, -halfDepth),
-            rotatedCorner(halfWidth, 0.0f, halfDepth),
-            rotatedCorner(-halfWidth, 0.0f, halfDepth),
-            rotatedCorner(-halfWidth, height, -halfDepth),
-            rotatedCorner(halfWidth, height, -halfDepth),
-            rotatedCorner(halfWidth, height, halfDepth),
-            rotatedCorner(-halfWidth, height, halfDepth)
+            rotatedCorner(-halfWidth, baseZ, -halfDepth),
+            rotatedCorner(halfWidth, baseZ, -halfDepth),
+            rotatedCorner(halfWidth, baseZ, halfDepth),
+            rotatedCorner(-halfWidth, baseZ, halfDepth),
+            rotatedCorner(-halfWidth, topZ, -halfDepth),
+            rotatedCorner(halfWidth, topZ, -halfDepth),
+            rotatedCorner(halfWidth, topZ, halfDepth),
+            rotatedCorner(-halfWidth, topZ, halfDepth)
         }};
 
         ViewportPreviewObjectVisual visual{};
@@ -1803,7 +1805,7 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
                 camera,
                 origin,
                 size,
-                {object.x, height + 0.5f, object.y},
+                {object.x, topZ + 0.5f, object.y},
                 topCenter,
                 topCenterDepth)) {
             topCenter = ImVec2(visual.boundsMin.x, visual.boundsMin.y - 14.0f);
@@ -1947,12 +1949,13 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
 
         if (gViewportPreviewTransientState.moveGizmoObjectIndex == visual.index) {
             const auto& object = world.objects[static_cast<std::size_t>(visual.index)];
-            const float height = std::max(1.2f, object.height);
+            const float height = object.height;
             const float gizmoLength = std::clamp(camera.distance * 0.08f, 1.8f, 6.0f);
-            const ViewportPreviewVec3 gizmoOrigin{object.x, height + 0.55f, object.y};
-            const ViewportPreviewVec3 gizmoXAxis{object.x + gizmoLength, height + 0.55f, object.y};
-            const ViewportPreviewVec3 gizmoYAxis{object.x, height + 0.55f, object.y + gizmoLength};
-            const ViewportPreviewVec3 gizmoZAxis{object.x, height + 0.55f + gizmoLength, object.y};
+            const float gizmoBaseZ = object.z + height + 0.55f;
+            const ViewportPreviewVec3 gizmoOrigin{object.x, gizmoBaseZ, object.y};
+            const ViewportPreviewVec3 gizmoXAxis{object.x + gizmoLength, gizmoBaseZ, object.y};
+            const ViewportPreviewVec3 gizmoYAxis{object.x, gizmoBaseZ, object.y + gizmoLength};
+            const ViewportPreviewVec3 gizmoZAxis{object.x, gizmoBaseZ + gizmoLength, object.y};
             const float xThickness = gViewportPreviewToolState.activeAxis == ViewportPreviewAxis::X ? 4.0f : 2.6f;
             const float yThickness = gViewportPreviewToolState.activeAxis == ViewportPreviewAxis::Y ? 4.0f : 2.6f;
             const float zThickness = gViewportPreviewToolState.activeAxis == ViewportPreviewAxis::Z ? 4.0f : 2.6f;
@@ -1993,12 +1996,12 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
 
         if (gViewportPreviewTransientState.rotationGizmoObjectIndex == visual.index) {
             const auto& object = world.objects[static_cast<std::size_t>(visual.index)];
-            const float height = std::max(1.2f, object.height);
+            const float height = object.height;
             const float ringRadius = std::clamp(
                 std::max({object.width, object.depth, height}) * 0.72f,
                 1.2f,
                 std::clamp(camera.distance * 0.12f, 2.0f, 8.0f));
-            const ViewportPreviewVec3 ringCenter{object.x, height * 0.5f, object.y};
+            const ViewportPreviewVec3 ringCenter{object.x, object.z + height * 0.5f, object.y};
             drawRotationRing3D(ringCenter, ringRadius, 0, IM_COL32(236, 96, 96, 245), 2.0f);
             drawRotationRing3D(ringCenter, ringRadius * 1.04f, 1, IM_COL32(98, 214, 146, 245), 2.0f);
             drawRotationRing3D(ringCenter, ringRadius * 1.08f, 2, IM_COL32(116, 176, 255, 245), 2.0f);
@@ -2691,6 +2694,87 @@ int main() {
         }
         return ok;
     };
+    auto footprintsOverlap = [](const bunker::MapObject& lhs, const bunker::MapObject& rhs) {
+        const float lhsMinX = lhs.x - lhs.width * 0.5f;
+        const float lhsMaxX = lhs.x + lhs.width * 0.5f;
+        const float lhsMinY = lhs.y - lhs.depth * 0.5f;
+        const float lhsMaxY = lhs.y + lhs.depth * 0.5f;
+        const float rhsMinX = rhs.x - rhs.width * 0.5f;
+        const float rhsMaxX = rhs.x + rhs.width * 0.5f;
+        const float rhsMinY = rhs.y - rhs.depth * 0.5f;
+        const float rhsMaxY = rhs.y + rhs.depth * 0.5f;
+        return lhsMaxX >= rhsMinX &&
+            lhsMinX <= rhsMaxX &&
+            lhsMaxY >= rhsMinY &&
+            lhsMinY <= rhsMaxY;
+    };
+    auto placeSelectedObjectOnSupport = [&]() {
+        if (selectedObjectIndex < 0 || selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+            return false;
+        }
+
+        auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+        if (isLayerLockedForObject(selectedObject)) {
+            statusText = "Selected object layer is locked; Shift+P placement is disabled.";
+            return false;
+        }
+        if (!isLayerVisibleForObject(selectedObject)) {
+            statusText = "Selected object layer is hidden; Shift+P placement is disabled.";
+            return false;
+        }
+
+        const bunker::MapObject beforeObject = selectedObject;
+        float highestSupportTop = 0.0f;
+        bool foundSupport = false;
+        for (int objectIndex = 0; objectIndex < static_cast<int>(editorWorld.objects.size()); ++objectIndex) {
+            if (objectIndex == selectedObjectIndex) {
+                continue;
+            }
+            const auto& candidate = editorWorld.objects[static_cast<std::size_t>(objectIndex)];
+            if (!footprintsOverlap(selectedObject, candidate)) {
+                continue;
+            }
+            const float candidateTop = candidate.z + candidate.height;
+            if (!foundSupport || candidateTop > highestSupportTop) {
+                highestSupportTop = candidateTop;
+                foundSupport = true;
+            }
+        }
+
+        selectedObject.z = snapCoordinate(foundSupport ? highestSupportTop : 0.0f);
+        if (beforeObject.z != selectedObject.z) {
+            undoStack.PushObjectUpdated("Place object on support", beforeObject, selectedObject, selectedObjectIndex);
+        }
+        statusText = foundSupport
+            ? "Placed selected object on highest overlapping support at Z=" + std::to_string(selectedObject.z) + "."
+            : "Placed selected object on floor at Z=0.";
+        ViewportPreviewShowOverlayMessage(statusText.c_str());
+        return beforeObject.z != selectedObject.z;
+    };
+    auto nudgeSelectedObjectZ = [&](float direction) {
+        if (selectedObjectIndex < 0 || selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+            return false;
+        }
+
+        auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+        if (isLayerLockedForObject(selectedObject)) {
+            statusText = "Selected object layer is locked; vertical movement is disabled.";
+            return false;
+        }
+        if (!isLayerVisibleForObject(selectedObject)) {
+            statusText = "Selected object layer is hidden; vertical movement is disabled.";
+            return false;
+        }
+
+        const bunker::MapObject beforeObject = selectedObject;
+        selectedObject.z = snapCoordinate(selectedObject.z + direction * resolvedSnapStep());
+        if (beforeObject.z != selectedObject.z) {
+            undoStack.PushObjectUpdated("Move object vertically", beforeObject, selectedObject, selectedObjectIndex);
+        }
+        statusText = "Moved selected object to Z=" + std::to_string(selectedObject.z) + ".";
+        ViewportPreviewShowOverlayMessage(statusText.c_str());
+        return beforeObject.z != selectedObject.z;
+    };
     refreshDraftLayerForPreset();
     refreshWorkspaceExportArtifactPreview();
     undoStack.MarkSaved();
@@ -2908,17 +2992,20 @@ int main() {
                     previewViewport.offsetY = ViewportPreviewClampPitch(previewViewport.offsetY - 0.035f);
                 }
             }
-            if (ImGui::IsKeyPressed(ImGuiKey_Equal) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd)) {
+            if (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd)) {
+                nudgeSelectedObjectZ(1.0f);
+            } else if (ImGui::IsKeyPressed(ImGuiKey_Equal)) {
                 previewViewport.zoom = ViewportPreviewClampZoom(previewViewport.zoom + 0.12f);
             }
-            if (ImGui::IsKeyPressed(ImGuiKey_Minus) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) {
+            if (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) {
+                nudgeSelectedObjectZ(-1.0f);
+            } else if (ImGui::IsKeyPressed(ImGuiKey_Minus)) {
                 previewViewport.zoom = ViewportPreviewClampZoom(previewViewport.zoom - 0.12f);
             }
             if (frameIo.KeyShift &&
                 ImGui::IsKeyPressed(ImGuiKey_P) &&
                 selectedObjectIndex >= 0) {
-                statusText = "Drop-to-surface requested, but vertical placement is not stored yet.";
-                ViewportPreviewShowOverlayMessage("Drop-to-surface requested, but vertical placement is not stored yet.");
+                placeSelectedObjectOnSupport();
             }
         }
 
@@ -4399,6 +4486,9 @@ int main() {
                 if (ImGui::InputFloat("Edit Y", &selectedObject.y, 0.5f, 2.0f, "%.1f") && snapToGrid) {
                     selectedObject.y = snapCoordinate(selectedObject.y);
                 }
+                if (ImGui::InputFloat("Edit Z", &selectedObject.z, 0.5f, 2.0f, "%.1f") && snapToGrid) {
+                    selectedObject.z = snapCoordinate(selectedObject.z);
+                }
                 if (ImGui::InputFloat("Width", &selectedObject.width, 0.1f, 0.5f, "%.1f")) {
                     selectedObject.width = snapDimension(selectedObject.width);
                 }
@@ -4935,7 +5025,7 @@ int main() {
                 editorLayerStates,
                 previewRenderOptions);
             if (gViewportPreviewTransientState.moveGizmoStatusRequested) {
-                statusText = "Move gizmo preview: X/Y placement exists; Z placement is a future floor/elevation milestone.";
+                statusText = "Move gizmo preview: use NumPad for X/Y and Keypad +/- for Z.";
             }
             if (gViewportPreviewTransientState.rotationGizmoStatusRequested) {
                 statusText = "Rotation gizmo preview: object rotation persistence is a future transform milestone.";
