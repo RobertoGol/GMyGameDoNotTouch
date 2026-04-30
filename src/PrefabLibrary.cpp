@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -96,6 +97,14 @@ std::string NormalizeTargetType(std::string_view value) {
     return {};
 }
 
+float NormalizeDegrees(float value) {
+    value = std::fmod(value, 360.0f);
+    if (value < 0.0f) {
+        value += 360.0f;
+    }
+    return value;
+}
+
 bool ReadOptionalQuotedString(std::istringstream& lineStream, std::string& value) {
     std::streampos originalPos = lineStream.tellg();
     std::string parsedValue;
@@ -164,6 +173,9 @@ void NormalizePrefabRecord(PrefabRecord& prefab) {
     }
 
     prefab.object.editorLayer = NormalizeEditorLayerName(prefab.object.editorLayer);
+    prefab.object.rotationX = NormalizeDegrees(prefab.object.rotationX);
+    prefab.object.rotationY = NormalizeDegrees(prefab.object.rotationY);
+    prefab.object.rotationZ = NormalizeDegrees(prefab.object.rotationZ);
     if (prefab.object.editorLayer.empty()) {
         prefab.object.editorLayer = DefaultEditorLayerName(prefab.object);
     }
@@ -245,6 +257,7 @@ bool LoadPrefabLibrary(std::vector<PrefabRecord>& prefabs) {
     }
 
     bool prefabLinesHaveZ = true;
+    bool prefabLinesHaveRotation = false;
     std::string line;
     while (std::getline(file, line)) {
         if (line.empty()) {
@@ -252,7 +265,10 @@ bool LoadPrefabLibrary(std::vector<PrefabRecord>& prefabs) {
         }
         if (line.starts_with('#')) {
             if (line.find("BUNKER_PREFABS_V") != std::string::npos) {
-                prefabLinesHaveZ = line.find("BUNKER_PREFABS_V4") != std::string::npos;
+                prefabLinesHaveZ =
+                    line.find("BUNKER_PREFABS_V4") != std::string::npos ||
+                    line.find("BUNKER_PREFABS_V5") != std::string::npos;
+                prefabLinesHaveRotation = line.find("BUNKER_PREFABS_V5") != std::string::npos;
             }
             continue;
         }
@@ -284,23 +300,39 @@ bool LoadPrefabLibrary(std::vector<PrefabRecord>& prefabs) {
                 >> prefab.object.y)) {
             return false;
         }
-        const std::streampos objectShapePos = lineStream.tellg();
-        const bool readObjectShapeWithZ =
-            prefabLinesHaveZ &&
-            static_cast<bool>(lineStream >> prefab.object.z
-                >> prefab.object.width
-                >> prefab.object.depth
-                >> prefab.object.height
-                >> prefab.object.health
-                >> prefab.object.blocksMovement
-                >> prefab.object.discovered
-                >> prefab.object.manualLoot);
-        if (!readObjectShapeWithZ) {
-            lineStream.clear();
-            if (objectShapePos != std::streampos(-1)) {
-                lineStream.seekg(objectShapePos);
+        if (prefabLinesHaveRotation) {
+            if (!(lineStream >> prefab.object.z
+                    >> prefab.object.rotationX
+                    >> prefab.object.rotationY
+                    >> prefab.object.rotationZ
+                    >> prefab.object.width
+                    >> prefab.object.depth
+                    >> prefab.object.height
+                    >> prefab.object.health
+                    >> prefab.object.blocksMovement
+                    >> prefab.object.discovered
+                    >> prefab.object.manualLoot)) {
+                return false;
             }
+        } else if (prefabLinesHaveZ) {
+            if (!(lineStream >> prefab.object.z
+                    >> prefab.object.width
+                    >> prefab.object.depth
+                    >> prefab.object.height
+                    >> prefab.object.health
+                    >> prefab.object.blocksMovement
+                    >> prefab.object.discovered
+                    >> prefab.object.manualLoot)) {
+                return false;
+            }
+            prefab.object.rotationX = 0.0f;
+            prefab.object.rotationY = 0.0f;
+            prefab.object.rotationZ = 0.0f;
+        } else {
             prefab.object.z = 0.0f;
+            prefab.object.rotationX = 0.0f;
+            prefab.object.rotationY = 0.0f;
+            prefab.object.rotationZ = 0.0f;
             if (!(lineStream >> prefab.object.width
                     >> prefab.object.depth
                     >> prefab.object.height
@@ -360,7 +392,7 @@ bool SavePrefabLibrary(const std::vector<PrefabRecord>& prefabs) {
         return false;
     }
 
-    file << "# BUNKER_PREFABS_V4\n";
+    file << "# BUNKER_PREFABS_V5\n";
     for (auto prefab : prefabs) {
         NormalizePrefabRecord(prefab);
         const std::string normalizedLayer = NormalizeEditorLayerName(prefab.object.editorLayer);
@@ -375,6 +407,9 @@ bool SavePrefabLibrary(const std::vector<PrefabRecord>& prefabs) {
              << prefab.object.x << ' '
              << prefab.object.y << ' '
              << prefab.object.z << ' '
+             << prefab.object.rotationX << ' '
+             << prefab.object.rotationY << ' '
+             << prefab.object.rotationZ << ' '
              << prefab.object.width << ' '
              << prefab.object.depth << ' '
              << prefab.object.height << ' '

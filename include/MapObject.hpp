@@ -53,6 +53,9 @@ struct MapObject {
     bool semanticAutoCreated = false;
     bool semanticLayoutPinned = false;
     std::string editorLayer;
+    float rotationX = 0.0f;
+    float rotationY = 0.0f;
+    float rotationZ = 0.0f;
 };
 
 }  // namespace bunker

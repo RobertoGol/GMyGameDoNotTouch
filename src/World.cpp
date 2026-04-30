@@ -116,9 +116,20 @@ void AppendUniqueLayer(std::vector<std::string>& layers, std::string layerName) 
     }
 }
 
+float NormalizeDegrees(float value) {
+    value = std::fmod(value, 360.0f);
+    if (value < 0.0f) {
+        value += 360.0f;
+    }
+    return value;
+}
+
 void NormalizeLoadedObject(MapObject& object) {
     object.scriptTag = std::string(NormalizeGameplayDescriptorTag(object.scriptTag));
     object.editorLayer = NormalizeEditorLayerName(object.editorLayer);
+    object.rotationX = NormalizeDegrees(object.rotationX);
+    object.rotationY = NormalizeDegrees(object.rotationY);
+    object.rotationZ = NormalizeDegrees(object.rotationZ);
     if (object.editorLayer.empty()) {
         object.editorLayer = DefaultEditorLayerName(object);
     }
@@ -144,7 +155,7 @@ const char* WorldObjectReferenceFieldLabel(WorldObjectReferenceField field) {
 }
 
 const char* CurrentWorldBinaryFormatLabel() {
-    return "BWL5";
+    return "BWL6";
 }
 
 std::string NormalizeEditorLayerName(std::string_view layerName) {
@@ -222,12 +233,13 @@ bool World::Load(const std::string& path) {
     char header[4]{};
     file.read(header, 4);
     const std::string format(header, 4);
-    const bool hasExtendedObjectData = (format == "BWL2" || format == "BWL3" || format == "BWL4" || format == "BWL5");
-    const bool hasSemanticAuthoringState = (format == "BWL3" || format == "BWL4" || format == "BWL5");
-    const bool hasEditorLayerData = (format == "BWL4" || format == "BWL5");
-    const bool hasPrefabSourceData = (format == "BWL5");
+    const bool hasExtendedObjectData = (format == "BWL2" || format == "BWL3" || format == "BWL4" || format == "BWL5" || format == "BWL6");
+    const bool hasSemanticAuthoringState = (format == "BWL3" || format == "BWL4" || format == "BWL5" || format == "BWL6");
+    const bool hasEditorLayerData = (format == "BWL4" || format == "BWL5" || format == "BWL6");
+    const bool hasPrefabSourceData = (format == "BWL5" || format == "BWL6");
     const bool hasObjectZData = (format != "BWLD");
-    if (format != "BWLD" && format != "BWL2" && format != "BWL3" && format != "BWL4" && format != "BWL5") {
+    const bool hasObjectRotationData = (format == "BWL6");
+    if (format != "BWLD" && format != "BWL2" && format != "BWL3" && format != "BWL4" && format != "BWL5" && format != "BWL6") {
         return false;
     }
 
@@ -276,6 +288,15 @@ bool World::Load(const std::string& path) {
             file.read(reinterpret_cast<char*>(&object.z), sizeof(object.z));
         } else {
             object.z = 0.0f;
+        }
+        if (hasObjectRotationData) {
+            file.read(reinterpret_cast<char*>(&object.rotationX), sizeof(object.rotationX));
+            file.read(reinterpret_cast<char*>(&object.rotationY), sizeof(object.rotationY));
+            file.read(reinterpret_cast<char*>(&object.rotationZ), sizeof(object.rotationZ));
+        } else {
+            object.rotationX = 0.0f;
+            object.rotationY = 0.0f;
+            object.rotationZ = 0.0f;
         }
         file.read(reinterpret_cast<char*>(&object.width), sizeof(object.width));
         file.read(reinterpret_cast<char*>(&object.depth), sizeof(object.depth));
@@ -344,6 +365,9 @@ bool World::Save(const std::string& path) const {
         file.write(reinterpret_cast<const char*>(&object.x), sizeof(object.x));
         file.write(reinterpret_cast<const char*>(&object.y), sizeof(object.y));
         file.write(reinterpret_cast<const char*>(&object.z), sizeof(object.z));
+        file.write(reinterpret_cast<const char*>(&object.rotationX), sizeof(object.rotationX));
+        file.write(reinterpret_cast<const char*>(&object.rotationY), sizeof(object.rotationY));
+        file.write(reinterpret_cast<const char*>(&object.rotationZ), sizeof(object.rotationZ));
         file.write(reinterpret_cast<const char*>(&object.width), sizeof(object.width));
         file.write(reinterpret_cast<const char*>(&object.depth), sizeof(object.depth));
         file.write(reinterpret_cast<const char*>(&object.height), sizeof(object.height));

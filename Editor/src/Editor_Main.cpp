@@ -1218,6 +1218,14 @@ float ViewportPreviewRadians(float degrees) {
     return degrees * (kViewportPreviewPi / 180.0f);
 }
 
+float NormalizeDegrees(float value) {
+    value = std::fmod(value, 360.0f);
+    if (value < 0.0f) {
+        value += 360.0f;
+    }
+    return value;
+}
+
 ViewportPreviewVec3 operator+(const ViewportPreviewVec3& lhs, const ViewportPreviewVec3& rhs) {
     return {lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z};
 }
@@ -1252,6 +1260,40 @@ ViewportPreviewVec3 ViewportPreviewNormalize(const ViewportPreviewVec3& value) {
         return {};
     }
     return value * (1.0f / length);
+}
+
+ViewportPreviewVec3 RotateViewportPreviewLocalPoint(
+    ViewportPreviewVec3 point,
+    float rotationXDegrees,
+    float rotationYDegrees,
+    float rotationZDegrees) {
+    const float rotationX = ViewportPreviewRadians(rotationXDegrees);
+    const float rotationY = ViewportPreviewRadians(rotationYDegrees);
+    const float rotationZ = ViewportPreviewRadians(rotationZDegrees);
+
+    const float cosX = std::cos(rotationX);
+    const float sinX = std::sin(rotationX);
+    point = {
+        point.x,
+        point.y * cosX - point.z * sinX,
+        point.y * sinX + point.z * cosX
+    };
+
+    const float cosY = std::cos(rotationY);
+    const float sinY = std::sin(rotationY);
+    point = {
+        point.x * cosY - point.y * sinY,
+        point.x * sinY + point.y * cosY,
+        point.z
+    };
+
+    const float cosZ = std::cos(rotationZ);
+    const float sinZ = std::sin(rotationZ);
+    return {
+        point.x * cosZ - point.z * sinZ,
+        point.y,
+        point.x * sinZ + point.z * cosZ
+    };
 }
 
 ImU32 ViewportPreviewColorForCategory(bunker::ObjectCategory category) {
@@ -1738,21 +1780,18 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
         const float halfWidth = std::max(0.6f, object.width * 0.5f);
         const float halfDepth = std::max(0.6f, object.depth * 0.5f);
         const float height = object.height;
-        const bool rotateObjectPreview =
-            index == selectedObjectIndex &&
-            gViewportPreviewToolState.activeTool == ViewportPreviewTool::RotatePreview;
-        const float previewAngle = rotateObjectPreview
-            ? ViewportPreviewRadians(gViewportPreviewToolState.objectOrientationPreviewDegrees)
-            : 0.0f;
-        const float previewCos = std::cos(previewAngle);
-        const float previewSin = std::sin(previewAngle);
         const float baseZ = object.z;
         const float topZ = object.z + height;
         auto rotatedCorner = [&](float localX, float localY, float localZ) {
+            const ViewportPreviewVec3 rotatedLocal = RotateViewportPreviewLocalPoint(
+                {localX, localY - baseZ, localZ},
+                object.rotationX,
+                object.rotationY,
+                object.rotationZ);
             return ViewportPreviewVec3{
-                object.x + localX * previewCos - localZ * previewSin,
-                localY,
-                object.y + localX * previewSin + localZ * previewCos
+                object.x + rotatedLocal.x,
+                baseZ + rotatedLocal.y,
+                object.y + rotatedLocal.z
             };
         };
         const std::array<ViewportPreviewVec3, 8> worldCorners{{
@@ -2005,7 +2044,7 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
             drawRotationRing3D(ringCenter, ringRadius, 0, IM_COL32(236, 96, 96, 245), 2.0f);
             drawRotationRing3D(ringCenter, ringRadius * 1.04f, 1, IM_COL32(98, 214, 146, 245), 2.0f);
             drawRotationRing3D(ringCenter, ringRadius * 1.08f, 2, IM_COL32(116, 176, 255, 245), 2.0f);
-            const float orientationRadians = ViewportPreviewRadians(gViewportPreviewToolState.objectOrientationPreviewDegrees);
+            const float orientationRadians = ViewportPreviewRadians(object.rotationZ);
             drawLine3D(
                 ringCenter,
                 {
@@ -2018,7 +2057,7 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
             drawList->AddText(
                 ImVec2(visual.topCenter.x + 12.0f, visual.topCenter.y + 22.0f),
                 IM_COL32(236, 220, 150, 245),
-                "Rotation preview");
+                "Rotation");
         }
 
         if (gViewportPreviewTransientState.orientationPreviewObjectIndex == visual.index) {
@@ -2213,6 +2252,17 @@ int main() {
     int validationSeverityFilter = 0;
     bool validationSelectedObjectOnly = false;
     char validationIssueSearchInput[128] = "";
+    struct RotationRepeatState {
+        ViewportPreviewAxis axis = ViewportPreviewAxis::None;
+        int direction = 0;
+        float heldTime = 0.0f;
+        float repeatTimer = 0.0f;
+    };
+    RotationRepeatState rotationRepeatState;
+    constexpr float kRotationStepDegrees = 4.0f;
+    constexpr float kRotationInitialRepeatInterval = 0.25f;
+    constexpr float kRotationMinimumRepeatInterval = 0.05f;
+    constexpr float kRotationAccelerationSeconds = 1.5f;
 
     bunker::World editorWorld;
     LoadOrCreateEditorWorld(editorWorld, statusText);
@@ -2610,6 +2660,9 @@ int main() {
                     beforeObject.x != afterObject.x ||
                     beforeObject.y != afterObject.y ||
                     beforeObject.z != afterObject.z ||
+                    beforeObject.rotationX != afterObject.rotationX ||
+                    beforeObject.rotationY != afterObject.rotationY ||
+                    beforeObject.rotationZ != afterObject.rotationZ ||
                     beforeObject.width != afterObject.width ||
                     beforeObject.depth != afterObject.depth ||
                     beforeObject.height != afterObject.height ||
@@ -2753,16 +2806,17 @@ int main() {
     };
     auto nudgeSelectedObjectZ = [&](float direction) {
         if (selectedObjectIndex < 0 || selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+            statusText = "Select an object before transform.";
             return false;
         }
 
         auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
         if (isLayerLockedForObject(selectedObject)) {
-            statusText = "Selected object layer is locked; vertical movement is disabled.";
+            statusText = "Selected object layer is locked; transform is disabled.";
             return false;
         }
         if (!isLayerVisibleForObject(selectedObject)) {
-            statusText = "Selected object layer is hidden; vertical movement is disabled.";
+            statusText = "Selected object layer is hidden; transform is disabled.";
             return false;
         }
 
@@ -2771,9 +2825,110 @@ int main() {
         if (beforeObject.z != selectedObject.z) {
             undoStack.PushObjectUpdated("Move object vertically", beforeObject, selectedObject, selectedObjectIndex);
         }
-        statusText = "Moved selected object to Z=" + std::to_string(selectedObject.z) + ".";
+        statusText = direction > 0.0f
+            ? "Raised selected object to Z=" + std::to_string(selectedObject.z) + "."
+            : "Lowered selected object to Z=" + std::to_string(selectedObject.z) + ".";
         ViewportPreviewShowOverlayMessage(statusText.c_str());
         return beforeObject.z != selectedObject.z;
+    };
+    auto groundCameraBasis = [&]() {
+        const ViewportPreviewCamera keyboardCamera = BuildViewportPreviewCamera(
+            previewViewport,
+            gViewportPreviewOrbitState,
+            ImVec2(720.0f, 418.0f));
+        ViewportPreviewVec3 forwardGround = ViewportPreviewNormalize({keyboardCamera.forward.x, 0.0f, keyboardCamera.forward.z});
+        ViewportPreviewVec3 rightGround = ViewportPreviewNormalize({keyboardCamera.right.x, 0.0f, keyboardCamera.right.z});
+        if (ViewportPreviewLength(forwardGround) <= 0.0001f) {
+            forwardGround = ViewportPreviewNormalize({
+                -std::cos(previewViewport.offsetX),
+                0.0f,
+                -std::sin(previewViewport.offsetX)
+            });
+        }
+        if (ViewportPreviewLength(rightGround) <= 0.0001f) {
+            rightGround = ViewportPreviewNormalize(ViewportPreviewCross(forwardGround, ViewportPreviewVec3{0.0f, 1.0f, 0.0f}));
+        }
+        return std::array<ViewportPreviewVec3, 2>{forwardGround, rightGround};
+    };
+    auto moveSelectedObjectCameraRelative = [&](const ViewportPreviewVec3& direction, const char* directionLabel) {
+        if (selectedObjectIndex < 0 || selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+            statusText = "Select an object before transform.";
+            return false;
+        }
+
+        auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+        if (isLayerLockedForObject(selectedObject)) {
+            statusText = "Selected object layer is locked; transform is disabled.";
+            return false;
+        }
+        if (!isLayerVisibleForObject(selectedObject)) {
+            statusText = "Selected object layer is hidden; transform is disabled.";
+            return false;
+        }
+
+        const bunker::MapObject beforeObject = selectedObject;
+        const float moveStep = resolvedSnapStep();
+        selectedObject.x = snapCoordinate(selectedObject.x + direction.x * moveStep);
+        selectedObject.y = snapCoordinate(selectedObject.y + direction.z * moveStep);
+        placeX = selectedObject.x;
+        placeY = selectedObject.y;
+        if (beforeObject.x != selectedObject.x || beforeObject.y != selectedObject.y) {
+            undoStack.PushObjectUpdated("Move object camera-relative", beforeObject, selectedObject, selectedObjectIndex);
+        }
+        statusText = "Moved selected object camera-" + std::string(directionLabel) +
+            " to X=" + std::to_string(selectedObject.x) +
+            ", Y=" + std::to_string(selectedObject.y) +
+            ", Z=" + std::to_string(selectedObject.z) + ".";
+        ViewportPreviewShowOverlayMessage(statusText.c_str());
+        return beforeObject.x != selectedObject.x || beforeObject.y != selectedObject.y;
+    };
+    auto rotateSelectedObject = [&](ViewportPreviewAxis axis, int direction) {
+        if (selectedObjectIndex < 0 || selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+            statusText = "Select an object before transform.";
+            return false;
+        }
+
+        auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+        if (isLayerLockedForObject(selectedObject)) {
+            statusText = "Selected object layer is locked; transform is disabled.";
+            return false;
+        }
+        if (!isLayerVisibleForObject(selectedObject)) {
+            statusText = "Selected object layer is hidden; transform is disabled.";
+            return false;
+        }
+
+        const bunker::MapObject beforeObject = selectedObject;
+        float* value = nullptr;
+        const char* axisLabel = "X";
+        switch (axis) {
+            case ViewportPreviewAxis::X:
+                value = &selectedObject.rotationX;
+                axisLabel = "X";
+                break;
+            case ViewportPreviewAxis::Y:
+                value = &selectedObject.rotationY;
+                axisLabel = "Y";
+                break;
+            case ViewportPreviewAxis::Z:
+                value = &selectedObject.rotationZ;
+                axisLabel = "Z";
+                break;
+            case ViewportPreviewAxis::None:
+            default:
+                return false;
+        }
+
+        *value = NormalizeDegrees(*value + static_cast<float>(direction) * kRotationStepDegrees);
+        gViewportPreviewToolState.activeTool = ViewportPreviewTool::RotatePreview;
+        gViewportPreviewToolState.activeAxis = axis;
+        gViewportPreviewToolState.objectOrientationPreviewDegrees = selectedObject.rotationZ;
+        gViewportPreviewToolState.orientationPreviewExpiresAt = ImGui::GetTime() + 2.75;
+        undoStack.PushObjectUpdated("Rotate object", beforeObject, selectedObject, selectedObjectIndex);
+        statusText = "Rotated selected object around " + std::string(axisLabel) +
+            " to " + std::to_string(static_cast<int>(*value)) + " degrees.";
+        ViewportPreviewShowOverlayMessage(statusText.c_str());
+        return true;
     };
     refreshDraftLayerForPreset();
     refreshWorkspaceExportArtifactPreview();
@@ -2881,72 +3036,70 @@ int main() {
             auto keypadPressed = [](ImGuiKey key) {
                 return ImGui::IsKeyPressed(key);
             };
-            auto keypadDirection = [&]() {
-                ImVec2 direction(0.0f, 0.0f);
-                if (keypadPressed(ImGuiKey_Keypad1)) { direction = ImVec2(-1.0f, -1.0f); }
-                if (keypadPressed(ImGuiKey_Keypad2)) { direction = ImVec2(0.0f, -1.0f); }
-                if (keypadPressed(ImGuiKey_Keypad3)) { direction = ImVec2(1.0f, -1.0f); }
-                if (keypadPressed(ImGuiKey_Keypad4)) { direction = ImVec2(-1.0f, 0.0f); }
-                if (keypadPressed(ImGuiKey_Keypad6)) { direction = ImVec2(1.0f, 0.0f); }
-                if (keypadPressed(ImGuiKey_Keypad7)) { direction = ImVec2(-1.0f, 1.0f); }
-                if (keypadPressed(ImGuiKey_Keypad8)) { direction = ImVec2(0.0f, 1.0f); }
-                if (keypadPressed(ImGuiKey_Keypad9)) { direction = ImVec2(1.0f, 1.0f); }
-                return direction;
+            auto keypadDown = [](ImGuiKey key) {
+                return ImGui::IsKeyDown(key);
             };
-            auto keypadOrientationDegrees = [&]() -> std::optional<float> {
-                if (keypadPressed(ImGuiKey_Keypad8)) { return 90.0f; }
-                if (keypadPressed(ImGuiKey_Keypad9)) { return 45.0f; }
-                if (keypadPressed(ImGuiKey_Keypad6)) { return 0.0f; }
-                if (keypadPressed(ImGuiKey_Keypad3)) { return 315.0f; }
-                if (keypadPressed(ImGuiKey_Keypad2)) { return 270.0f; }
-                if (keypadPressed(ImGuiKey_Keypad1)) { return 225.0f; }
-                if (keypadPressed(ImGuiKey_Keypad4)) { return 180.0f; }
-                if (keypadPressed(ImGuiKey_Keypad7)) { return 135.0f; }
-                if (keypadPressed(ImGuiKey_Keypad5)) { return 0.0f; }
-                return std::nullopt;
+            auto rotationKey = [&]() {
+                struct RotationKeyState {
+                    ViewportPreviewAxis axis = ViewportPreviewAxis::None;
+                    int direction = 0;
+                    bool pressed = false;
+                    bool down = false;
+                };
+
+                if (keypadDown(ImGuiKey_Keypad8)) { return RotationKeyState{ViewportPreviewAxis::X, 1, keypadPressed(ImGuiKey_Keypad8), true}; }
+                if (keypadDown(ImGuiKey_Keypad2)) { return RotationKeyState{ViewportPreviewAxis::X, -1, keypadPressed(ImGuiKey_Keypad2), true}; }
+                if (keypadDown(ImGuiKey_Keypad6)) { return RotationKeyState{ViewportPreviewAxis::Z, 1, keypadPressed(ImGuiKey_Keypad6), true}; }
+                if (keypadDown(ImGuiKey_Keypad4)) { return RotationKeyState{ViewportPreviewAxis::Z, -1, keypadPressed(ImGuiKey_Keypad4), true}; }
+                if (keypadDown(ImGuiKey_Keypad9)) { return RotationKeyState{ViewportPreviewAxis::Y, 1, keypadPressed(ImGuiKey_Keypad9), true}; }
+                if (keypadDown(ImGuiKey_Keypad7)) { return RotationKeyState{ViewportPreviewAxis::Y, -1, keypadPressed(ImGuiKey_Keypad7), true}; }
+                return RotationKeyState{};
             };
-            if (selectedObjectIndex >= 0 &&
-                selectedObjectIndex < static_cast<int>(editorWorld.objects.size()) &&
-                gViewportPreviewToolState.activeTool == ViewportPreviewTool::MovePreview) {
-                const ImVec2 moveDirection = keypadDirection();
-                if (moveDirection.x != 0.0f || moveDirection.y != 0.0f) {
-                    auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
-                    if (isLayerLockedForObject(selectedObject)) {
-                        statusText = "Selected object layer is locked; G+NumPad move is disabled.";
-                    } else if (!isLayerVisibleForObject(selectedObject)) {
-                        statusText = "Selected object layer is hidden; G+NumPad move is disabled.";
+            if (frameIo.KeyAlt == false && ImGui::IsKeyDown(ImGuiKey_O)) {
+                const auto key = rotationKey();
+                if (key.down) {
+                    const bool newRotationKey =
+                        rotationRepeatState.axis != key.axis ||
+                        rotationRepeatState.direction != key.direction;
+                    if (key.pressed || newRotationKey) {
+                        rotateSelectedObject(key.axis, key.direction);
+                        rotationRepeatState.axis = key.axis;
+                        rotationRepeatState.direction = key.direction;
+                        rotationRepeatState.heldTime = 0.0f;
+                        rotationRepeatState.repeatTimer = 0.0f;
                     } else {
-                        const float moveStep = resolvedSnapStep();
-                        selectedObject.x = snapCoordinate(selectedObject.x + moveDirection.x * moveStep);
-                        selectedObject.y = snapCoordinate(selectedObject.y + moveDirection.y * moveStep);
-                        placeX = selectedObject.x;
-                        placeY = selectedObject.y;
-                        if (moveDirection.x != 0.0f && moveDirection.y == 0.0f) {
-                            gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::X;
-                        } else if (moveDirection.y != 0.0f && moveDirection.x == 0.0f) {
-                            gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Y;
-                        } else {
-                            gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::None;
+                        rotationRepeatState.heldTime += frameIo.DeltaTime;
+                        rotationRepeatState.repeatTimer += frameIo.DeltaTime;
+                        const float accelerationT = std::clamp(
+                            rotationRepeatState.heldTime / kRotationAccelerationSeconds,
+                            0.0f,
+                            1.0f);
+                        const float repeatInterval =
+                            kRotationInitialRepeatInterval +
+                            (kRotationMinimumRepeatInterval - kRotationInitialRepeatInterval) * accelerationT;
+                        if (rotationRepeatState.repeatTimer >= repeatInterval) {
+                            rotateSelectedObject(key.axis, key.direction);
+                            rotationRepeatState.repeatTimer = 0.0f;
                         }
-                        statusText = "Moved selected object with G+NumPad to X=" +
-                            std::to_string(selectedObject.x) + " Y=" + std::to_string(selectedObject.y) + ".";
-                        ViewportPreviewShowOverlayMessage("Moved selected object with G+NumPad.");
                     }
+                } else {
+                    rotationRepeatState = {};
                 }
-            }
-            if (selectedObjectIndex >= 0 &&
-                selectedObjectIndex < static_cast<int>(editorWorld.objects.size()) &&
-                frameIo.KeyAlt == false &&
-                ImGui::IsKeyDown(ImGuiKey_O)) {
-                const std::optional<float> orientationDegrees = keypadOrientationDegrees();
-                if (orientationDegrees.has_value()) {
-                    gViewportPreviewToolState.activeTool = ViewportPreviewTool::RotatePreview;
-                    gViewportPreviewToolState.objectOrientationPreviewDegrees = *orientationDegrees;
-                    gViewportPreviewToolState.orientationPreviewExpiresAt = ImGui::GetTime() + 2.75;
-                    statusText = "Object orientation preview: " +
-                        std::to_string(static_cast<int>(*orientationDegrees)) +
-                        " degrees. Rotation is not persisted because MapObject has no rotation field.";
-                    ViewportPreviewShowOverlayMessage(statusText.c_str());
+            } else {
+                rotationRepeatState = {};
+                const auto [forwardGround, rightGround] = groundCameraBasis();
+                if (keypadPressed(ImGuiKey_Keypad8)) {
+                    moveSelectedObjectCameraRelative(forwardGround, "forward");
+                    gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Y;
+                } else if (keypadPressed(ImGuiKey_Keypad2)) {
+                    moveSelectedObjectCameraRelative(forwardGround * -1.0f, "backward");
+                    gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Y;
+                } else if (keypadPressed(ImGuiKey_Keypad4)) {
+                    moveSelectedObjectCameraRelative(rightGround * -1.0f, "left");
+                    gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::X;
+                } else if (keypadPressed(ImGuiKey_Keypad6)) {
+                    moveSelectedObjectCameraRelative(rightGround, "right");
+                    gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::X;
                 }
             }
 
@@ -2992,15 +3145,11 @@ int main() {
                     previewViewport.offsetY = ViewportPreviewClampPitch(previewViewport.offsetY - 0.035f);
                 }
             }
-            if (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd)) {
+            if (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract) || ImGui::IsKeyPressed(ImGuiKey_Minus)) {
                 nudgeSelectedObjectZ(1.0f);
-            } else if (ImGui::IsKeyPressed(ImGuiKey_Equal)) {
-                previewViewport.zoom = ViewportPreviewClampZoom(previewViewport.zoom + 0.12f);
             }
-            if (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) {
+            if (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd) || ImGui::IsKeyPressed(ImGuiKey_Equal)) {
                 nudgeSelectedObjectZ(-1.0f);
-            } else if (ImGui::IsKeyPressed(ImGuiKey_Minus)) {
-                previewViewport.zoom = ViewportPreviewClampZoom(previewViewport.zoom - 0.12f);
             }
             if (frameIo.KeyShift &&
                 ImGui::IsKeyPressed(ImGuiKey_P) &&
@@ -4489,6 +4638,16 @@ int main() {
                 if (ImGui::InputFloat("Edit Z", &selectedObject.z, 0.5f, 2.0f, "%.1f") && snapToGrid) {
                     selectedObject.z = snapCoordinate(selectedObject.z);
                 }
+                bool rotationEdited = false;
+                rotationEdited = ImGui::InputFloat("Rotation X", &selectedObject.rotationX, 4.0f, 16.0f, "%.1f") || rotationEdited;
+                rotationEdited = ImGui::InputFloat("Rotation Y", &selectedObject.rotationY, 4.0f, 16.0f, "%.1f") || rotationEdited;
+                rotationEdited = ImGui::InputFloat("Rotation Z", &selectedObject.rotationZ, 4.0f, 16.0f, "%.1f") || rotationEdited;
+                if (rotationEdited) {
+                    selectedObject.rotationX = NormalizeDegrees(selectedObject.rotationX);
+                    selectedObject.rotationY = NormalizeDegrees(selectedObject.rotationY);
+                    selectedObject.rotationZ = NormalizeDegrees(selectedObject.rotationZ);
+                    statusText = "Updated selected object rotation.";
+                }
                 if (ImGui::InputFloat("Width", &selectedObject.width, 0.1f, 0.5f, "%.1f")) {
                     selectedObject.width = snapDimension(selectedObject.width);
                 }
@@ -5887,6 +6046,9 @@ int main() {
                 frameBeginObject.x != frameEndObject.x ||
                 frameBeginObject.y != frameEndObject.y ||
                 frameBeginObject.z != frameEndObject.z ||
+                frameBeginObject.rotationX != frameEndObject.rotationX ||
+                frameBeginObject.rotationY != frameEndObject.rotationY ||
+                frameBeginObject.rotationZ != frameEndObject.rotationZ ||
                 frameBeginObject.width != frameEndObject.width ||
                 frameBeginObject.depth != frameEndObject.depth ||
                 frameBeginObject.height != frameEndObject.height ||
