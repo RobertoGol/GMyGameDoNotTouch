@@ -2167,7 +2167,7 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
     drawList->AddText(
         ImVec2(origin.x + 10.0f, origin.y + size.y - 22.0f),
         IM_COL32(150, 164, 180, 215),
-        "LMB select | G+NumPad move | O+NumPad orient | Tab select | Arrows camera | Shift+P drop | Esc clear");
+        "LMB select | NumPad move | PgUp/PgDn depth | -/+ Z | O+NumPad rotate | Num0/Shift+F focus | Shift+P drop | MMB orbit | Wheel zoom");
 
     ImGui::EndChild();
     return interactionResult;
@@ -2258,11 +2258,20 @@ int main() {
         float heldTime = 0.0f;
         float repeatTimer = 0.0f;
     };
+    struct MovementRepeatState {
+        int command = 0;
+        float heldTime = 0.0f;
+        float repeatTimer = 0.0f;
+    };
     RotationRepeatState rotationRepeatState;
+    MovementRepeatState movementRepeatState;
     constexpr float kRotationStepDegrees = 4.0f;
     constexpr float kRotationInitialRepeatInterval = 0.25f;
     constexpr float kRotationMinimumRepeatInterval = 0.05f;
     constexpr float kRotationAccelerationSeconds = 1.5f;
+    constexpr float kMovementInitialRepeatInterval = 0.25f;
+    constexpr float kMovementMinimumRepeatInterval = 0.05f;
+    constexpr float kMovementAccelerationSeconds = 1.5f;
 
     bunker::World editorWorld;
     LoadOrCreateEditorWorld(editorWorld, statusText);
@@ -2989,23 +2998,35 @@ int main() {
             if (ImGui::IsKeyPressed(ImGuiKey_Tab)) {
                 selectRelativeObject(frameIo.KeyShift ? -1 : 1);
             }
+            if (ImGui::IsKeyPressed(ImGuiKey_Keypad0) ||
+                (frameIo.KeyShift && ImGui::IsKeyPressed(ImGuiKey_F))) {
+                if (selectedObjectIndex < 0 ||
+                    selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+                    statusText = "Select an object before focusing.";
+                    ViewportPreviewShowOverlayMessage(statusText.c_str());
+                } else {
+                    focusObjectInEditor(selectedObjectIndex, 1.45f);
+                    statusText = "Focused selected object.";
+                    ViewportPreviewShowOverlayMessage(statusText.c_str());
+                }
+            }
             if (ImGui::IsKeyPressed(ImGuiKey_G) && selectedObjectIndex >= 0) {
                 gViewportPreviewToolState.activeTool = ViewportPreviewTool::MovePreview;
                 gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::None;
-                statusText = "Move mode: use NumPad 1-9 to move selected object on X/Y.";
+                statusText = "Move mode: use NumPad 8/2/4/6 or PgUp/PgDn for camera-relative movement.";
                 ViewportPreviewShowOverlayMessage(statusText.c_str());
             }
             if (ImGui::IsKeyPressed(ImGuiKey_R) && selectedObjectIndex >= 0) {
                 gViewportPreviewToolState.activeTool = ViewportPreviewTool::RotatePreview;
                 gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::None;
-                statusText = "Rotation gizmo preview: object rotation persistence is a future transform milestone.";
+                statusText = "Rotation mode: hold O and press NumPad to rotate selected object.";
                 ViewportPreviewShowOverlayMessage(statusText.c_str());
             }
             if (ImGui::IsKeyPressed(ImGuiKey_O) && selectedObjectIndex >= 0) {
                 gViewportPreviewToolState.activeTool = ViewportPreviewTool::RotatePreview;
                 gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::None;
                 gViewportPreviewToolState.orientationPreviewExpiresAt = ImGui::GetTime() + 2.75;
-                statusText = "Orientation mode: hold O and press NumPad to preview object facing.";
+                statusText = "Rotation mode: hold O and press NumPad to rotate selected object.";
                 ViewportPreviewShowOverlayMessage(statusText.c_str());
             }
             if (ImGui::IsKeyPressed(ImGuiKey_O) && selectedObjectIndex < 0) {
@@ -3055,7 +3076,52 @@ int main() {
                 if (keypadDown(ImGuiKey_Keypad7)) { return RotationKeyState{ViewportPreviewAxis::Y, -1, keypadPressed(ImGuiKey_Keypad7), true}; }
                 return RotationKeyState{};
             };
+            auto movementKey = [&]() {
+                struct MovementKeyState {
+                    int command = 0;
+                    bool pressed = false;
+                    bool down = false;
+                };
+
+                if (keypadDown(ImGuiKey_Keypad8)) { return MovementKeyState{1, keypadPressed(ImGuiKey_Keypad8), true}; }
+                if (keypadDown(ImGuiKey_PageUp)) { return MovementKeyState{1, keypadPressed(ImGuiKey_PageUp), true}; }
+                if (keypadDown(ImGuiKey_Keypad2)) { return MovementKeyState{2, keypadPressed(ImGuiKey_Keypad2), true}; }
+                if (keypadDown(ImGuiKey_PageDown)) { return MovementKeyState{2, keypadPressed(ImGuiKey_PageDown), true}; }
+                if (keypadDown(ImGuiKey_Keypad4)) { return MovementKeyState{3, keypadPressed(ImGuiKey_Keypad4), true}; }
+                if (keypadDown(ImGuiKey_Keypad6)) { return MovementKeyState{4, keypadPressed(ImGuiKey_Keypad6), true}; }
+                if (keypadDown(ImGuiKey_KeypadSubtract)) { return MovementKeyState{5, keypadPressed(ImGuiKey_KeypadSubtract), true}; }
+                if (keypadDown(ImGuiKey_Minus)) { return MovementKeyState{5, keypadPressed(ImGuiKey_Minus), true}; }
+                if (keypadDown(ImGuiKey_KeypadAdd)) { return MovementKeyState{6, keypadPressed(ImGuiKey_KeypadAdd), true}; }
+                if (keypadDown(ImGuiKey_Equal)) { return MovementKeyState{6, keypadPressed(ImGuiKey_Equal), true}; }
+                return MovementKeyState{};
+            };
+            auto applyMovementCommand = [&](int command) {
+                const auto [forwardGround, rightGround] = groundCameraBasis();
+                switch (command) {
+                    case 1:
+                        gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Y;
+                        return moveSelectedObjectCameraRelative(forwardGround, "forward");
+                    case 2:
+                        gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Y;
+                        return moveSelectedObjectCameraRelative(forwardGround * -1.0f, "backward");
+                    case 3:
+                        gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::X;
+                        return moveSelectedObjectCameraRelative(rightGround * -1.0f, "left");
+                    case 4:
+                        gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::X;
+                        return moveSelectedObjectCameraRelative(rightGround, "right");
+                    case 5:
+                        gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Z;
+                        return nudgeSelectedObjectZ(1.0f);
+                    case 6:
+                        gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Z;
+                        return nudgeSelectedObjectZ(-1.0f);
+                    default:
+                        return false;
+                }
+            };
             if (frameIo.KeyAlt == false && ImGui::IsKeyDown(ImGuiKey_O)) {
+                movementRepeatState = {};
                 const auto key = rotationKey();
                 if (key.down) {
                     const bool newRotationKey =
@@ -3087,19 +3153,31 @@ int main() {
                 }
             } else {
                 rotationRepeatState = {};
-                const auto [forwardGround, rightGround] = groundCameraBasis();
-                if (keypadPressed(ImGuiKey_Keypad8)) {
-                    moveSelectedObjectCameraRelative(forwardGround, "forward");
-                    gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Y;
-                } else if (keypadPressed(ImGuiKey_Keypad2)) {
-                    moveSelectedObjectCameraRelative(forwardGround * -1.0f, "backward");
-                    gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Y;
-                } else if (keypadPressed(ImGuiKey_Keypad4)) {
-                    moveSelectedObjectCameraRelative(rightGround * -1.0f, "left");
-                    gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::X;
-                } else if (keypadPressed(ImGuiKey_Keypad6)) {
-                    moveSelectedObjectCameraRelative(rightGround, "right");
-                    gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::X;
+                const auto key = movementKey();
+                if (key.down) {
+                    const bool newMovementKey = movementRepeatState.command != key.command;
+                    if (key.pressed || newMovementKey) {
+                        applyMovementCommand(key.command);
+                        movementRepeatState.command = key.command;
+                        movementRepeatState.heldTime = 0.0f;
+                        movementRepeatState.repeatTimer = 0.0f;
+                    } else {
+                        movementRepeatState.heldTime += frameIo.DeltaTime;
+                        movementRepeatState.repeatTimer += frameIo.DeltaTime;
+                        const float accelerationT = std::clamp(
+                            movementRepeatState.heldTime / kMovementAccelerationSeconds,
+                            0.0f,
+                            1.0f);
+                        const float repeatInterval =
+                            kMovementInitialRepeatInterval +
+                            (kMovementMinimumRepeatInterval - kMovementInitialRepeatInterval) * accelerationT;
+                        if (movementRepeatState.repeatTimer >= repeatInterval) {
+                            applyMovementCommand(key.command);
+                            movementRepeatState.repeatTimer = 0.0f;
+                        }
+                    }
+                } else {
+                    movementRepeatState = {};
                 }
             }
 
@@ -3144,12 +3222,6 @@ int main() {
                 if (arrowDown) {
                     previewViewport.offsetY = ViewportPreviewClampPitch(previewViewport.offsetY - 0.035f);
                 }
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract) || ImGui::IsKeyPressed(ImGuiKey_Minus)) {
-                nudgeSelectedObjectZ(1.0f);
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd) || ImGui::IsKeyPressed(ImGuiKey_Equal)) {
-                nudgeSelectedObjectZ(-1.0f);
             }
             if (frameIo.KeyShift &&
                 ImGui::IsKeyPressed(ImGuiKey_P) &&
@@ -5184,10 +5256,10 @@ int main() {
                 editorLayerStates,
                 previewRenderOptions);
             if (gViewportPreviewTransientState.moveGizmoStatusRequested) {
-                statusText = "Move gizmo preview: use NumPad for X/Y and Keypad +/- for Z.";
+                statusText = "Move preview: use NumPad/PgUp/PgDn for camera-relative movement and -/+ for Z.";
             }
             if (gViewportPreviewTransientState.rotationGizmoStatusRequested) {
-                statusText = "Rotation gizmo preview: object rotation persistence is a future transform milestone.";
+                statusText = "Rotation preview: hold O and press NumPad to rotate selected object.";
             }
             if (gViewportPreviewTransientState.orientationPreviewStatusRequested) {
                 statusText = std::string("Transform Orientation preview: ") +
