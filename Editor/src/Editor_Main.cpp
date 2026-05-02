@@ -2311,6 +2311,7 @@ int main() {
     int presetIndex = 0;
     int selectedObjectIndex = -1;
     int selectedPrefabIndex = -1;
+    int objectWindowCategoryIndex = 0;
     int selectedImportedConceptIndex = -1;
     int objectCategoryFilter = -1;
     bool useDraftInteractionOverride = false;
@@ -3547,9 +3548,8 @@ int main() {
         }
 
         if (showObjectWindow) {
-            setTopLevelWindowDefaults(ImVec2(16.0f, 40.0f), ImVec2(320.0f, 420.0f));
+            setTopLevelWindowDefaults(ImVec2(16.0f, 40.0f), ImVec2(680.0f, 500.0f));
             ImGui::Begin("Object Window", &showObjectWindow, ImGuiWindowFlags_NoCollapse);
-            ImGui::TextDisabled("Content browser shell; drag/drop placement path is not final.");
             ImGui::InputTextWithHint(
                 "Filter",
                 "Search presets, prefab labels, IDs, or target types",
@@ -3557,116 +3557,244 @@ int main() {
                 IM_ARRAYSIZE(objectWindowFilterInput));
             ImGui::Separator();
 
-            std::vector<std::string> prefabTargetTypes;
-            prefabTargetTypes.reserve(savedPrefabs.size());
-            for (const auto& prefab : savedPrefabs) {
-                if (prefab.targetType.empty()) {
-                    continue;
+            struct ObjectWindowCategory {
+                const char* label;
+                int parent = -1;
+            };
+            const std::array<ObjectWindowCategory, 18> objectWindowCategories = {{
+                {"All", -1},
+                {"WorldObjects", -1},
+                {"Static", 1},
+                {"MovableStatic", 1},
+                {"Door", 1},
+                {"Activator", 1},
+                {"Container", 1},
+                {"Furniture", 1},
+                {"Terminal", 1},
+                {"Flora", 1},
+                {"Lights", -1},
+                {"Items", -1},
+                {"Ammo", 11},
+                {"Armor", 11},
+                {"Clothing", 11},
+                {"Key", 11},
+                {"Vehicles", -1},
+                {"Markers", -1},
+            }};
+            constexpr int kObjectWindowPrefabsCategory = 18;
+            constexpr int kObjectWindowProjectCustomCategory = 19;
+            const auto objectWindowCategoryLabel = [&](int categoryIndex) {
+                if (categoryIndex >= 0 && categoryIndex < static_cast<int>(objectWindowCategories.size())) {
+                    return objectWindowCategories[static_cast<std::size_t>(categoryIndex)].label;
                 }
-                const bool alreadyPresent = std::any_of(
-                    prefabTargetTypes.begin(),
-                    prefabTargetTypes.end(),
-                    [&](const std::string& targetType) { return targetType == prefab.targetType; });
-                if (!alreadyPresent) {
-                    prefabTargetTypes.push_back(prefab.targetType);
+                if (categoryIndex == kObjectWindowPrefabsCategory) {
+                    return "Prefabs";
                 }
-            }
-
-            ImGui::BeginChild("ObjectWindowCategories", ImVec2(0.0f, 112.0f), true);
-            ImGui::Text("Categories");
-            if (ImGui::TreeNodeEx("Draft Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
-                for (int presetCategoryIndex = 0; presetCategoryIndex < IM_ARRAYSIZE(objectPresetLabels); ++presetCategoryIndex) {
-                    const bool selected = (presetIndex == presetCategoryIndex);
-                    if (ImGui::Selectable((std::string("Preset :: ") + objectPresetLabels[presetCategoryIndex]).c_str(), selected)) {
-                        presetIndex = presetCategoryIndex;
-                        selectedPrefabIndex = -1;
-                        refreshDraftLayerForPreset();
-                        statusText = "Object Window selected base object. Placement path pending.";
-                    }
+                if (categoryIndex == kObjectWindowProjectCustomCategory) {
+                    return "Project Custom";
                 }
-                ImGui::TreePop();
-            }
-            if (ImGui::TreeNodeEx("Prefab Library", ImGuiTreeNodeFlags_DefaultOpen)) {
-                if (savedPrefabs.empty()) {
-                    ImGui::TextDisabled("No prefab records loaded.");
-                } else {
-                    for (const auto& targetType : prefabTargetTypes) {
-                        ImGui::BulletText("%s", targetType.c_str());
-                    }
+                return "All";
+            };
+            const auto presetMatchesObjectWindowCategory = [&](const ObjectPreset& preset, int categoryIndex) {
+                if (categoryIndex == 0 || categoryIndex == kObjectWindowProjectCustomCategory) {
+                    return true;
                 }
-                ImGui::TreePop();
-            }
-            ImGui::EndChild();
-
-            ImGui::Text("Base Objects / Prefabs");
-            ImGui::BeginChild("ObjectWindowList", ImVec2(0.0f, 158.0f), true);
-            for (int index = 0; index < IM_ARRAYSIZE(objectPresetLabels); ++index) {
+                switch (categoryIndex) {
+                case 2:
+                    return preset.category == bunker::ObjectCategory::Structure ||
+                        preset.category == bunker::ObjectCategory::Hangar;
+                case 6:
+                    return preset.category == bunker::ObjectCategory::Container;
+                case 8:
+                    return preset.category == bunker::ObjectCategory::Terminal;
+                case 16:
+                    return preset.category == bunker::ObjectCategory::Vehicle;
+                case 17:
+                    return preset.category == bunker::ObjectCategory::Landmark ||
+                        preset.category == bunker::ObjectCategory::ResourceNode;
+                default:
+                    return false;
+                }
+            };
+            const auto prefabMatchesObjectWindowCategory = [&](const SavedPrefab& prefab, int categoryIndex) {
+                if (categoryIndex == 0 || categoryIndex == kObjectWindowPrefabsCategory) {
+                    return true;
+                }
+                switch (categoryIndex) {
+                case 2:
+                    return prefab.object.category == bunker::ObjectCategory::Structure ||
+                        prefab.object.category == bunker::ObjectCategory::Hangar;
+                case 6:
+                    return prefab.object.category == bunker::ObjectCategory::Container;
+                case 8:
+                    return prefab.object.category == bunker::ObjectCategory::Terminal;
+                case 16:
+                    return prefab.object.category == bunker::ObjectCategory::Vehicle;
+                case 17:
+                    return prefab.object.category == bunker::ObjectCategory::Landmark ||
+                        prefab.object.category == bunker::ObjectCategory::ResourceNode;
+                case kObjectWindowProjectCustomCategory:
+                    return prefab.targetType.empty();
+                default:
+                    return false;
+                }
+            };
+            const auto presetMatchesSearch = [&](int index) {
                 const auto& preset = objectPresets[static_cast<std::size_t>(index)];
                 const std::string presetSearchText =
                     std::string(objectPresetLabels[index]) + " " +
                     ToLabel(preset.category) + " " +
                     ToLabel(preset.interaction);
-                if (!ContainsCaseInsensitive(presetSearchText, objectWindowFilterInput)) {
+                return ContainsCaseInsensitive(presetSearchText, objectWindowFilterInput);
+            };
+            const auto prefabMatchesSearch = [&](const SavedPrefab& prefab) {
+                const std::string prefabSearchText =
+                    prefab.label + " " +
+                    prefab.id + " " +
+                    prefab.targetType + " " +
+                    prefab.object.displayName + " " +
+                    ToLabel(prefab.object.category) + " " +
+                    ToLabel(prefab.object.interaction);
+                return ContainsCaseInsensitive(prefabSearchText, objectWindowFilterInput);
+            };
+            const auto countObjectWindowCategoryItems = [&](int categoryIndex) {
+                int count = 0;
+                for (int index = 0; index < IM_ARRAYSIZE(objectPresetLabels); ++index) {
+                    const auto& preset = objectPresets[static_cast<std::size_t>(index)];
+                    if (presetMatchesObjectWindowCategory(preset, categoryIndex) && presetMatchesSearch(index)) {
+                        ++count;
+                    }
+                }
+                for (const auto& prefab : savedPrefabs) {
+                    if (prefabMatchesObjectWindowCategory(prefab, categoryIndex) && prefabMatchesSearch(prefab)) {
+                        ++count;
+                    }
+                }
+                return count;
+            };
+
+            auto drawObjectWindowCategorySelectable = [&](const char* label, int categoryIndex) {
+                const std::string rowLabel =
+                    std::string(label) + " (" + std::to_string(countObjectWindowCategoryItems(categoryIndex)) + ")";
+                const bool selected = objectWindowCategoryIndex == categoryIndex;
+                if (ImGui::Selectable((rowLabel + "##object_window_category_" + std::to_string(categoryIndex)).c_str(), selected)) {
+                    objectWindowCategoryIndex = categoryIndex;
+                    statusText = "Object Window category selected: " + std::string(objectWindowCategoryLabel(categoryIndex)) + ".";
+                }
+            };
+
+            const float contentHeight = std::max(260.0f, ImGui::GetContentRegionAvail().y - 118.0f);
+            ImGui::BeginChild("ObjectWindowCategoryTree", ImVec2(190.0f, contentHeight), true);
+            ImGui::TextDisabled("Categories");
+            drawObjectWindowCategorySelectable("All", 0);
+            if (ImGui::TreeNodeEx("WorldObjects", ImGuiTreeNodeFlags_DefaultOpen)) {
+                drawObjectWindowCategorySelectable("Static", 2);
+                drawObjectWindowCategorySelectable("MovableStatic", 3);
+                drawObjectWindowCategorySelectable("Door", 4);
+                drawObjectWindowCategorySelectable("Activator", 5);
+                drawObjectWindowCategorySelectable("Container", 6);
+                drawObjectWindowCategorySelectable("Furniture", 7);
+                drawObjectWindowCategorySelectable("Terminal", 8);
+                drawObjectWindowCategorySelectable("Flora", 9);
+                ImGui::TreePop();
+            }
+            drawObjectWindowCategorySelectable("Lights", 10);
+            if (ImGui::TreeNodeEx("Items", ImGuiTreeNodeFlags_DefaultOpen)) {
+                drawObjectWindowCategorySelectable("Ammo", 12);
+                drawObjectWindowCategorySelectable("Armor", 13);
+                drawObjectWindowCategorySelectable("Clothing", 14);
+                drawObjectWindowCategorySelectable("Key", 15);
+                ImGui::TreePop();
+            }
+            drawObjectWindowCategorySelectable("Vehicles", 16);
+            drawObjectWindowCategorySelectable("Markers", 17);
+            drawObjectWindowCategorySelectable("Prefabs", kObjectWindowPrefabsCategory);
+            drawObjectWindowCategorySelectable("Project Custom", kObjectWindowProjectCustomCategory);
+            ImGui::EndChild();
+
+            ImGui::SameLine();
+            ImGui::BeginGroup();
+            ImGui::Text("Items: %s", objectWindowCategoryLabel(objectWindowCategoryIndex));
+            ImGui::BeginChild("ObjectWindowList", ImVec2(0.0f, contentHeight * 0.58f), true);
+            int visibleItemCount = 0;
+            for (int index = 0; index < IM_ARRAYSIZE(objectPresetLabels); ++index) {
+                const auto& preset = objectPresets[static_cast<std::size_t>(index)];
+                if (!presetMatchesObjectWindowCategory(preset, objectWindowCategoryIndex) ||
+                    !presetMatchesSearch(index)) {
                     continue;
                 }
-                const bool selected = (presetIndex == index);
+                ++visibleItemCount;
+                const bool selected = selectedPrefabIndex < 0 && presetIndex == index;
                 std::string presetRowLabel =
-                    std::string("[Preset] ") + objectPresetLabels[index] +
+                    std::string("[Project] ") + objectPresetLabels[index] +
                     " | " + ToLabel(preset.category) +
                     " | " + ToLabel(preset.interaction);
                 if (ImGui::Selectable((presetRowLabel + "##object_window_preset_" + std::to_string(index)).c_str(), selected)) {
                     presetIndex = index;
                     selectedPrefabIndex = -1;
                     refreshDraftLayerForPreset();
-                    statusText = "Object Window selected base object. Placement path pending.";
+                    statusText = "Object Window selected base object. Selection does not place object yet.";
                 }
             }
             for (int index = 0; index < static_cast<int>(savedPrefabs.size()); ++index) {
                 const auto& prefab = savedPrefabs[static_cast<std::size_t>(index)];
-                const std::string prefabSearchText =
-                    prefab.label + " " +
-                    prefab.id + " " +
-                    prefab.targetType + " " +
-                    prefab.object.displayName;
-                if (!ContainsCaseInsensitive(prefabSearchText, objectWindowFilterInput)) {
+                if (!prefabMatchesObjectWindowCategory(prefab, objectWindowCategoryIndex) ||
+                    !prefabMatchesSearch(prefab)) {
                     continue;
                 }
-                const bool selected = (selectedPrefabIndex == index);
+                ++visibleItemCount;
+                const bool selected = selectedPrefabIndex == index;
                 std::string prefabRowLabel =
                     "[Prefab] " + prefab.label +
-                    " | " + prefab.targetType +
+                    " | " + (prefab.targetType.empty() ? "Project Custom" : prefab.targetType) +
                     " | " + prefab.id;
                 if (ImGui::Selectable((prefabRowLabel + "##object_window_prefab_" + std::to_string(index)).c_str(), selected)) {
                     selectedPrefabIndex = index;
                     CopyStringToBuffer(prefab.label, prefabLabelInput, IM_ARRAYSIZE(prefabLabelInput));
-                    statusText = "Object Window selected base object. Placement path pending.";
+                    statusText = "Object Window selected prefab source. Selection does not place object yet.";
                 }
+            }
+            if (visibleItemCount == 0) {
+                ImGui::TextDisabled("No objects in this category yet.");
             }
             ImGui::EndChild();
 
             ImGui::Separator();
-            ImGui::Text("Selected Base Object / Prefab");
+            ImGui::Text("Selected Item Info");
+            ImGui::BeginChild("ObjectWindowSelectedInfo", ImVec2(0.0f, 0.0f), true);
             if (selectedPrefabIndex >= 0 && selectedPrefabIndex < static_cast<int>(savedPrefabs.size())) {
                 const auto& prefab = savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)];
-                ImGui::TextWrapped("Name: %s", prefab.label.c_str());
-                ImGui::TextDisabled("Prefab ID: %s", prefab.id.c_str());
-                ImGui::TextDisabled("Target: %s", prefab.targetType.c_str());
+                ImGui::TextWrapped("Display Name: %s", prefab.label.c_str());
+                ImGui::TextDisabled("ID: %s", prefab.id.c_str());
+                ImGui::TextDisabled("Category: %s", ToLabel(prefab.object.category));
+                ImGui::TextDisabled("Source Type: Prefab");
+                ImGui::TextDisabled("Target Type: %s", prefab.targetType.empty() ? "Project Custom" : prefab.targetType.c_str());
                 ImGui::TextWrapped("Seed Object: %s", prefab.object.displayName.c_str());
+                ImGui::TextDisabled("Interaction: %s", ToLabel(prefab.object.interaction));
                 ImGui::TextDisabled(
-                    "Interaction: %s | Category: %s",
-                    ToLabel(prefab.object.interaction),
-                    ToLabel(prefab.object.category));
+                    "Dimensions: %.1f x %.1f x %.1f",
+                    prefab.object.width,
+                    prefab.object.depth,
+                    prefab.object.height);
+                if (!prefab.object.scriptTag.empty()) {
+                    ImGui::TextDisabled("Script Tag: %s", prefab.object.scriptTag.c_str());
+                }
             } else {
                 const auto& preset = objectPresets[static_cast<std::size_t>(presetIndex)];
-                ImGui::TextWrapped("Preset: %s", objectPresetLabels[presetIndex]);
+                ImGui::TextWrapped("Display Name: %s", objectPresetLabels[presetIndex]);
+                ImGui::TextDisabled("ID: preset:%s", objectPresetLabels[presetIndex]);
                 ImGui::TextDisabled("Category: %s", ToLabel(preset.category));
+                ImGui::TextDisabled("Source Type: Project preset");
                 ImGui::TextDisabled("Interaction: %s", ToLabel(preset.interaction));
                 ImGui::TextDisabled(
-                    "Footprint: %.1f x %.1f x %.1f",
+                    "Dimensions: %.1f x %.1f x %.1f",
                     preset.width,
                     preset.depth,
                     preset.height);
             }
+            ImGui::TextDisabled("Selection does not place object yet.");
+            ImGui::EndChild();
+            ImGui::EndGroup();
             ImGui::End();
         }
 

@@ -2923,7 +2923,7 @@ bool RunPrefabUsageAndExportReportSmoke() {
     }
 
     const std::string report = bunker::LoadTextArtifactPreview(exportResult.validationReportPath, 8000);
-    return Check(report.find("Format: BWL5") != std::string::npos, "prefab usage smoke expected export report to mention BWL5 format") &&
+    return Check(report.find("Format: BWL6") != std::string::npos, "prefab usage smoke expected export report to mention BWL6 format") &&
         Check(report.find("Prefab-derived objects: 2") != std::string::npos, "prefab usage smoke expected prefab-derived object count in report") &&
         Check(report.find("Broken prefab references: 1") != std::string::npos, "prefab usage smoke expected broken prefab reference count in report");
 }
