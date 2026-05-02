@@ -3549,12 +3549,18 @@ int main() {
 
         if (showObjectWindow) {
             setTopLevelWindowDefaults(ImVec2(16.0f, 40.0f), ImVec2(680.0f, 500.0f));
-            ImGui::Begin("Object Window", &showObjectWindow, ImGuiWindowFlags_NoCollapse);
+            ImGui::Begin("Object Window###ObjectWindow_Window", &showObjectWindow, ImGuiWindowFlags_NoCollapse);
+            ImGui::SetNextItemWidth(std::max(220.0f, ImGui::GetContentRegionAvail().x - 180.0f));
             ImGui::InputTextWithHint(
-                "Filter",
+                "Search###ObjectWindow_Filter_Search",
                 "Search presets, prefab labels, IDs, or target types",
                 objectWindowFilterInput,
                 IM_ARRAYSIZE(objectWindowFilterInput));
+            ImGui::SameLine();
+            if (ImGui::Button("Clear###ObjectWindow_Filter_Clear", ImVec2(64.0f, 0.0f))) {
+                objectWindowFilterInput[0] = '\0';
+                statusText = "Object Window search cleared.";
+            }
             ImGui::Separator();
 
             struct ObjectWindowCategory {
@@ -3673,21 +3679,28 @@ int main() {
                 return count;
             };
 
+            const int selectedCategoryItemCount = countObjectWindowCategoryItems(objectWindowCategoryIndex);
             auto drawObjectWindowCategorySelectable = [&](const char* label, int categoryIndex) {
                 const std::string rowLabel =
                     std::string(label) + " (" + std::to_string(countObjectWindowCategoryItems(categoryIndex)) + ")";
                 const bool selected = objectWindowCategoryIndex == categoryIndex;
-                if (ImGui::Selectable((rowLabel + "##object_window_category_" + std::to_string(categoryIndex)).c_str(), selected)) {
+                const std::string rowId =
+                    "###ObjectWindow_Category_" + std::string(objectWindowCategoryLabel(categoryIndex));
+                if (ImGui::Selectable((rowLabel + rowId).c_str(), selected)) {
                     objectWindowCategoryIndex = categoryIndex;
                     statusText = "Object Window category selected: " + std::string(objectWindowCategoryLabel(categoryIndex)) + ".";
                 }
             };
 
+            ImGui::TextDisabled(
+                "Category: %s | Visible items: %d",
+                objectWindowCategoryLabel(objectWindowCategoryIndex),
+                selectedCategoryItemCount);
             const float contentHeight = std::max(260.0f, ImGui::GetContentRegionAvail().y - 118.0f);
-            ImGui::BeginChild("ObjectWindowCategoryTree", ImVec2(190.0f, contentHeight), true);
+            ImGui::BeginChild("ObjectWindow_CategoryPane", ImVec2(220.0f, contentHeight), true);
             ImGui::TextDisabled("Categories");
             drawObjectWindowCategorySelectable("All", 0);
-            if (ImGui::TreeNodeEx("WorldObjects", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (ImGui::TreeNodeEx("WorldObjects###ObjectWindow_Category_WorldObjects", ImGuiTreeNodeFlags_DefaultOpen)) {
                 drawObjectWindowCategorySelectable("Static", 2);
                 drawObjectWindowCategorySelectable("MovableStatic", 3);
                 drawObjectWindowCategorySelectable("Door", 4);
@@ -3699,7 +3712,7 @@ int main() {
                 ImGui::TreePop();
             }
             drawObjectWindowCategorySelectable("Lights", 10);
-            if (ImGui::TreeNodeEx("Items", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (ImGui::TreeNodeEx("Items###ObjectWindow_Category_Items", ImGuiTreeNodeFlags_DefaultOpen)) {
                 drawObjectWindowCategorySelectable("Ammo", 12);
                 drawObjectWindowCategorySelectable("Armor", 13);
                 drawObjectWindowCategorySelectable("Clothing", 14);
@@ -3715,7 +3728,7 @@ int main() {
             ImGui::SameLine();
             ImGui::BeginGroup();
             ImGui::Text("Items: %s", objectWindowCategoryLabel(objectWindowCategoryIndex));
-            ImGui::BeginChild("ObjectWindowList", ImVec2(0.0f, contentHeight * 0.58f), true);
+            ImGui::BeginChild("ObjectWindow_ItemList", ImVec2(0.0f, contentHeight * 0.58f), true);
             int visibleItemCount = 0;
             for (int index = 0; index < IM_ARRAYSIZE(objectPresetLabels); ++index) {
                 const auto& preset = objectPresets[static_cast<std::size_t>(index)];
@@ -3729,12 +3742,14 @@ int main() {
                     std::string("[Project] ") + objectPresetLabels[index] +
                     " | " + ToLabel(preset.category) +
                     " | " + ToLabel(preset.interaction);
-                if (ImGui::Selectable((presetRowLabel + "##object_window_preset_" + std::to_string(index)).c_str(), selected)) {
+                ImGui::PushID(("ObjectWindow_Item_Preset_" + std::to_string(index)).c_str());
+                if (ImGui::Selectable(presetRowLabel.c_str(), selected)) {
                     presetIndex = index;
                     selectedPrefabIndex = -1;
                     refreshDraftLayerForPreset();
                     statusText = "Object Window selected base object. Selection does not place object yet.";
                 }
+                ImGui::PopID();
             }
             for (int index = 0; index < static_cast<int>(savedPrefabs.size()); ++index) {
                 const auto& prefab = savedPrefabs[static_cast<std::size_t>(index)];
@@ -3748,20 +3763,28 @@ int main() {
                     "[Prefab] " + prefab.label +
                     " | " + (prefab.targetType.empty() ? "Project Custom" : prefab.targetType) +
                     " | " + prefab.id;
-                if (ImGui::Selectable((prefabRowLabel + "##object_window_prefab_" + std::to_string(index)).c_str(), selected)) {
+                ImGui::PushID(("ObjectWindow_Item_Prefab_" + prefab.id).c_str());
+                if (ImGui::Selectable(prefabRowLabel.c_str(), selected)) {
                     selectedPrefabIndex = index;
                     CopyStringToBuffer(prefab.label, prefabLabelInput, IM_ARRAYSIZE(prefabLabelInput));
                     statusText = "Object Window selected prefab source. Selection does not place object yet.";
                 }
+                ImGui::PopID();
             }
             if (visibleItemCount == 0) {
-                ImGui::TextDisabled("No objects in this category yet.");
+                if (objectWindowFilterInput[0] != '\0') {
+                    ImGui::TextDisabled("No matching objects.");
+                } else {
+                    ImGui::TextDisabled("No objects in this category yet.");
+                }
             }
             ImGui::EndChild();
 
             ImGui::Separator();
-            ImGui::Text("Selected Item Info");
-            ImGui::BeginChild("ObjectWindowSelectedInfo", ImVec2(0.0f, 0.0f), true);
+            ImGui::PushID("ObjectWindow_Details_Title");
+            ImGui::Text("Selected Item");
+            ImGui::PopID();
+            ImGui::BeginChild("ObjectWindow_DetailsPanel", ImVec2(0.0f, 0.0f), true);
             if (selectedPrefabIndex >= 0 && selectedPrefabIndex < static_cast<int>(savedPrefabs.size())) {
                 const auto& prefab = savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)];
                 ImGui::TextWrapped("Display Name: %s", prefab.label.c_str());
