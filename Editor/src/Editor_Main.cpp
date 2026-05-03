@@ -1085,6 +1085,15 @@ using editor_support::ToIndex;
 using editor_support::ToLabel;
 using editor_support::TryExportValidatedWorld;
 
+struct ObjectWindowDragPayload {
+    int sourceType = 0;  // 1 = project preset, 2 = saved prefab
+    int sourceIndex = -1;
+};
+
+constexpr const char* kObjectWindowDragPayloadType = "BUNKER_OBJECT_WINDOW_ITEM";
+constexpr int kObjectWindowDragSourcePreset = 1;
+constexpr int kObjectWindowDragSourcePrefab = 2;
+
 struct ViewportPreviewVec3 {
     float x = 0.0f;
     float y = 0.0f;
@@ -1868,6 +1877,33 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
         }
         return nullptr;
     };
+    auto pickObjectAtMouse = [&]() {
+        int pickedIndex = -1;
+        float bestDepth = std::numeric_limits<float>::max();
+        for (const auto& visual : objectVisuals) {
+            if (visual.layerLocked) {
+                continue;
+            }
+            if (mousePos.x < visual.boundsMin.x - 6.0f || mousePos.x > visual.boundsMax.x + 6.0f ||
+                mousePos.y < visual.boundsMin.y - 6.0f || mousePos.y > visual.boundsMax.y + 6.0f) {
+                continue;
+            }
+            if (visual.averageDepth >= bestDepth) {
+                continue;
+            }
+            bestDepth = visual.averageDepth;
+            pickedIndex = visual.index;
+        }
+        return pickedIndex;
+    };
+
+    if (canvasInput) {
+        const int hoveredObjectIndex = pickObjectAtMouse();
+        if (hoveredObjectIndex >= 0) {
+            interactionResult.objectUnderMouse = true;
+            interactionResult.objectUnderMouseIndex = hoveredObjectIndex;
+        }
+    }
 
     if (!viewportState.semanticOverlayLabel.empty()) {
         drawList->AddText(
@@ -2124,6 +2160,33 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
         drawList->AddText(ImVec2(spawnLabelPoint.x + 8.0f, spawnLabelPoint.y - 10.0f), IM_COL32(180, 220, 255, 255), "SPAWN");
     }
 
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kObjectWindowDragPayloadType)) {
+            if (payload->DataSize == static_cast<int>(sizeof(ObjectWindowDragPayload))) {
+                const auto* dragPayload = static_cast<const ObjectWindowDragPayload*>(payload->Data);
+                interactionResult.droppedObjectWindowItem = true;
+                interactionResult.droppedObjectWindowSourceType = dragPayload->sourceType;
+                interactionResult.droppedObjectWindowSourceIndex = dragPayload->sourceIndex;
+                float dropWorldX = 0.0f;
+                float dropWorldY = 0.0f;
+                if (ViewportPreviewRaycastGround(camera, origin, size, mousePos, dropWorldX, dropWorldY)) {
+                    interactionResult.dropHasWorldPosition = true;
+                    interactionResult.worldX = dropWorldX;
+                    interactionResult.worldY = dropWorldY;
+                }
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+
+    if (rightClicked && !shift) {
+        const int pickedIndex = pickObjectAtMouse();
+        if (pickedIndex >= 0) {
+            interactionResult.rightClickedObject = true;
+            interactionResult.rightClickedObjectIndex = pickedIndex;
+        }
+    }
+
     if (leftClicked && !shift) {
         float worldX = 0.0f;
         float worldY = 0.0f;
@@ -2133,22 +2196,11 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
             interactionResult.worldY = worldY;
         }
 
-        float bestDepth = std::numeric_limits<float>::max();
-        for (const auto& visual : objectVisuals) {
-            if (visual.layerLocked) {
-                continue;
-            }
-            if (mousePos.x < visual.boundsMin.x - 6.0f || mousePos.x > visual.boundsMax.x + 6.0f ||
-                mousePos.y < visual.boundsMin.y - 6.0f || mousePos.y > visual.boundsMax.y + 6.0f) {
-                continue;
-            }
-            if (visual.averageDepth >= bestDepth) {
-                continue;
-            }
-            bestDepth = visual.averageDepth;
+        const int pickedIndex = pickObjectAtMouse();
+        if (pickedIndex >= 0) {
             interactionResult.clicked = true;
             interactionResult.clickedObject = true;
-            interactionResult.clickedObjectIndex = visual.index;
+            interactionResult.clickedObjectIndex = pickedIndex;
             interactionResult.doubleClickedObject = ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
         }
     }
@@ -2167,7 +2219,7 @@ PreviewInteraction DrawWorldPreview3D(const bunker::World& world,
     drawList->AddText(
         ImVec2(origin.x + 10.0f, origin.y + size.y - 22.0f),
         IM_COL32(150, 164, 180, 215),
-        "LMB select | NumPad move | PgUp/PgDn depth | -/+ Z | O+NumPad rotate | Num0/Shift+F focus | Shift+P drop | MMB orbit | Wheel zoom");
+        "LMB select | Num* camera-pick | NumPad move object | -/+ Z | O+NumPad rotate | PgUp/PgDn camera | Num0/Shift+F focus | Shift+P drop | MMB orbit | Wheel zoom");
 
     ImGui::EndChild();
     return interactionResult;
@@ -2263,8 +2315,14 @@ int main() {
         float heldTime = 0.0f;
         float repeatTimer = 0.0f;
     };
+    struct CameraRepeatState {
+        int direction = 0;
+        float heldTime = 0.0f;
+        float repeatTimer = 0.0f;
+    };
     RotationRepeatState rotationRepeatState;
     MovementRepeatState movementRepeatState;
+    CameraRepeatState cameraRepeatState;
     constexpr float kRotationStepDegrees = 4.0f;
     constexpr float kRotationInitialRepeatInterval = 0.25f;
     constexpr float kRotationMinimumRepeatInterval = 0.05f;
@@ -2311,6 +2369,8 @@ int main() {
     int presetIndex = 0;
     int selectedObjectIndex = -1;
     int selectedPrefabIndex = -1;
+    int viewportObjectUnderMouseIndex = -1;
+    int contextObjectIndex = -1;
     int objectWindowCategoryIndex = 0;
     int selectedImportedConceptIndex = -1;
     int objectCategoryFilter = -1;
@@ -2361,45 +2421,13 @@ int main() {
     const char* categoryLabels[] = {"Structure", "Resource Node", "Terminal", "Vehicle", "Landmark", "Container", "Hangar", "Hostile"};
     const char* objectFilterLabels[] = {"All Categories", "Structure", "Resource Node", "Terminal", "Vehicle", "Landmark", "Container", "Hangar", "Hostile"};
     const char* levelPlanningLabels[] = {"Bunker Level 0 / Ground", "Bunker Level +1", "Bunker Level -1", "Double-height / Arena volume"};
-    const char* floorSurfacePresetLabels[] = {"Concrete", "Metal grate", "Tile", "Dirt / rough", "Industrial plate"};
-    const char* wallSurfacePresetLabels[] = {"Concrete", "Metal panel", "Reinforced bunker wall", "Service wall"};
-    const char* ceilingSurfacePresetLabels[] = {"Concrete", "Pipes / service ceiling", "Industrial plate", "Open / double-height"};
-    const char* transitionLengthLabels[] = {"Short", "Medium", "Long"};
-    const char* transitionWidthLabels[] = {"Narrow", "Wide"};
-    const char* transitionSlopeLabels[] = {"Steep", "Gentle"};
-    const char* magneticAnchorLabels[] = {
-        "Floor edge",
-        "Wall edge",
-        "Doorway",
-        "Stair top",
-        "Stair bottom",
-        "Ramp top",
-        "Ramp bottom",
-        "Vehicle lane",
-        "Centerline",
-        "Grid intersection"
-    };
     const char* locationPlanningLabels[] = {
         "Current Bunker Interior",
         "Future Exterior Entry",
         "Future Service Tunnel"
     };
     int selectedPlanningLevelIndex = 0;
-    int selectedFloorSurfacePresetIndex = 0;
-    int selectedWallSurfacePresetIndex = 2;
-    int selectedCeilingSurfacePresetIndex = 1;
-    int selectedStairLengthIndex = 1;
-    int selectedStairWidthIndex = 0;
-    int selectedStairSlopeIndex = 1;
-    int selectedRampLengthIndex = 1;
-    int selectedRampWidthIndex = 1;
-    int selectedRampSlopeIndex = 1;
-    bool planDoubleHeightRoom = false;
-    bool planUpperOpeningPlaceholder = false;
-    bool enableMagneticPlacementPreview = true;
-    int selectedMagneticAnchorIndex = 9;
     int selectedLocationPlanningIndex = 0;
-    char verticalClearancePlanningNote[160] = "Future shell: review stacked-deck clearance, balconies, and arena sightlines.";
     SyncEditorLayerViewStates(editorWorld, editorLayerStates);
     auto clearSemanticOverlay = [&]() {
         ClearPreviewSemanticOverlay(previewViewport);
@@ -2892,6 +2920,210 @@ int main() {
         ViewportPreviewShowOverlayMessage(statusText.c_str());
         return beforeObject.x != selectedObject.x || beforeObject.y != selectedObject.y;
     };
+    auto zoomPreviewCamera = [&](int direction) {
+        if (selectedObjectIndex >= 0 && selectedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
+            const auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+            gViewportPreviewOrbitState.targetWorldX = selectedObject.x;
+            gViewportPreviewOrbitState.targetWorldY = selectedObject.y;
+        } else if (!gViewportPreviewOrbitState.initialized) {
+            statusText = "Select an object or focus target before PgUp/PgDn camera zoom.";
+            ViewportPreviewShowOverlayMessage(statusText.c_str());
+            return false;
+        }
+
+        const float beforeZoom = previewViewport.zoom;
+        previewViewport.zoom = ViewportPreviewClampZoom(previewViewport.zoom + static_cast<float>(direction) * 0.18f);
+        previewViewport.hasFocusRequest = false;
+        if (beforeZoom == previewViewport.zoom) {
+            statusText = direction > 0
+                ? "Camera is already at minimum distance."
+                : "Camera is already at maximum distance.";
+        } else {
+            statusText = direction > 0
+                ? "Camera moved closer to selected object."
+                : "Camera moved farther from selected object.";
+        }
+        ViewportPreviewShowOverlayMessage(statusText.c_str());
+        return beforeZoom != previewViewport.zoom;
+    };
+    auto pickObjectFromCameraView = [&]() {
+        float minX = editorWorld.metadata.playerSpawnX;
+        float maxX = editorWorld.metadata.playerSpawnX;
+        float minY = editorWorld.metadata.playerSpawnY;
+        float maxY = editorWorld.metadata.playerSpawnY;
+        bool hasVisibleObject = false;
+        for (const auto& object : editorWorld.objects) {
+            if (!isLayerVisibleForObject(object)) {
+                continue;
+            }
+            hasVisibleObject = true;
+            minX = std::min(minX, object.x - object.width);
+            maxX = std::max(maxX, object.x + object.width);
+            minY = std::min(minY, object.y - object.depth);
+            maxY = std::max(maxY, object.y + object.depth);
+        }
+        if (!hasVisibleObject) {
+            return -1;
+        }
+
+        EnsureViewportPreviewDefaults(
+            previewViewport,
+            gViewportPreviewOrbitState,
+            (minX + maxX) * 0.5f,
+            (minY + maxY) * 0.5f);
+        previewViewport.zoom = ViewportPreviewClampZoom(previewViewport.zoom);
+        previewViewport.offsetY = ViewportPreviewClampPitch(previewViewport.offsetY);
+        const ViewportPreviewCamera camera = BuildViewportPreviewCamera(
+            previewViewport,
+            gViewportPreviewOrbitState,
+            ImVec2(720.0f, 418.0f));
+
+        int bestIndex = -1;
+        float bestScore = std::numeric_limits<float>::max();
+        for (int objectIndex = 0; objectIndex < static_cast<int>(editorWorld.objects.size()); ++objectIndex) {
+            const auto& object = editorWorld.objects[static_cast<std::size_t>(objectIndex)];
+            if (!isLayerVisibleForObject(object) || isLayerLockedForObject(object)) {
+                continue;
+            }
+            if (!std::isfinite(object.x) || !std::isfinite(object.y) || !std::isfinite(object.z) ||
+                !std::isfinite(object.width) || !std::isfinite(object.depth) || !std::isfinite(object.height)) {
+                continue;
+            }
+
+            const ViewportPreviewVec3 objectCenter{
+                object.x,
+                object.z + std::max(0.25f, object.height) * 0.5f,
+                object.y
+            };
+            const ViewportPreviewVec3 toObject = objectCenter - camera.position;
+            const float cameraDistance = ViewportPreviewDot(toObject, camera.forward);
+            if (cameraDistance <= 0.05f) {
+                continue;
+            }
+
+            const ViewportPreviewVec3 closestPointOnRay = camera.position + camera.forward * cameraDistance;
+            const float rayDistance = ViewportPreviewLength(objectCenter - closestPointOnRay);
+            const float objectRadius = std::max(
+                0.75f,
+                std::max({std::abs(object.width), std::abs(object.depth), std::abs(object.height)}) * 0.65f);
+            const float coneAllowance = std::max(objectRadius, cameraDistance * 0.035f);
+            if (rayDistance > coneAllowance) {
+                continue;
+            }
+
+            const float score = rayDistance * 4.0f + cameraDistance * 0.05f;
+            if (score < bestScore) {
+                bestScore = score;
+                bestIndex = objectIndex;
+            }
+        }
+        return bestIndex;
+    };
+    auto buildPlacedObjectFromPreset = [&](int sourcePresetIndex, float worldX, float worldY) {
+        const int clampedPresetIndex = std::clamp(sourcePresetIndex, 0, static_cast<int>(objectPresets.size()) - 1);
+        const auto& preset = objectPresets[static_cast<std::size_t>(clampedPresetIndex)];
+        bunker::MapObject object;
+        const std::string preferredRegistryId = DefaultRegistryIdForPreset(clampedPresetIndex, editorWorld.objects.size());
+        object.registryId = editorWorld.HasObject(preferredRegistryId)
+            ? MakeDuplicateRegistryId(editorWorld, preferredRegistryId)
+            : preferredRegistryId;
+        object.displayName = std::string(objectPresetLabels[clampedPresetIndex]) + " Reference";
+        object.interaction = preset.interaction;
+        object.category = preset.category;
+        object.x = snapCoordinate(worldX);
+        object.y = snapCoordinate(worldY);
+        object.z = 0.0f;
+        object.rotationX = 0.0f;
+        object.rotationY = 0.0f;
+        object.rotationZ = 0.0f;
+        object.width = preset.width;
+        object.depth = preset.depth;
+        object.height = preset.height;
+        object.health = preset.health;
+        object.blocksMovement = preset.blocksMovement;
+        object.discovered = true;
+        object.manualLoot = preset.manualLoot;
+        object.editorLayer = bunker::DefaultEditorLayerName(object);
+        return object;
+    };
+    auto buildPlacedObjectFromPrefab = [&](int sourcePrefabIndex, float worldX, float worldY) -> std::optional<bunker::MapObject> {
+        if (sourcePrefabIndex < 0 || sourcePrefabIndex >= static_cast<int>(savedPrefabs.size())) {
+            return std::nullopt;
+        }
+        const auto& prefab = savedPrefabs[static_cast<std::size_t>(sourcePrefabIndex)];
+        bunker::MapObject placed = prefab.object;
+        placed.registryId = MakeDuplicateRegistryId(editorWorld, placed.registryId);
+        placed.x = snapCoordinate(worldX);
+        placed.y = snapCoordinate(worldY);
+        placed.z = 0.0f;
+        placed.rotationX = 0.0f;
+        placed.rotationY = 0.0f;
+        placed.rotationZ = 0.0f;
+        placed.prefabSourceId = prefab.id;
+        placed.editorLayer = bunker::NormalizeEditorLayerName(placed.editorLayer);
+        if (placed.editorLayer.empty()) {
+            placed.editorLayer = bunker::DefaultEditorLayerName(placed);
+        }
+        return placed;
+    };
+    auto placeObjectWindowSourceInWorld = [&](int sourceType, int sourceIndex, bool hasWorldPosition, float worldX, float worldY) {
+        float placeWorldX = hasWorldPosition ? worldX : gViewportPreviewOrbitState.targetWorldX;
+        float placeWorldY = hasWorldPosition ? worldY : gViewportPreviewOrbitState.targetWorldY;
+        if (!std::isfinite(placeWorldX) || !std::isfinite(placeWorldY)) {
+            if (selectedObjectIndex >= 0 && selectedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
+                const auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+                placeWorldX = selectedObject.x;
+                placeWorldY = selectedObject.y;
+            } else {
+                placeWorldX = 0.0f;
+                placeWorldY = 0.0f;
+            }
+        }
+
+        std::optional<bunker::MapObject> placedObject;
+        std::string sourceLabel;
+        if (sourceType == kObjectWindowDragSourcePreset) {
+            if (sourceIndex < 0 || sourceIndex >= static_cast<int>(objectPresets.size())) {
+                statusText = "Cannot place Object Window item: stale preset source.";
+                return false;
+            }
+            placedObject = buildPlacedObjectFromPreset(sourceIndex, placeWorldX, placeWorldY);
+            sourceLabel = objectPresetLabels[sourceIndex];
+        } else if (sourceType == kObjectWindowDragSourcePrefab) {
+            placedObject = buildPlacedObjectFromPrefab(sourceIndex, placeWorldX, placeWorldY);
+            if (!placedObject.has_value()) {
+                statusText = "Cannot place Object Window item: stale prefab source.";
+                return false;
+            }
+            sourceLabel = savedPrefabs[static_cast<std::size_t>(sourceIndex)].label;
+        } else {
+            statusText = "Cannot place Object Window item: unknown source.";
+            return false;
+        }
+
+        const std::size_t beforeCount = editorWorld.objects.size();
+        editorWorld.AddObject(*placedObject);
+        if (editorWorld.objects.size() != beforeCount + 1) {
+            statusText = "Object placement failed count safety check.";
+            return false;
+        }
+
+        undoStack.PushObjectAdded(
+            "Place Object Window item",
+            editorWorld.objects.back(),
+            static_cast<int>(editorWorld.objects.size()) - 1,
+            editorWorld.objects.back().registryId);
+        syncEditorLayerStateTable();
+        focusObjectInEditor(static_cast<int>(editorWorld.objects.size()) - 1, previewViewport.zoom);
+        placeX = editorWorld.objects.back().x;
+        placeY = editorWorld.objects.back().y;
+        statusText = "Placed '" + sourceLabel + "' at X=" +
+            std::to_string(editorWorld.objects.back().x) +
+            ", Y=" + std::to_string(editorWorld.objects.back().y) +
+            ", Z=" + std::to_string(editorWorld.objects.back().z) + ".";
+        ViewportPreviewShowOverlayMessage(statusText.c_str());
+        return true;
+    };
     auto rotateSelectedObject = [&](ViewportPreviewAxis axis, int direction) {
         if (selectedObjectIndex < 0 || selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
             statusText = "Select an object before transform.";
@@ -3011,10 +3243,25 @@ int main() {
                     ViewportPreviewShowOverlayMessage(statusText.c_str());
                 }
             }
+            if (ImGui::IsKeyPressed(ImGuiKey_KeypadMultiply)) {
+                const int cameraPickedObjectIndex = pickObjectFromCameraView();
+                if (cameraPickedObjectIndex >= 0 &&
+                    cameraPickedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
+                    if (focusObjectInEditor(cameraPickedObjectIndex, previewViewport.zoom)) {
+                        previewViewport.hasFocusRequest = false;
+                        statusText = "Selected object '" +
+                            editorWorld.objects[static_cast<std::size_t>(cameraPickedObjectIndex)].displayName +
+                            "' from camera view.";
+                    }
+                } else {
+                    statusText = "No object in camera view.";
+                }
+                ViewportPreviewShowOverlayMessage(statusText.c_str());
+            }
             if (ImGui::IsKeyPressed(ImGuiKey_G) && selectedObjectIndex >= 0) {
                 gViewportPreviewToolState.activeTool = ViewportPreviewTool::MovePreview;
                 gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::None;
-                statusText = "Move mode: use NumPad 8/2/4/6 or PgUp/PgDn for camera-relative movement.";
+                statusText = "Move mode: use NumPad 8/2/4/6 for camera-relative movement and -/+ for Z.";
                 ViewportPreviewShowOverlayMessage(statusText.c_str());
             }
             if (ImGui::IsKeyPressed(ImGuiKey_R) && selectedObjectIndex >= 0) {
@@ -3085,9 +3332,7 @@ int main() {
                 };
 
                 if (keypadDown(ImGuiKey_Keypad8)) { return MovementKeyState{1, keypadPressed(ImGuiKey_Keypad8), true}; }
-                if (keypadDown(ImGuiKey_PageUp)) { return MovementKeyState{1, keypadPressed(ImGuiKey_PageUp), true}; }
                 if (keypadDown(ImGuiKey_Keypad2)) { return MovementKeyState{2, keypadPressed(ImGuiKey_Keypad2), true}; }
-                if (keypadDown(ImGuiKey_PageDown)) { return MovementKeyState{2, keypadPressed(ImGuiKey_PageDown), true}; }
                 if (keypadDown(ImGuiKey_Keypad4)) { return MovementKeyState{3, keypadPressed(ImGuiKey_Keypad4), true}; }
                 if (keypadDown(ImGuiKey_Keypad6)) { return MovementKeyState{4, keypadPressed(ImGuiKey_Keypad6), true}; }
                 if (keypadDown(ImGuiKey_KeypadSubtract)) { return MovementKeyState{5, keypadPressed(ImGuiKey_KeypadSubtract), true}; }
@@ -3121,8 +3366,19 @@ int main() {
                         return false;
                 }
             };
+            auto cameraZoomKey = [&]() {
+                struct CameraZoomKeyState {
+                    int direction = 0;
+                    bool pressed = false;
+                    bool down = false;
+                };
+                if (keypadDown(ImGuiKey_PageUp)) { return CameraZoomKeyState{1, keypadPressed(ImGuiKey_PageUp), true}; }
+                if (keypadDown(ImGuiKey_PageDown)) { return CameraZoomKeyState{-1, keypadPressed(ImGuiKey_PageDown), true}; }
+                return CameraZoomKeyState{};
+            };
             if (frameIo.KeyAlt == false && ImGui::IsKeyDown(ImGuiKey_O)) {
                 movementRepeatState = {};
+                cameraRepeatState = {};
                 const auto key = rotationKey();
                 if (key.down) {
                     const bool newRotationKey =
@@ -3154,8 +3410,34 @@ int main() {
                 }
             } else {
                 rotationRepeatState = {};
-                const auto key = movementKey();
-                if (key.down) {
+                const auto cameraKey = cameraZoomKey();
+                if (cameraKey.down) {
+                    movementRepeatState = {};
+                    const bool newCameraKey = cameraRepeatState.direction != cameraKey.direction;
+                    if (cameraKey.pressed || newCameraKey) {
+                        zoomPreviewCamera(cameraKey.direction);
+                        cameraRepeatState.direction = cameraKey.direction;
+                        cameraRepeatState.heldTime = 0.0f;
+                        cameraRepeatState.repeatTimer = 0.0f;
+                    } else {
+                        cameraRepeatState.heldTime += frameIo.DeltaTime;
+                        cameraRepeatState.repeatTimer += frameIo.DeltaTime;
+                        const float accelerationT = std::clamp(
+                            cameraRepeatState.heldTime / kMovementAccelerationSeconds,
+                            0.0f,
+                            1.0f);
+                        const float repeatInterval =
+                            kMovementInitialRepeatInterval +
+                            (kMovementMinimumRepeatInterval - kMovementInitialRepeatInterval) * accelerationT;
+                        if (cameraRepeatState.repeatTimer >= repeatInterval) {
+                            zoomPreviewCamera(cameraKey.direction);
+                            cameraRepeatState.repeatTimer = 0.0f;
+                        }
+                    }
+                } else {
+                    cameraRepeatState = {};
+                    const auto key = movementKey();
+                    if (key.down) {
                     const bool newMovementKey = movementRepeatState.command != key.command;
                     if (key.pressed || newMovementKey) {
                         applyMovementCommand(key.command);
@@ -3177,8 +3459,9 @@ int main() {
                             movementRepeatState.repeatTimer = 0.0f;
                         }
                     }
-                } else {
-                    movementRepeatState = {};
+                    } else {
+                        movementRepeatState = {};
+                    }
                 }
             }
 
@@ -3730,6 +4013,7 @@ int main() {
             ImGui::Text("Items: %s", objectWindowCategoryLabel(objectWindowCategoryIndex));
             ImGui::BeginChild("ObjectWindow_ItemList", ImVec2(0.0f, contentHeight * 0.58f), true);
             int visibleItemCount = 0;
+            bool selectedObjectWindowItemVisible = false;
             for (int index = 0; index < IM_ARRAYSIZE(objectPresetLabels); ++index) {
                 const auto& preset = objectPresets[static_cast<std::size_t>(index)];
                 if (!presetMatchesObjectWindowCategory(preset, objectWindowCategoryIndex) ||
@@ -3738,16 +4022,29 @@ int main() {
                 }
                 ++visibleItemCount;
                 const bool selected = selectedPrefabIndex < 0 && presetIndex == index;
+                selectedObjectWindowItemVisible = selectedObjectWindowItemVisible || selected;
                 std::string presetRowLabel =
                     std::string("[Project] ") + objectPresetLabels[index] +
                     " | " + ToLabel(preset.category) +
                     " | " + ToLabel(preset.interaction);
                 ImGui::PushID(("ObjectWindow_Item_Preset_" + std::to_string(index)).c_str());
                 if (ImGui::Selectable(presetRowLabel.c_str(), selected)) {
+                    const std::size_t beforeSelectionObjectCount = editorWorld.objects.size();
                     presetIndex = index;
                     selectedPrefabIndex = -1;
                     refreshDraftLayerForPreset();
                     statusText = "Object Window selected base object. Selection does not place object yet.";
+                    if (editorWorld.objects.size() != beforeSelectionObjectCount) {
+                        statusText = "Object Window selection count safety failed.";
+                    }
+                }
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    const ObjectWindowDragPayload payload{kObjectWindowDragSourcePreset, index};
+                    ImGui::SetDragDropPayload(kObjectWindowDragPayloadType, &payload, sizeof(payload));
+                    ImGui::TextUnformatted(objectPresetLabels[index]);
+                    ImGui::TextDisabled("Project preset | %s", ToLabel(preset.category));
+                    ImGui::TextDisabled("Drop in Render Window to place.");
+                    ImGui::EndDragDropSource();
                 }
                 ImGui::PopID();
             }
@@ -3759,15 +4056,28 @@ int main() {
                 }
                 ++visibleItemCount;
                 const bool selected = selectedPrefabIndex == index;
+                selectedObjectWindowItemVisible = selectedObjectWindowItemVisible || selected;
                 std::string prefabRowLabel =
                     "[Prefab] " + prefab.label +
                     " | " + (prefab.targetType.empty() ? "Project Custom" : prefab.targetType) +
                     " | " + prefab.id;
                 ImGui::PushID(("ObjectWindow_Item_Prefab_" + prefab.id).c_str());
                 if (ImGui::Selectable(prefabRowLabel.c_str(), selected)) {
+                    const std::size_t beforeSelectionObjectCount = editorWorld.objects.size();
                     selectedPrefabIndex = index;
                     CopyStringToBuffer(prefab.label, prefabLabelInput, IM_ARRAYSIZE(prefabLabelInput));
                     statusText = "Object Window selected prefab source. Selection does not place object yet.";
+                    if (editorWorld.objects.size() != beforeSelectionObjectCount) {
+                        statusText = "Object Window selection count safety failed.";
+                    }
+                }
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    const ObjectWindowDragPayload payload{kObjectWindowDragSourcePrefab, index};
+                    ImGui::SetDragDropPayload(kObjectWindowDragPayloadType, &payload, sizeof(payload));
+                    ImGui::TextUnformatted(prefab.label.c_str());
+                    ImGui::TextDisabled("Prefab | %s", prefab.id.c_str());
+                    ImGui::TextDisabled("Drop in Render Window to place.");
+                    ImGui::EndDragDropSource();
                 }
                 ImGui::PopID();
             }
@@ -3785,7 +4095,10 @@ int main() {
             ImGui::Text("Selected Item");
             ImGui::PopID();
             ImGui::BeginChild("ObjectWindow_DetailsPanel", ImVec2(0.0f, 0.0f), true);
-            if (selectedPrefabIndex >= 0 && selectedPrefabIndex < static_cast<int>(savedPrefabs.size())) {
+            if (!selectedObjectWindowItemVisible) {
+                ImGui::TextDisabled("Selected item is outside current category/filter.");
+                ImGui::TextDisabled("Selection does not place object yet.");
+            } else if (selectedPrefabIndex >= 0 && selectedPrefabIndex < static_cast<int>(savedPrefabs.size())) {
                 const auto& prefab = savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)];
                 ImGui::TextWrapped("Display Name: %s", prefab.label.c_str());
                 ImGui::TextDisabled("ID: %s", prefab.id.c_str());
@@ -3802,6 +4115,7 @@ int main() {
                 if (!prefab.object.scriptTag.empty()) {
                     ImGui::TextDisabled("Script Tag: %s", prefab.object.scriptTag.c_str());
                 }
+                ImGui::TextDisabled("Selection does not place object yet.");
             } else {
                 const auto& preset = objectPresets[static_cast<std::size_t>(presetIndex)];
                 ImGui::TextWrapped("Display Name: %s", objectPresetLabels[presetIndex]);
@@ -3814,8 +4128,8 @@ int main() {
                     preset.width,
                     preset.depth,
                     preset.height);
+                ImGui::TextDisabled("Selection does not place object yet.");
             }
-            ImGui::TextDisabled("Selection does not place object yet.");
             ImGui::EndChild();
             ImGui::EndGroup();
             ImGui::End();
@@ -5230,74 +5544,40 @@ int main() {
 
         if (showLevelsWindow) {
             setTopLevelWindowDefaults(ImVec2(930.0f, 210.0f), ImVec2(468.0f, 684.0f));
-            ImGui::Begin("Levels / Floors / Layers", &showLevelsWindow, ImGuiWindowFlags_NoCollapse);
+            ImGui::Begin("Levels / Floors / Layers###LevelsWindow_Window", &showLevelsWindow, ImGuiWindowFlags_NoCollapse);
             ImGui::TextDisabled("Drag this window by its title bar outside the main editor to detach it.");
-            ImGui::TextDisabled("Planning shell for future authored-world vertical organization. No geometry or save-format changes yet.");
+            ImGui::TextDisabled("Level and layer organization only. Construction parts are placed as objects.");
             ImGui::Separator();
-            ImGui::BeginChild("LevelsPlanningScroll", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
-            ImGui::Text("Level / Floor Stack");
-            ImGui::Combo("Planning Level", &selectedPlanningLevelIndex, levelPlanningLabels, IM_ARRAYSIZE(levelPlanningLabels));
-            ImGui::TextWrapped("This planning shell tracks future bunker decks, dungeon floors, modular house levels, and authored vertical slices without persisting new floor data yet.");
+            ImGui::BeginChild("LevelsWindow_Scroll", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+            ImGui::Text("Level / Floor Stack###LevelsWindow_LevelStack");
+            ImGui::Combo("Planning Level###LevelsWindow_PlanningLevel", &selectedPlanningLevelIndex, levelPlanningLabels, IM_ARRAYSIZE(levelPlanningLabels));
+            ImGui::TextWrapped("This selector is an editor organization label only; it does not create floors, walls, stairs, ramps, or geometry.");
 
             ImGui::Separator();
-            ImGui::Text("Floor Modularity");
-            ImGui::Combo("Floor Surface Preset", &selectedFloorSurfacePresetIndex, floorSurfacePresetLabels, IM_ARRAYSIZE(floorSurfacePresetLabels));
-            ImGui::Combo("Wall Surface Preset", &selectedWallSurfacePresetIndex, wallSurfacePresetLabels, IM_ARRAYSIZE(wallSurfacePresetLabels));
-            ImGui::Combo("Ceiling Surface Preset", &selectedCeilingSurfacePresetIndex, ceilingSurfacePresetLabels, IM_ARRAYSIZE(ceilingSurfacePresetLabels));
-            ImGui::TextDisabled("Workflow taxonomy only for now.");
+            ImGui::Text("Layer Overview###LevelsWindow_LayerOverview");
+            syncEditorLayerStateTable();
+            if (editorLayerStates.empty()) {
+                ImGui::TextDisabled("No editor layers in the current workspace.");
+            } else {
+                ImGui::BeginChild("LevelsWindow_LayerList", ImVec2(0.0f, 150.0f), true);
+                for (const auto& layerState : editorLayerStates) {
+                    const int objectCount = editorWorld.CountObjectsInEditorLayer(layerState.name);
+                    ImGui::BulletText(
+                        "%s | visible=%s | locked=%s | objects=%d",
+                        layerState.name.c_str(),
+                        layerState.visible ? "yes" : "no",
+                        layerState.locked ? "yes" : "no",
+                        objectCount);
+                }
+                ImGui::EndChild();
+            }
 
             ImGui::Separator();
-            ImGui::Text("Vertical Transitions");
-            ImGui::TextDisabled("Stairs");
-            ImGui::Combo("Stair Type", &selectedStairLengthIndex, transitionLengthLabels, IM_ARRAYSIZE(transitionLengthLabels));
-            ImGui::Combo("Stair Width", &selectedStairWidthIndex, transitionWidthLabels, IM_ARRAYSIZE(transitionWidthLabels));
-            ImGui::Combo("Stair Slope", &selectedStairSlopeIndex, transitionSlopeLabels, IM_ARRAYSIZE(transitionSlopeLabels));
-            ImGui::TextDisabled("Ramp / vehicle slope");
-            ImGui::Combo("Ramp Type", &selectedRampLengthIndex, transitionLengthLabels, IM_ARRAYSIZE(transitionLengthLabels));
-            ImGui::Combo("Ramp Width", &selectedRampWidthIndex, transitionWidthLabels, IM_ARRAYSIZE(transitionWidthLabels));
-            ImGui::Combo("Ramp Slope", &selectedRampSlopeIndex, transitionSlopeLabels, IM_ARRAYSIZE(transitionSlopeLabels));
-            ImGui::TextWrapped("Runtime vehicle/tank physics and fall/forward velocity behavior are future runtime milestones.");
-
-            ImGui::Separator();
-            ImGui::Text("Double-Height Spaces");
-            ImGui::Checkbox("Double-height room / arena", &planDoubleHeightRoom);
-            ImGui::Checkbox("Upper floor opening / balcony placeholder", &planUpperOpeningPlaceholder);
-            ImGui::InputText("Vertical Clearance Note", verticalClearancePlanningNote, IM_ARRAYSIZE(verticalClearancePlanningNote));
-            ImGui::TextDisabled("Planning only. No world geometry changes yet.");
-
-            ImGui::Separator();
-            ImGui::Text("Modular Floor / Transition Planning");
-            const auto setLevelsPlanningStatus = [&](const char* actionLabel) {
-                statusText = std::string(actionLabel) +
-                    " | level=" + levelPlanningLabels[selectedPlanningLevelIndex] +
-                    " | floor=" + floorSurfacePresetLabels[selectedFloorSurfacePresetIndex] +
-                    " | wall=" + wallSurfacePresetLabels[selectedWallSurfacePresetIndex] +
-                    " | ceiling=" + ceilingSurfacePresetLabels[selectedCeilingSurfacePresetIndex] +
-                    " | shell only.";
-            };
-            if (ImGui::Button("Plan Stair Module", ImVec2(-1.0f, 0.0f))) {
-                setLevelsPlanningStatus("Planned stair module shell");
-            }
-            if (ImGui::Button("Plan Ramp Module", ImVec2(-1.0f, 0.0f))) {
-                setLevelsPlanningStatus("Planned ramp module shell");
-            }
-            if (ImGui::Button("Plan Double-Height Volume", ImVec2(-1.0f, 0.0f))) {
-                setLevelsPlanningStatus("Planned double-height volume shell");
-            }
-            if (ImGui::Button("Plan Floor Surface Change", ImVec2(-1.0f, 0.0f))) {
-                setLevelsPlanningStatus("Planned floor surface change shell");
-            }
-            if (ImGui::Button("Plan Wall/Ceiling Surface Change", ImVec2(-1.0f, 0.0f))) {
-                setLevelsPlanningStatus("Planned wall/ceiling surface change shell");
-            }
-            ImGui::TextDisabled("Buttons update planning status only and do not place geometry.");
-
-            ImGui::Separator();
-            ImGui::Text("Magnet Anchors / Snapping");
-            ImGui::Checkbox("Enable magnetic placement preview", &enableMagneticPlacementPreview);
-            ImGui::Combo("Anchor Type", &selectedMagneticAnchorIndex, magneticAnchorLabels, IM_ARRAYSIZE(magneticAnchorLabels));
+            ImGui::Text("Object Placement Workflow###LevelsWindow_ObjectPlacementWorkflow");
+            ImGui::TextWrapped("Place floor, wall, ceiling, stair, ramp, and room modules as objects or prefabs from Object Window into Render Window.");
+            ImGui::TextWrapped("Surface presets and construction modules belong in object presets, prefabs, or the future placed-reference inspector.");
             ImGui::BulletText("Current snap step: %.2f", resolvedSnapStep());
-            ImGui::TextWrapped("Future magnet anchors will snap modules and objects to authored sockets.");
+            ImGui::TextDisabled("No fake planning buttons live here; this window does not place geometry.");
             ImGui::EndChild();
             ImGui::End();
         }
@@ -5406,8 +5686,11 @@ int main() {
                 previewViewport,
                 editorLayerStates,
                 previewRenderOptions);
+            viewportObjectUnderMouseIndex = previewInteraction.objectUnderMouse
+                ? previewInteraction.objectUnderMouseIndex
+                : -1;
             if (gViewportPreviewTransientState.moveGizmoStatusRequested) {
-                statusText = "Move preview: use NumPad/PgUp/PgDn for camera-relative movement and -/+ for Z.";
+                statusText = "Move preview: use NumPad 8/2/4/6 for camera-relative movement and -/+ for Z.";
             }
             if (gViewportPreviewTransientState.rotationGizmoStatusRequested) {
                 statusText = "Rotation preview: hold O and press NumPad to rotate selected object.";
@@ -5457,6 +5740,26 @@ int main() {
                 worldSpawnY = editorWorld.metadata.playerSpawnY;
                 statusText = "Moved player spawn through world preview.";
             }
+            if (previewInteraction.droppedObjectWindowItem) {
+                if (placeObjectWindowSourceInWorld(
+                        previewInteraction.droppedObjectWindowSourceType,
+                        previewInteraction.droppedObjectWindowSourceIndex,
+                        previewInteraction.dropHasWorldPosition,
+                        previewInteraction.worldX,
+                        previewInteraction.worldY)) {
+                    selectedObjectUndoHandledThisFrame = true;
+                }
+            }
+            if (previewInteraction.rightClickedObject &&
+                previewInteraction.rightClickedObjectIndex >= 0 &&
+                previewInteraction.rightClickedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
+                if (focusObjectInEditor(previewInteraction.rightClickedObjectIndex, previewViewport.zoom)) {
+                    previewViewport.hasFocusRequest = false;
+                    contextObjectIndex = previewInteraction.rightClickedObjectIndex;
+                    statusText = "Selected object from context click.";
+                    ImGui::OpenPopup("Object Context###RenderWindow_ObjectContext");
+                }
+            }
             if (previewInteraction.clicked) {
                 placeX = snapCoordinate(previewInteraction.worldX);
                 placeY = snapCoordinate(previewInteraction.worldY);
@@ -5473,6 +5776,50 @@ int main() {
                 } else {
                     statusText = "Preview cursor updated for object/prefab placement.";
                 }
+            }
+            if (ImGui::BeginPopup("Object Context###RenderWindow_ObjectContext")) {
+                if (contextObjectIndex >= 0 && contextObjectIndex < static_cast<int>(editorWorld.objects.size())) {
+                    const auto& contextObject = editorWorld.objects[static_cast<std::size_t>(contextObjectIndex)];
+                    ImGui::TextUnformatted("Object Properties");
+                    ImGui::Separator();
+                    ImGui::TextWrapped("Display Name: %s", contextObject.displayName.c_str());
+                    ImGui::TextDisabled("ID: %s", contextObject.registryId.c_str());
+                    ImGui::TextDisabled("Category: %s", ToLabel(contextObject.category));
+                    ImGui::TextDisabled(
+                        "Position: %.2f, %.2f, %.2f",
+                        contextObject.x,
+                        contextObject.y,
+                        contextObject.z);
+                    ImGui::TextDisabled(
+                        "Rotation: %.0f, %.0f, %.0f",
+                        contextObject.rotationX,
+                        contextObject.rotationY,
+                        contextObject.rotationZ);
+                    ImGui::TextDisabled(
+                        "Dimensions: %.1f x %.1f x %.1f",
+                        contextObject.width,
+                        contextObject.depth,
+                        contextObject.height);
+                    if (!contextObject.prefabSourceId.empty()) {
+                        ImGui::TextDisabled("Prefab Source: %s", contextObject.prefabSourceId.c_str());
+                    }
+                    ImGui::TextDisabled("Full Reference Inspector is future work.");
+                    if (ImGui::Button("Focus Selected###RenderWindow_ObjectContext_Focus", ImVec2(160.0f, 0.0f))) {
+                        focusObjectInEditor(contextObjectIndex, 1.45f);
+                        statusText = "Focused context object.";
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Close###RenderWindow_ObjectContext_Close", ImVec2(100.0f, 0.0f))) {
+                        ImGui::CloseCurrentPopup();
+                    }
+                } else {
+                    ImGui::TextDisabled("No object selected.");
+                    if (ImGui::Button("Close###RenderWindow_ObjectContext_CloseEmpty", ImVec2(100.0f, 0.0f))) {
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+                ImGui::EndPopup();
             }
             if (ImGui::Button("Reset View", ImVec2(120.0f, 0.0f))) {
                 previewViewport = {};

@@ -33,6 +33,14 @@ struct PreviewInteraction {
     bool clickedObject = false;
     int clickedObjectIndex = -1;
     bool doubleClickedObject = false;
+    bool objectUnderMouse = false;
+    int objectUnderMouseIndex = -1;
+    bool rightClickedObject = false;
+    int rightClickedObjectIndex = -1;
+    bool droppedObjectWindowItem = false;
+    int droppedObjectWindowSourceType = 0;
+    int droppedObjectWindowSourceIndex = -1;
+    bool dropHasWorldPosition = false;
     bool draggingSelectedObject = false;
     bool draggingSelectedWidth = false;
     bool draggingSelectedDepth = false;
