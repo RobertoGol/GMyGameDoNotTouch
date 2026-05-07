@@ -3,16 +3,20 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <cctype>
 #include <fstream>
 #include <iomanip>
 #include <limits>
 #include <optional>
+#include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
@@ -40,969 +44,6 @@ struct ImportedConcept {
     bool addedToLibrary = false;
 };
 
-#if 0
-
-struct SavedPrefab {
-    std::string label;
-    bunker::MapObject object;
-};
-
-struct PreviewInteraction {
-    bool clicked = false;
-    bool clickedObject = false;
-    int clickedObjectIndex = -1;
-    bool doubleClickedObject = false;
-    bool draggingSelectedObject = false;
-    float worldX = 0.0f;
-    float worldY = 0.0f;
-};
-
-struct PreviewViewportState {
-    float zoom = 1.0f;
-    float offsetX = 0.0f;
-    float offsetY = 0.0f;
-};
-
-struct ObjectPreset {
-    const char* label;
-    bunker::InteractionType interaction;
-    bunker::ObjectCategory category;
-    float width;
-    float depth;
-    float height;
-    float health;
-    bool blocksMovement;
-    bool manualLoot;
-};
-
-const char* ToLabel(bunker::InteractionType interaction) {
-    switch (interaction) {
-        case bunker::InteractionType::Static: return "Static";
-        case bunker::InteractionType::Container: return "Container";
-        case bunker::InteractionType::Resource: return "Resource";
-        case bunker::InteractionType::Terminal: return "Terminal";
-        case bunker::InteractionType::Transition: return "Transition";
-        case bunker::InteractionType::VehicleAnchor: return "Vehicle Anchor";
-        case bunker::InteractionType::Workshop: return "Workshop";
-        case bunker::InteractionType::Hostile: return "Hostile";
-    }
-    return "Static";
-}
-
-const char* ToLabel(bunker::ObjectCategory category) {
-    switch (category) {
-        case bunker::ObjectCategory::Structure: return "Structure";
-        case bunker::ObjectCategory::ResourceNode: return "Resource Node";
-        case bunker::ObjectCategory::Terminal: return "Terminal";
-        case bunker::ObjectCategory::Vehicle: return "Vehicle";
-        case bunker::ObjectCategory::Landmark: return "Landmark";
-        case bunker::ObjectCategory::Container: return "Container";
-        case bunker::ObjectCategory::Hangar: return "Hangar";
-        case bunker::ObjectCategory::Hostile: return "Hostile";
-    }
-    return "Structure";
-}
-
-int ToIndex(bunker::InteractionType interaction) {
-    return static_cast<int>(interaction);
-}
-
-int ToIndex(bunker::ObjectCategory category) {
-    switch (category) {
-        case bunker::ObjectCategory::Structure: return 0;
-        case bunker::ObjectCategory::ResourceNode: return 1;
-        case bunker::ObjectCategory::Terminal: return 2;
-        case bunker::ObjectCategory::Vehicle: return 3;
-        case bunker::ObjectCategory::Landmark: return 4;
-        case bunker::ObjectCategory::Container: return 5;
-        case bunker::ObjectCategory::Hangar: return 6;
-        case bunker::ObjectCategory::Hostile: return 7;
-    }
-    return 0;
-}
-
-bunker::ObjectCategory CategoryFromIndex(int index) {
-    switch (index) {
-        case 0: return bunker::ObjectCategory::Structure;
-        case 1: return bunker::ObjectCategory::ResourceNode;
-        case 2: return bunker::ObjectCategory::Terminal;
-        case 3: return bunker::ObjectCategory::Vehicle;
-        case 4: return bunker::ObjectCategory::Landmark;
-        case 5: return bunker::ObjectCategory::Container;
-        case 6: return bunker::ObjectCategory::Hangar;
-        case 7: return bunker::ObjectCategory::Hostile;
-        default: return bunker::ObjectCategory::Structure;
-    }
-}
-
-bool LoadOrCreateEditorWorld(bunker::World& world, std::string& statusText) {
-    bunker::SessionProfile sessionProfile;
-    const auto profilePath = bunker::DefaultSessionProfilePath();
-    if (!bunker::LoadSessionProfile(profilePath, sessionProfile)) {
-        sessionProfile = bunker::MakeDefaultSessionProfile();
-    }
-    bunker::NormalizeSessionProfile(sessionProfile);
-
-    const auto path = bunker::ResolveWorldPath(sessionProfile.selectedWorld);
-    if (world.Load(path.string())) {
-        statusText = "Loaded runtime world from " + path.string();
-        return true;
-    }
-
-    world.GeneratePrototypeZone();
-
-    const auto saveResult = bunker::SaveWorldAtomically(world, path);
-    if (!saveResult.ok) {
-        statusText = "Runtime world was missing. Failed to persist generated workspace: " + saveResult.message;
-        return false;
-    }
-
-    statusText = "Runtime world was missing. Generated a fresh prototype workspace at " + path.string();
-    return false;
-}
-
-bool SetActiveWorldInProfile(const std::string& worldFileName, std::string& statusText) {
-    bunker::SessionProfile sessionProfile;
-    const auto profilePath = bunker::DefaultSessionProfilePath();
-    if (!bunker::LoadSessionProfile(profilePath, sessionProfile)) {
-        sessionProfile = bunker::MakeDefaultSessionProfile();
-    }
-    bunker::NormalizeSessionProfile(sessionProfile);
-    sessionProfile.selectedWorld = bunker::NormalizeWorldReference(worldFileName);
-    const auto saveResult = bunker::SaveProfileAtomically(sessionProfile, profilePath);
-    if (saveResult.ok) {
-        statusText = "Active world changed to " + sessionProfile.selectedWorld;
-        return true;
-    }
-    statusText = "Failed to update active world in session profile: " + saveResult.message;
-    return false;
-}
-
-void CopyStringToBuffer(const std::string& value, char* buffer, std::size_t size) {
-    if (buffer == nullptr || size == 0) {
-        return;
-    }
-
-    strncpy_s(buffer, size, value.c_str(), _TRUNCATE);
-}
-
-void SyncEditorWorldBindings(const bunker::World& editorWorld,
-                             int& selectedObjectIndex,
-                             char* selectedRegistryEdit,
-                             std::size_t selectedRegistryEditSize,
-                             char* selectedScriptTagEdit,
-                             std::size_t selectedScriptTagEditSize,
-                             char* selectedLinkTargetEdit,
-                             std::size_t selectedLinkTargetEditSize,
-                             char* worldNameInput,
-                             std::size_t worldNameInputSize,
-                             char* worldBiomeInput,
-                             std::size_t worldBiomeInputSize,
-                             char* worldObjectiveInput,
-                             std::size_t worldObjectiveInputSize,
-                             float& worldSpawnX,
-                             float& worldSpawnY) {
-    selectedObjectIndex = -1;
-    CopyStringToBuffer("", selectedRegistryEdit, selectedRegistryEditSize);
-    CopyStringToBuffer("", selectedScriptTagEdit, selectedScriptTagEditSize);
-    CopyStringToBuffer("", selectedLinkTargetEdit, selectedLinkTargetEditSize);
-    CopyStringToBuffer(editorWorld.metadata.name, worldNameInput, worldNameInputSize);
-    CopyStringToBuffer(editorWorld.metadata.biome, worldBiomeInput, worldBiomeInputSize);
-    CopyStringToBuffer(editorWorld.metadata.objective, worldObjectiveInput, worldObjectiveInputSize);
-    worldSpawnX = editorWorld.metadata.playerSpawnX;
-    worldSpawnY = editorWorld.metadata.playerSpawnY;
-}
-
-const ObjectPreset& SelectedPreset(const std::array<ObjectPreset, 6>& presets, int index) {
-    const int clampedIndex = (index < 0) ? 0 : (index >= static_cast<int>(presets.size()) ? static_cast<int>(presets.size()) - 1 : index);
-    return presets[static_cast<std::size_t>(clampedIndex)];
-}
-
-std::string DefaultRegistryIdForPreset(int presetIndex, std::size_t objectCount) {
-    switch (presetIndex) {
-        case 0: return "[%structure_" + std::to_string(objectCount + 1) + "]";
-        case 1: return "[%terminal_" + std::to_string(objectCount + 1) + "]";
-        case 2: return "[%container_" + std::to_string(objectCount + 1) + "]";
-        case 3: return "[%transition_" + std::to_string(objectCount + 1) + "]";
-        case 4: return "[#tr_custom_" + std::to_string(objectCount + 1) + "]";
-        default: return "[%resource_" + std::to_string(objectCount + 1) + "]";
-    }
-}
-
-void PrepareSpecializedDraft(const char* draftName,
-                             const char* registryId,
-                             float& placeX,
-                             float& placeY,
-                             char* objectNameInput,
-                             std::size_t objectNameSize,
-                             char* registryInput,
-                             std::size_t registrySize,
-    char* loot0,
-    char* loot1,
-    char* loot2,
-    char* loot3) {
-    CopyStringToBuffer(draftName, objectNameInput, objectNameSize);
-    CopyStringToBuffer(registryId, registryInput, registrySize);
-    placeX = 0.0f;
-    placeY = 0.0f;
-    loot0[0] = '\0';
-    loot1[0] = '\0';
-    loot2[0] = '\0';
-    loot3[0] = '\0';
-}
-
-void ApplyTerminalDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = (object.registryId.find("archive") == std::string::npos) ? "terminal_sync" : "archive_sync";
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-}
-
-void ApplyTransitionDescriptorPreset(bunker::MapObject& object,
-                                     char* scriptTagBuffer,
-                                     std::size_t scriptTagSize,
-                                     char* linkTargetBuffer,
-                                     std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Transition;
-    object.category = bunker::ObjectCategory::Landmark;
-    object.scriptTag = "Travel marker / route handoff";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "next_zone";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyWorkshopDescriptorPreset(bunker::MapObject& object, char* scriptTagBuffer, std::size_t scriptTagSize) {
-    object.interaction = bunker::InteractionType::Workshop;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "workshop_service";
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-}
-
-void ApplyTowerDescriptorPreset(bunker::MapObject& object,
-                                char* scriptTagBuffer,
-                                std::size_t scriptTagSize,
-                                char* linkTargetBuffer,
-                                std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "tower_sync";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "regional_grid";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyPowerPylonDescriptorPreset(bunker::MapObject& object,
-                                     char* scriptTagBuffer,
-                                     std::size_t scriptTagSize,
-                                     char* linkTargetBuffer,
-                                     std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "power_pylon";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "regional_grid";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyDroneStationDescriptorPreset(bunker::MapObject& object,
-                                       char* scriptTagBuffer,
-                                       std::size_t scriptTagSize,
-                                       char* linkTargetBuffer,
-                                       std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "drone_station";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "salvage_sweep";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyRailDepotDescriptorPreset(bunker::MapObject& object,
-                                    char* scriptTagBuffer,
-                                    std::size_t scriptTagSize,
-                                    char* linkTargetBuffer,
-                                    std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "rail_depot";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "industrial_spur";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyOrbitalUplinkDescriptorPreset(bunker::MapObject& object,
-                                        char* scriptTagBuffer,
-                                        std::size_t scriptTagSize,
-                                        char* linkTargetBuffer,
-                                        std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "orbital_uplink";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "low_orbit_scan";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyRailFortressDescriptorPreset(bunker::MapObject& object,
-                                       char* scriptTagBuffer,
-                                       std::size_t scriptTagSize,
-                                       char* linkTargetBuffer,
-                                       std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "rail_fortress_hub";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "magistral_anchor";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyRecoveryFabricatorDescriptorPreset(bunker::MapObject& object,
-                                             char* scriptTagBuffer,
-                                             std::size_t scriptTagSize,
-                                             char* linkTargetBuffer,
-                                             std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "recovery_fabricator";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "industrial_refinery";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyIndustrialGateDescriptorPreset(bunker::MapObject& object,
-                                         char* scriptTagBuffer,
-                                         std::size_t scriptTagSize,
-                                         char* linkTargetBuffer,
-                                         std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "industrial_gate";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "inner_spur";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyIndustrialSurveyDescriptorPreset(bunker::MapObject& object,
-                                           char* scriptTagBuffer,
-                                           std::size_t scriptTagSize,
-                                           char* linkTargetBuffer,
-                                           std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "industrial_survey";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "inner_spur_survey";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyIndustrialOutpostDescriptorPreset(bunker::MapObject& object,
-                                            char* scriptTagBuffer,
-                                            std::size_t scriptTagSize,
-                                            char* linkTargetBuffer,
-                                            std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "industrial_outpost";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "inner_spur_outpost";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyAssemblyCellDescriptorPreset(bunker::MapObject& object,
-                                       char* scriptTagBuffer,
-                                       std::size_t scriptTagSize,
-                                       char* linkTargetBuffer,
-                                       std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "assembly_cell";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "inner_spur_assembly";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyFoundryLineDescriptorPreset(bunker::MapObject& object,
-                                      char* scriptTagBuffer,
-                                      std::size_t scriptTagSize,
-                                      char* linkTargetBuffer,
-                                      std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "foundry_line";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "inner_spur_foundry";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyReactorYardDescriptorPreset(bunker::MapObject& object,
-                                      char* scriptTagBuffer,
-                                      std::size_t scriptTagSize,
-                                      char* linkTargetBuffer,
-                                      std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "reactor_yard";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "inner_spur_reactor";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyCapacitorBankDescriptorPreset(bunker::MapObject& object,
-                                        char* scriptTagBuffer,
-                                        std::size_t scriptTagSize,
-                                        char* linkTargetBuffer,
-                                        std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "capacitor_bank";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "inner_spur_capacitor";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyRelaySubstationDescriptorPreset(bunker::MapObject& object,
-                                          char* scriptTagBuffer,
-                                          std::size_t scriptTagSize,
-                                          char* linkTargetBuffer,
-                                          std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "relay_substation";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "shelter17_backbone";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyServiceBayDescriptorPreset(bunker::MapObject& object,
-                                     char* scriptTagBuffer,
-                                     std::size_t scriptTagSize,
-                                     char* linkTargetBuffer,
-                                     std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "service_bay";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "inner_spur_service";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyWaterReclaimerDescriptorPreset(bunker::MapObject& object,
-                                         char* scriptTagBuffer,
-                                         std::size_t scriptTagSize,
-                                         char* linkTargetBuffer,
-                                         std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "water_reclaimer";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "inner_spur_water";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyServiceHubDescriptorPreset(bunker::MapObject& object,
-                                     char* scriptTagBuffer,
-                                     std::size_t scriptTagSize,
-                                     char* linkTargetBuffer,
-                                     std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "lanline_service_hub";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "shelter17_services";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyFeyRingDescriptorPreset(bunker::MapObject& object,
-                                  char* scriptTagBuffer,
-                                  std::size_t scriptTagSize,
-                                  char* linkTargetBuffer,
-                                  std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Landmark;
-    object.scriptTag = "fey_ring";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "intercity_ring";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyMedicalSupportDescriptorPreset(bunker::MapObject& object,
-                                         char* scriptTagBuffer,
-                                         std::size_t scriptTagSize,
-                                         char* linkTargetBuffer,
-                                         std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "medical_support";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "field_medical";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyTankServiceDescriptorPreset(bunker::MapObject& object,
-                                      char* scriptTagBuffer,
-                                      std::size_t scriptTagSize,
-                                      char* linkTargetBuffer,
-                                      std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Workshop;
-    object.category = bunker::ObjectCategory::Hangar;
-    object.scriptTag = "tank_service";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "bt72_service";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyRemoteLinkDescriptorPreset(bunker::MapObject& object,
-                                     char* scriptTagBuffer,
-                                     std::size_t scriptTagSize,
-                                     char* linkTargetBuffer,
-                                     std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "remote_link";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "gate_control";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplyEchoDescriptorPreset(bunker::MapObject& object,
-                               char* scriptTagBuffer,
-                               std::size_t scriptTagSize,
-                               char* linkTargetBuffer,
-                               std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "echo_trace";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "hidden_cache";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-void ApplySpecialistDescriptorPreset(bunker::MapObject& object,
-                                     char* scriptTagBuffer,
-                                     std::size_t scriptTagSize,
-                                     char* linkTargetBuffer,
-                                     std::size_t linkTargetSize) {
-    object.interaction = bunker::InteractionType::Terminal;
-    object.category = bunker::ObjectCategory::Terminal;
-    object.scriptTag = "specialist_cryo";
-    if (object.linkTarget.empty()) {
-        object.linkTarget = "engineer";
-    }
-    CopyStringToBuffer(object.scriptTag, scriptTagBuffer, scriptTagSize);
-    CopyStringToBuffer(object.linkTarget, linkTargetBuffer, linkTargetSize);
-}
-
-std::string ToLowerCopy(std::string value) {
-    for (char& ch : value) {
-        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    }
-    return value;
-}
-
-bool ContainsCaseInsensitive(const std::string& haystack, const std::string& needle) {
-    if (needle.empty()) {
-        return true;
-    }
-    return ToLowerCopy(haystack).find(ToLowerCopy(needle)) != std::string::npos;
-}
-
-bool IsBlank(const char* text) {
-    if (text == nullptr) {
-        return true;
-    }
-    while (*text != '\0') {
-        if (!std::isspace(static_cast<unsigned char>(*text))) {
-            return false;
-        }
-        ++text;
-    }
-    return true;
-}
-
-std::string TrimCopy(const char* text) {
-    if (text == nullptr) {
-        return {};
-    }
-    std::string_view value(text);
-    std::size_t first = 0;
-    while (first < value.size() && std::isspace(static_cast<unsigned char>(value[first]))) {
-        ++first;
-    }
-    if (first == value.size()) {
-        return {};
-    }
-    std::size_t last = value.size();
-    while (last > first && std::isspace(static_cast<unsigned char>(value[last - 1]))) {
-        --last;
-    }
-    return std::string(value.substr(first, last - first));
-}
-
-std::string NormalizeExportWorldName(const char* exportWorldFileInput) {
-    std::string exportName = TrimCopy(exportWorldFileInput);
-    if (exportName.empty()) {
-        return {};
-    }
-    if (!exportName.ends_with(".bwld")) {
-        exportName += ".bwld";
-    }
-    return bunker::NormalizeWorldReference(exportName);
-}
-
-std::string MakeDuplicateRegistryId(const bunker::World& world, const std::string& sourceRegistryId) {
-    std::string stem = sourceRegistryId;
-    if (!stem.empty() && stem.back() == ']') {
-        stem.pop_back();
-    }
-
-    for (int copyIndex = 1; copyIndex < 10000; ++copyIndex) {
-        std::string candidate = stem + "_copy_" + std::to_string(copyIndex);
-        if (!sourceRegistryId.empty() && sourceRegistryId.back() == ']') {
-            candidate += "]";
-        }
-        if (!world.HasObject(candidate)) {
-            return candidate;
-        }
-    }
-
-    return stem + "_copy_overflow";
-}
-
-bool HasOtherObjectWithRegistryId(const bunker::World& world, const std::string& registryId, int selectedIndex) {
-    for (int index = 0; index < static_cast<int>(world.objects.size()); ++index) {
-        if (index == selectedIndex) {
-            continue;
-        }
-        if (world.objects[static_cast<std::size_t>(index)].registryId == registryId) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool LoadPrefabLibrary(std::vector<SavedPrefab>& prefabs) {
-    prefabs.clear();
-
-    std::ifstream file(bunker::EditorPrefabLibraryPath());
-    if (!file.is_open()) {
-        return false;
-    }
-
-    SavedPrefab prefab;
-    while (file >> std::quoted(prefab.label)
-                >> std::quoted(prefab.object.registryId)
-                >> std::quoted(prefab.object.displayName)
-                >> std::quoted(prefab.object.scriptTag)
-                >> std::quoted(prefab.object.linkTarget)) {
-        int interaction = 0;
-        int category = 0;
-        file >> interaction
-             >> category
-             >> prefab.object.x
-             >> prefab.object.y
-             >> prefab.object.z
-             >> prefab.object.width
-             >> prefab.object.depth
-             >> prefab.object.height
-             >> prefab.object.health
-             >> prefab.object.blocksMovement
-             >> prefab.object.discovered
-             >> prefab.object.manualLoot;
-        if (!file) {
-            break;
-        }
-
-        prefab.object.interaction = static_cast<bunker::InteractionType>(interaction);
-        prefab.object.category = static_cast<bunker::ObjectCategory>(category);
-        for (auto& lootId : prefab.object.manualLootIds) {
-            if (!(file >> std::quoted(lootId))) {
-                return false;
-            }
-        }
-        prefabs.push_back(prefab);
-    }
-
-    return true;
-}
-
-std::string BuildEditorValidationStatus(const bunker::World& world) {
-    const auto issues = bunker::ValidateWorldForRuntime(world);
-    return bunker::BuildValidationSummary(issues);
-}
-
-bool SavePrefabLibrary(const std::vector<SavedPrefab>& prefabs) {
-    std::ofstream file(bunker::EditorPrefabLibraryPath());
-    if (!file.is_open()) {
-        return false;
-    }
-
-    for (const auto& prefab : prefabs) {
-        file << std::quoted(prefab.label) << ' '
-             << std::quoted(prefab.object.registryId) << ' '
-             << std::quoted(prefab.object.displayName) << ' '
-             << std::quoted(prefab.object.scriptTag) << ' '
-             << std::quoted(prefab.object.linkTarget) << ' '
-             << static_cast<int>(prefab.object.interaction) << ' '
-             << static_cast<int>(prefab.object.category) << ' '
-             << prefab.object.x << ' '
-             << prefab.object.y << ' '
-             << prefab.object.z << ' '
-             << prefab.object.width << ' '
-             << prefab.object.depth << ' '
-             << prefab.object.height << ' '
-             << prefab.object.health << ' '
-             << prefab.object.blocksMovement << ' '
-             << prefab.object.discovered << ' '
-             << prefab.object.manualLoot;
-        for (const auto& lootId : prefab.object.manualLootIds) {
-            file << ' ' << std::quoted(lootId);
-        }
-        file << '\n';
-    }
-
-    return static_cast<bool>(file);
-}
-
-ImU32 ColorForCategory(bunker::ObjectCategory category) {
-    switch (category) {
-        case bunker::ObjectCategory::Structure: return IM_COL32(110, 120, 140, 255);
-        case bunker::ObjectCategory::ResourceNode: return IM_COL32(180, 140, 60, 255);
-        case bunker::ObjectCategory::Terminal: return IM_COL32(40, 170, 210, 255);
-        case bunker::ObjectCategory::Vehicle: return IM_COL32(170, 170, 80, 255);
-        case bunker::ObjectCategory::Landmark: return IM_COL32(80, 180, 110, 255);
-        case bunker::ObjectCategory::Container: return IM_COL32(170, 80, 60, 255);
-        case bunker::ObjectCategory::Hangar: return IM_COL32(150, 120, 70, 255);
-        case bunker::ObjectCategory::Hostile: return IM_COL32(200, 60, 60, 255);
-    }
-    return IM_COL32(150, 150, 150, 255);
-}
-
-const char* InteractionMarker(bunker::InteractionType interaction) {
-    switch (interaction) {
-        case bunker::InteractionType::Static: return "S";
-        case bunker::InteractionType::Container: return "C";
-        case bunker::InteractionType::Resource: return "R";
-        case bunker::InteractionType::Terminal: return "T";
-        case bunker::InteractionType::Transition: return "X";
-        case bunker::InteractionType::VehicleAnchor: return "V";
-        case bunker::InteractionType::Workshop: return "W";
-        case bunker::InteractionType::Hostile: return "H";
-    }
-    return "?";
-}
-
-ImU32 InteractionMarkerColor(bunker::InteractionType interaction) {
-    switch (interaction) {
-        case bunker::InteractionType::Static: return IM_COL32(190, 190, 190, 210);
-        case bunker::InteractionType::Container: return IM_COL32(214, 120, 90, 230);
-        case bunker::InteractionType::Resource: return IM_COL32(212, 178, 90, 230);
-        case bunker::InteractionType::Terminal: return IM_COL32(80, 210, 230, 230);
-        case bunker::InteractionType::Transition: return IM_COL32(110, 220, 140, 230);
-        case bunker::InteractionType::VehicleAnchor: return IM_COL32(220, 210, 90, 230);
-        case bunker::InteractionType::Workshop: return IM_COL32(255, 170, 70, 230);
-        case bunker::InteractionType::Hostile: return IM_COL32(230, 80, 80, 230);
-    }
-    return IM_COL32(220, 220, 220, 210);
-}
-
-PreviewInteraction DrawWorldPreview(const bunker::World& world,
-                                    int selectedObjectIndex,
-                                    bool previewAsPlayer,
-                                    PreviewViewportState& viewportState,
-                                    bool showInteractionHelpers,
-                                    bool showObjectLabels) {
-    PreviewInteraction interactionResult;
-    ImGui::Text("World Preview");
-    ImGui::TextDisabled(previewAsPlayer ? "Preview: player readability" : "Preview: editor overview");
-
-    const ImVec2 canvasSize(0.0f, 220.0f);
-    ImGui::BeginChild("WorldPreviewCanvas", canvasSize, true);
-    const ImVec2 origin = ImGui::GetCursorScreenPos();
-    const ImVec2 size = ImGui::GetContentRegionAvail();
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-    drawList->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), IM_COL32(18, 22, 28, 255));
-    drawList->AddRect(origin, ImVec2(origin.x + size.x, origin.y + size.y), IM_COL32(60, 80, 96, 255));
-
-    float minX = world.metadata.playerSpawnX;
-    float maxX = world.metadata.playerSpawnX;
-    float minY = world.metadata.playerSpawnY;
-    float maxY = world.metadata.playerSpawnY;
-    for (const auto& object : world.objects) {
-        minX = std::min(minX, object.x - object.width);
-        maxX = std::max(maxX, object.x + object.width);
-        minY = std::min(minY, object.y - object.depth);
-        maxY = std::max(maxY, object.y + object.depth);
-    }
-
-    const float worldWidth = std::max(1.0f, maxX - minX);
-    const float worldHeight = std::max(1.0f, maxY - minY);
-    const float scaleX = (size.x - 12.0f) / worldWidth;
-    const float scaleY = (size.y - 12.0f) / worldHeight;
-    const float baseScale = std::max(1.0f, std::min(scaleX, scaleY));
-    const float scale = std::max(0.25f, baseScale * viewportState.zoom);
-
-    auto toCanvas = [&](float worldX, float worldY) {
-        const float px = origin.x + 6.0f + viewportState.offsetX + ((worldX - minX) * scale);
-        const float py = origin.y + 6.0f + viewportState.offsetY + ((worldY - minY) * scale);
-        return ImVec2(px, py);
-    };
-
-    auto toWorld = [&](const ImVec2& canvasPoint) {
-        const float worldX = minX + ((canvasPoint.x - (origin.x + 6.0f) - viewportState.offsetX) / scale);
-        const float worldY = minY + ((canvasPoint.y - (origin.y + 6.0f) - viewportState.offsetY) / scale);
-        return ImVec2(worldX, worldY);
-    };
-
-    if (ImGui::IsWindowHovered()) {
-        const float wheel = ImGui::GetIO().MouseWheel;
-        if (wheel != 0.0f) {
-            viewportState.zoom = std::clamp(viewportState.zoom + (wheel * 0.1f), 0.5f, 3.0f);
-        }
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle)) {
-            const ImVec2 drag = ImGui::GetIO().MouseDelta;
-            viewportState.offsetX += drag.x;
-            viewportState.offsetY += drag.y;
-        }
-    }
-
-    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        const ImVec2 mousePos = ImGui::GetIO().MousePos;
-        if (mousePos.x >= origin.x && mousePos.x <= origin.x + size.x &&
-            mousePos.y >= origin.y && mousePos.y <= origin.y + size.y) {
-            interactionResult.clicked = true;
-            const ImVec2 worldPoint = toWorld(mousePos);
-            interactionResult.worldX = worldPoint.x;
-            interactionResult.worldY = worldPoint.y;
-            for (int index = static_cast<int>(world.objects.size()) - 1; index >= 0; --index) {
-                const auto& object = world.objects[static_cast<std::size_t>(index)];
-                const float minObjectX = object.x - (object.width * 0.5f);
-                const float maxObjectX = object.x + (object.width * 0.5f);
-                const float minObjectY = object.y - (object.depth * 0.5f);
-                const float maxObjectY = object.y + (object.depth * 0.5f);
-                if (worldPoint.x >= minObjectX && worldPoint.x <= maxObjectX &&
-                    worldPoint.y >= minObjectY && worldPoint.y <= maxObjectY) {
-                    interactionResult.clickedObject = true;
-                    interactionResult.clickedObjectIndex = index;
-                    interactionResult.doubleClickedObject = ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
-                    break;
-                }
-            }
-        }
-    }
-
-    if (ImGui::IsWindowHovered() &&
-        selectedObjectIndex >= 0 &&
-        selectedObjectIndex < static_cast<int>(world.objects.size()) &&
-        ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-        const ImVec2 mousePos = ImGui::GetIO().MousePos;
-        if (mousePos.x >= origin.x && mousePos.x <= origin.x + size.x &&
-            mousePos.y >= origin.y && mousePos.y <= origin.y + size.y) {
-            const auto& selectedObject = world.objects[static_cast<std::size_t>(selectedObjectIndex)];
-            const ImVec2 selectedCenter = toCanvas(selectedObject.x, selectedObject.y);
-            const float pickRadiusX = std::max(8.0f, selectedObject.width * 0.5f * scale);
-            const float pickRadiusY = std::max(8.0f, selectedObject.depth * 0.5f * scale);
-            if (std::abs(mousePos.x - selectedCenter.x) <= pickRadiusX &&
-                std::abs(mousePos.y - selectedCenter.y) <= pickRadiusY) {
-                const ImVec2 worldPoint = toWorld(mousePos);
-                interactionResult.draggingSelectedObject = true;
-                interactionResult.worldX = worldPoint.x;
-                interactionResult.worldY = worldPoint.y;
-            }
-        }
-    }
-
-    if (!world.objects.empty()) {
-        for (int index = 0; index < static_cast<int>(world.objects.size()); ++index) {
-            const auto& object = world.objects[static_cast<std::size_t>(index)];
-            const ImVec2 center = toCanvas(object.x, object.y);
-            const float halfW = std::max(2.0f, object.width * 0.5f * scale);
-            const float halfH = std::max(2.0f, object.depth * 0.5f * scale);
-            const ImVec2 min(center.x - halfW, center.y - halfH);
-            const ImVec2 max(center.x + halfW, center.y + halfH);
-            drawList->AddRectFilled(min, max, ColorForCategory(object.category), 2.0f);
-            if (selectedObjectIndex == index) {
-                drawList->AddRect(min, max, IM_COL32(255, 240, 110, 255), 2.0f, 0, 2.0f);
-            }
-            if (showInteractionHelpers) {
-                const ImU32 markerColor = InteractionMarkerColor(object.interaction);
-                drawList->AddCircleFilled(ImVec2(center.x, center.y - halfH - 10.0f), 8.0f, markerColor);
-                drawList->AddText(ImVec2(center.x - 3.0f, center.y - halfH - 16.0f), IM_COL32(20, 20, 20, 255), InteractionMarker(object.interaction));
-            }
-            if (showObjectLabels || selectedObjectIndex == index) {
-                drawList->AddText(ImVec2(center.x + halfW + 4.0f, center.y - 6.0f), IM_COL32(220, 220, 220, 220), object.displayName.c_str());
-                if (selectedObjectIndex == index && !object.scriptTag.empty()) {
-                    drawList->AddText(ImVec2(center.x + halfW + 4.0f, center.y + 8.0f), IM_COL32(150, 210, 180, 220), object.scriptTag.c_str());
-                }
-                if (selectedObjectIndex == index && !object.linkTarget.empty()) {
-                    const std::string routeLabel = "-> " + object.linkTarget;
-                    drawList->AddText(ImVec2(center.x + halfW + 4.0f, center.y + 22.0f), IM_COL32(140, 190, 230, 220), routeLabel.c_str());
-                }
-            }
-        }
-
-        const ImVec2 spawnPoint = toCanvas(world.metadata.playerSpawnX, world.metadata.playerSpawnY);
-        drawList->AddCircleFilled(spawnPoint, 5.0f, IM_COL32(120, 255, 170, 255));
-        drawList->AddCircle(spawnPoint, 9.0f, IM_COL32(120, 255, 170, 180), 0, 2.0f);
-        drawList->AddText(ImVec2(spawnPoint.x + 8.0f, spawnPoint.y - 8.0f), IM_COL32(120, 255, 170, 220), "SPAWN");
-    } else {
-        drawList->AddText(ImVec2(origin.x + 12.0f, origin.y + 12.0f), IM_COL32(180, 180, 180, 255), "No objects in world preview.");
-    }
-
-    ImGui::Dummy(size);
-    ImGui::EndChild();
-    return interactionResult;
-}
-
-#endif
 
 using editor_support::ApplyAssemblyCellDescriptorPreset;
 using editor_support::ApplyCapacitorBankDescriptorPreset;
@@ -2265,7 +1306,12 @@ int main() {
     bool showLocationsWindow = true;
     bool showExportRuntime = true;
     bool showImportAssistant = true;
+    bool showEditorToolbar = true;
+    bool showEditorStatus = true;
+    bool showControlsHelp = false;
+    bool showAboutEditor = false;
     bool resetWorkspaceLayout = false;
+    bool workspaceLayoutInitialized = false;
     bool importToPrefabLibrary = true;
     bool seedDraftFromImport = true;
     bool previewAsPlayer = true;
@@ -2371,6 +1417,18 @@ int main() {
     int selectedPrefabIndex = -1;
     int viewportObjectUnderMouseIndex = -1;
     int contextObjectIndex = -1;
+    bool showReferencePropertiesWindow = false;
+    int referencePropertiesObjectIndex = -1;
+    int referencePropertiesBufferObjectIndex = -1;
+    int referenceLootSelectedSlot = 0;
+    std::vector<std::string> editorFloorStack = {
+        "Bunker Level 0 / Ground",
+        "Bunker Level +1",
+        "Bunker Level -1",
+        "Double-height / Arena volume",
+    };
+    std::vector<std::pair<std::string, int>> objectFloorAssignments;
+    bool filterCurrentEditorLevel = true;
     int objectWindowCategoryIndex = 0;
     int selectedImportedConceptIndex = -1;
     int objectCategoryFilter = -1;
@@ -2394,6 +1452,13 @@ int main() {
     char selectedScriptTagEdit[128] = "";
     char selectedLinkTargetEdit[128] = "";
     char selectedLayerEdit[64] = "";
+    char referenceDisplayNameEdit[128] = "";
+    char referenceScriptTagEdit[128] = "";
+    char referenceLinkTargetEdit[128] = "";
+    char referenceLayerEdit[64] = "";
+    char selectedPlanningLevelEdit[128] = "Bunker Level 0 / Ground";
+    std::array<std::array<char, 64>, 4> referenceLootEdits{};
+    char referenceLootEntryEdit[256] = "";
     char draftLayerInput[64] = "Structures";
     float worldSpawnX = editorWorld.metadata.playerSpawnX;
     float worldSpawnY = editorWorld.metadata.playerSpawnY;
@@ -2420,7 +1485,6 @@ int main() {
     const char* interactionLabels[] = {"Static", "Container", "Resource", "Terminal", "Transition", "Vehicle Anchor", "Workshop", "Hostile"};
     const char* categoryLabels[] = {"Structure", "Resource Node", "Terminal", "Vehicle", "Landmark", "Container", "Hangar", "Hostile"};
     const char* objectFilterLabels[] = {"All Categories", "Structure", "Resource Node", "Terminal", "Vehicle", "Landmark", "Container", "Hangar", "Hostile"};
-    const char* levelPlanningLabels[] = {"Bunker Level 0 / Ground", "Bunker Level +1", "Bunker Level -1", "Double-height / Arena volume"};
     const char* locationPlanningLabels[] = {
         "Current Bunker Interior",
         "Future Exterior Entry",
@@ -2495,6 +1559,77 @@ int main() {
     };
     auto isLayerLockedForObject = [&](const bunker::MapObject& object) {
         return IsObjectLockedInEditorLayerView(object, editorLayerStates);
+    };
+    auto clampEditorFloorIndex = [&](int floorIndex) {
+        const int floorCount = static_cast<int>(editorFloorStack.size());
+        if (floorCount <= 0) {
+            return 0;
+        }
+        return std::clamp(floorIndex, 0, floorCount - 1);
+    };
+    auto findObjectFloorAssignment = [&](std::string_view registryId) -> int {
+        for (const auto& assignment : objectFloorAssignments) {
+            if (assignment.first == registryId) {
+                return clampEditorFloorIndex(assignment.second);
+            }
+        }
+        return 0;
+    };
+    auto setObjectFloorAssignment = [&](std::string_view registryId, int floorIndex) {
+        const std::string registryKey(registryId);
+        const int clampedFloorIndex = clampEditorFloorIndex(floorIndex);
+        for (auto& assignment : objectFloorAssignments) {
+            if (assignment.first == registryKey) {
+                assignment.second = clampedFloorIndex;
+                return;
+            }
+        }
+        objectFloorAssignments.emplace_back(registryKey, clampedFloorIndex);
+    };
+    auto removeObjectFloorAssignment = [&](std::string_view registryId) {
+        const std::string registryKey(registryId);
+        objectFloorAssignments.erase(
+            std::remove_if(
+                objectFloorAssignments.begin(),
+                objectFloorAssignments.end(),
+                [&](const auto& assignment) { return assignment.first == registryKey; }),
+            objectFloorAssignments.end());
+    };
+    auto syncObjectFloorAssignments = [&]() {
+        objectFloorAssignments.erase(
+            std::remove_if(
+                objectFloorAssignments.begin(),
+                objectFloorAssignments.end(),
+                [&](const auto& assignment) { return !editorWorld.HasObject(assignment.first); }),
+            objectFloorAssignments.end());
+        for (const auto& object : editorWorld.objects) {
+            setObjectFloorAssignment(object.registryId, findObjectFloorAssignment(object.registryId));
+        }
+    };
+    auto isObjectVisibleForCurrentEditorFloor = [&](const bunker::MapObject& object) {
+        if (!filterCurrentEditorLevel) {
+            return true;
+        }
+        return findObjectFloorAssignment(object.registryId) == clampEditorFloorIndex(selectedPlanningLevelIndex);
+    };
+    auto countObjectsAssignedToEditorFloor = [&](int floorIndex) {
+        const int clampedFloorIndex = clampEditorFloorIndex(floorIndex);
+        int count = 0;
+        for (const auto& object : editorWorld.objects) {
+            if (findObjectFloorAssignment(object.registryId) == clampedFloorIndex) {
+                ++count;
+            }
+        }
+        return count;
+    };
+    auto countObjectsVisibleAfterEditorFilters = [&]() {
+        int count = 0;
+        for (const auto& object : editorWorld.objects) {
+            if (isLayerVisibleForObject(object) && isObjectVisibleForCurrentEditorFloor(object)) {
+                ++count;
+            }
+        }
+        return count;
     };
     auto refreshDraftLayerForPreset = [&]() {
         bunker::MapObject draftObject;
@@ -2652,6 +1787,7 @@ int main() {
         }
 
         syncEditorLayerStateTable();
+        syncObjectFloorAssignments();
         clearSemanticOverlay();
         if (!outcome.focusRegistryId.empty()) {
             const int focusIndex = FindObjectIndexByRegistryId(editorWorld, outcome.focusRegistryId);
@@ -2709,6 +1845,8 @@ int main() {
                     beforeObject.discovered != afterObject.discovered ||
                     beforeObject.manualLoot != afterObject.manualLoot ||
                     beforeObject.manualLootIds != afterObject.manualLootIds ||
+                    beforeObject.lootMode != afterObject.lootMode ||
+                    beforeObject.lootEntries != afterObject.lootEntries ||
                     beforeObject.scriptTag != afterObject.scriptTag ||
                     beforeObject.linkTarget != afterObject.linkTarget ||
                     beforeObject.prefabSourceId != afterObject.prefabSourceId ||
@@ -2729,9 +1867,23 @@ int main() {
     };
     auto deleteObjectByRegistryId = [&](const std::string& registryId) {
         const int deletedObjectIndex = FindObjectIndexByRegistryId(editorWorld, registryId);
+        removeObjectFloorAssignment(registryId);
         editorWorld.RemoveObject(registryId);
         syncEditorLayerStateTable();
         clearSemanticOverlay();
+        if (contextObjectIndex == deletedObjectIndex) {
+            contextObjectIndex = -1;
+        } else if (contextObjectIndex > deletedObjectIndex && deletedObjectIndex >= 0) {
+            --contextObjectIndex;
+        }
+        if (referencePropertiesObjectIndex == deletedObjectIndex) {
+            showReferencePropertiesWindow = false;
+            referencePropertiesObjectIndex = -1;
+            referencePropertiesBufferObjectIndex = -1;
+        } else if (referencePropertiesObjectIndex > deletedObjectIndex && deletedObjectIndex >= 0) {
+            --referencePropertiesObjectIndex;
+            referencePropertiesBufferObjectIndex = -1;
+        }
         if (selectedObjectIndex == deletedObjectIndex) {
             selectedObjectIndex = -1;
             SyncSelectedObjectBindings(
@@ -2745,6 +1897,30 @@ int main() {
         } else if (selectedObjectIndex > deletedObjectIndex && deletedObjectIndex >= 0) {
             --selectedObjectIndex;
         }
+    };
+    auto deletePlacedReferenceByIndex = [&](int objectIndex, std::string_view undoLabel) {
+        if (objectIndex < 0 || objectIndex >= static_cast<int>(editorWorld.objects.size())) {
+            statusText = "Select a placed reference before deleting.";
+            return false;
+        }
+        const auto& object = editorWorld.objects[static_cast<std::size_t>(objectIndex)];
+        if (isLayerLockedForObject(object)) {
+            statusText = "Selected object layer is locked; delete is disabled.";
+            return false;
+        }
+        const bunker::MapObject removedObject = object;
+        const std::string removedRegistryId = object.registryId;
+        const std::string removedDisplayName = object.displayName;
+        const std::string beforeSelectionRegistryId = currentSelectedRegistryId();
+        deleteObjectByRegistryId(removedRegistryId);
+        undoStack.PushObjectRemoved(
+            undoLabel,
+            removedObject,
+            objectIndex,
+            beforeSelectionRegistryId,
+            currentSelectedRegistryId());
+        statusText = "Deleted placed reference: " + removedDisplayName;
+        return true;
     };
     auto refreshExportArtifactPreview = [&](const std::filesystem::path& worldPath) {
         const auto reportPath = worldPath.empty()
@@ -2857,6 +2033,10 @@ int main() {
             statusText = "Selected object layer is hidden; transform is disabled.";
             return false;
         }
+        if (!isObjectVisibleForCurrentEditorFloor(selectedObject)) {
+            statusText = "Selected object is filtered by the current floor; transform is disabled.";
+            return false;
+        }
 
         const bunker::MapObject beforeObject = selectedObject;
         selectedObject.z = snapCoordinate(selectedObject.z + direction * resolvedSnapStep());
@@ -2901,6 +2081,10 @@ int main() {
         }
         if (!isLayerVisibleForObject(selectedObject)) {
             statusText = "Selected object layer is hidden; transform is disabled.";
+            return false;
+        }
+        if (!isObjectVisibleForCurrentEditorFloor(selectedObject)) {
+            statusText = "Selected object is filtered by the current floor; transform is disabled.";
             return false;
         }
 
@@ -2953,7 +2137,7 @@ int main() {
         float maxY = editorWorld.metadata.playerSpawnY;
         bool hasVisibleObject = false;
         for (const auto& object : editorWorld.objects) {
-            if (!isLayerVisibleForObject(object)) {
+            if (!isLayerVisibleForObject(object) || !isObjectVisibleForCurrentEditorFloor(object)) {
                 continue;
             }
             hasVisibleObject = true;
@@ -2982,7 +2166,7 @@ int main() {
         float bestScore = std::numeric_limits<float>::max();
         for (int objectIndex = 0; objectIndex < static_cast<int>(editorWorld.objects.size()); ++objectIndex) {
             const auto& object = editorWorld.objects[static_cast<std::size_t>(objectIndex)];
-            if (!isLayerVisibleForObject(object) || isLayerLockedForObject(object)) {
+            if (!isLayerVisibleForObject(object) || !isObjectVisibleForCurrentEditorFloor(object)) {
                 continue;
             }
             if (!std::isfinite(object.x) || !std::isfinite(object.y) || !std::isfinite(object.z) ||
@@ -3066,6 +2250,32 @@ int main() {
         }
         return placed;
     };
+    auto objectWindowSelectionLootReference = [&]() -> std::optional<std::pair<std::string, std::string>> {
+        if (selectedPrefabIndex >= 0 && selectedPrefabIndex < static_cast<int>(savedPrefabs.size())) {
+            const auto& prefab = savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)];
+            return std::make_pair(prefab.id.empty() ? prefab.label : prefab.id, "Object Window prefab: " + prefab.label);
+        }
+        if (presetIndex >= 0 && presetIndex < IM_ARRAYSIZE(objectPresetLabels)) {
+            return std::make_pair("preset:" + std::string(objectPresetLabels[presetIndex]), "Object Window preset: " + std::string(objectPresetLabels[presetIndex]));
+        }
+        return std::nullopt;
+    };
+    auto objectWindowDragPayloadLootReference = [&](const ObjectWindowDragPayload& payload) -> std::optional<std::pair<std::string, std::string>> {
+        if (payload.sourceType == kObjectWindowDragSourcePreset &&
+            payload.sourceIndex >= 0 &&
+            payload.sourceIndex < IM_ARRAYSIZE(objectPresetLabels)) {
+            return std::make_pair(
+                "preset:" + std::string(objectPresetLabels[payload.sourceIndex]),
+                "Object Window preset: " + std::string(objectPresetLabels[payload.sourceIndex]));
+        }
+        if (payload.sourceType == kObjectWindowDragSourcePrefab &&
+            payload.sourceIndex >= 0 &&
+            payload.sourceIndex < static_cast<int>(savedPrefabs.size())) {
+            const auto& prefab = savedPrefabs[static_cast<std::size_t>(payload.sourceIndex)];
+            return std::make_pair(prefab.id.empty() ? prefab.label : prefab.id, "Object Window prefab: " + prefab.label);
+        }
+        return std::nullopt;
+    };
     auto placeObjectWindowSourceInWorld = [&](int sourceType, int sourceIndex, bool hasWorldPosition, float worldX, float worldY) {
         float placeWorldX = hasWorldPosition ? worldX : gViewportPreviewOrbitState.targetWorldX;
         float placeWorldY = hasWorldPosition ? worldY : gViewportPreviewOrbitState.targetWorldY;
@@ -3114,6 +2324,7 @@ int main() {
             static_cast<int>(editorWorld.objects.size()) - 1,
             editorWorld.objects.back().registryId);
         syncEditorLayerStateTable();
+        setObjectFloorAssignment(editorWorld.objects.back().registryId, selectedPlanningLevelIndex);
         focusObjectInEditor(static_cast<int>(editorWorld.objects.size()) - 1, previewViewport.zoom);
         placeX = editorWorld.objects.back().x;
         placeY = editorWorld.objects.back().y;
@@ -3174,6 +2385,7 @@ int main() {
     };
     refreshDraftLayerForPreset();
     refreshWorkspaceExportArtifactPreview();
+    syncObjectFloorAssignments();
     undoStack.MarkSaved();
 
     while (!glfwWindowShouldClose(window)) {
@@ -3202,7 +2414,7 @@ int main() {
                         candidate += objectCount;
                     }
                     const auto& candidateObject = editorWorld.objects[static_cast<std::size_t>(candidate)];
-                    if (!isLayerVisibleForObject(candidateObject) || isLayerLockedForObject(candidateObject)) {
+                    if (!isLayerVisibleForObject(candidateObject)) {
                         continue;
                     }
                     selectedObjectIndex = candidate;
@@ -3258,6 +2470,19 @@ int main() {
                 }
                 ViewportPreviewShowOverlayMessage(statusText.c_str());
             }
+            if (frameIo.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) {
+                applyUndoOutcome(undoStack.Undo(editorWorld));
+                ViewportPreviewShowOverlayMessage(statusText.c_str());
+            }
+            if (frameIo.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) {
+                applyUndoOutcome(undoStack.Redo(editorWorld));
+                ViewportPreviewShowOverlayMessage(statusText.c_str());
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_Delete) && !ImGui::IsAnyItemActive()) {
+                if (deletePlacedReferenceByIndex(selectedObjectIndex, "Delete placed reference")) {
+                    ViewportPreviewShowOverlayMessage(statusText.c_str());
+                }
+            }
             if (ImGui::IsKeyPressed(ImGuiKey_G) && selectedObjectIndex >= 0) {
                 gViewportPreviewToolState.activeTool = ViewportPreviewTool::MovePreview;
                 gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::None;
@@ -3285,21 +2510,6 @@ int main() {
                 statusText = std::string("Transform Orientation preview: ") +
                     ViewportPreviewOrientationName(gViewportPreviewToolState.orientation) + ".";
                 ViewportPreviewShowOverlayMessage(statusText.c_str());
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_X)) {
-                gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::X;
-                statusText = "Active gizmo axis: X.";
-                ViewportPreviewShowOverlayMessage(statusText.c_str(), 1.25);
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_Y)) {
-                gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Y;
-                statusText = "Active gizmo axis: Y.";
-                ViewportPreviewShowOverlayMessage(statusText.c_str(), 1.25);
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_Z)) {
-                gViewportPreviewToolState.activeAxis = ViewportPreviewAxis::Z;
-                statusText = "Active gizmo axis: Z.";
-                ViewportPreviewShowOverlayMessage(statusText.c_str(), 1.25);
             }
 
             auto keypadPressed = [](ImGuiKey key) {
@@ -3571,8 +2781,199 @@ int main() {
         glClearColor(0.07f, 0.07f, 0.09f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
+        const auto disabledMenuItem = [](const char* label, const char* reason) {
+            ImGui::BeginDisabled();
+            ImGui::MenuItem(label);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("%s", reason);
+            }
+        };
+        const auto disabledButton = [](const char* label, const char* reason, const ImVec2& size = ImVec2(0.0f, 0.0f)) {
+            ImGui::BeginDisabled();
+            ImGui::Button(label, size);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("%s", reason);
+            }
+        };
+        auto showAllEditorWindows = [&]() {
+            showAssetPalette = true;
+            showObjectWindow = true;
+            showWorldAuthoring = true;
+            showCellView = true;
+            showRenderWindow = true;
+            showLevelsWindow = true;
+            showLocationsWindow = true;
+            showExportRuntime = true;
+            showImportAssistant = true;
+            showEditorToolbar = true;
+            showEditorStatus = true;
+            statusText = "Opened the full editor workspace.";
+        };
+        auto showAllEditorLayers = [&]() {
+            for (auto& layerState : editorLayerStates) {
+                layerState.visible = true;
+            }
+            statusText = "All editor layers are visible in Render Window.";
+        };
+        auto unlockAllEditorLayers = [&]() {
+            for (auto& layerState : editorLayerStates) {
+                layerState.locked = false;
+            }
+            statusText = "All editor layers are unlocked.";
+        };
+        auto openSelectedReferenceProperties = [&]() {
+            if (selectedObjectIndex < 0 || selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+                statusText = "Select a placed reference before opening properties.";
+                return false;
+            }
+            referencePropertiesObjectIndex = selectedObjectIndex;
+            referencePropertiesBufferObjectIndex = -1;
+            showReferencePropertiesWindow = true;
+            statusText = "Opened reference properties for selected placed object.";
+            return true;
+        };
+        auto focusSelectedReference = [&]() {
+            if (selectedObjectIndex < 0 || selectedObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+                statusText = "Select an object before focusing.";
+                return false;
+            }
+            const bool focused = focusObjectInEditor(selectedObjectIndex, 1.45f);
+            statusText = focused ? "Focused selected object." : "Selected object could not be focused.";
+            return focused;
+        };
+        const bool hasSelectedReference =
+            selectedObjectIndex >= 0 && selectedObjectIndex < static_cast<int>(editorWorld.objects.size());
+        const bool selectedReferenceLocked = hasSelectedReference &&
+            isLayerLockedForObject(editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)]);
+        const bool canDeleteSelectedReference = hasSelectedReference && !selectedReferenceLocked;
+        const char* futureRoadmapTooltip = "Future roadmap item; no editor behavior is implemented yet.";
+
         if (ImGui::BeginMainMenuBar()) {
+            if (ImGui::BeginMenu("File")) {
+                disabledMenuItem("New World", futureRoadmapTooltip);
+                disabledMenuItem("Load World...", futureRoadmapTooltip);
+                disabledMenuItem("Save", "Use the Export / Runtime window for the current runtime export path.");
+                disabledMenuItem("Save As...", "Save format migration and file picker are future roadmap items.");
+                ImGui::Separator();
+                if (ImGui::MenuItem("Open Export / Runtime Window")) {
+                    showExportRuntime = true;
+                    statusText = "Opened Export / Runtime window.";
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Exit")) {
+                    glfwSetWindowShouldClose(window, GLFW_TRUE);
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Edit")) {
+                if (ImGui::MenuItem("Undo", "Ctrl+Z", false, undoStack.PeekUndo() != nullptr)) {
+                    applyUndoOutcome(undoStack.Undo(editorWorld));
+                    ViewportPreviewShowOverlayMessage(statusText.c_str());
+                }
+                if (ImGui::MenuItem("Redo", "Ctrl+Y", false, undoStack.PeekRedo() != nullptr)) {
+                    applyUndoOutcome(undoStack.Redo(editorWorld));
+                    ViewportPreviewShowOverlayMessage(statusText.c_str());
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Delete Selected Reference", "Del", false, canDeleteSelectedReference)) {
+                    if (deletePlacedReferenceByIndex(selectedObjectIndex, "Delete placed reference")) {
+                        selectedObjectUndoHandledThisFrame = true;
+                        ViewportPreviewShowOverlayMessage(statusText.c_str());
+                    }
+                }
+                if (hasSelectedReference && selectedReferenceLocked && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                    ImGui::SetTooltip("Selected object layer is locked; delete is disabled.");
+                }
+                disabledMenuItem("Copy Reference", futureRoadmapTooltip);
+                disabledMenuItem("Paste Reference", futureRoadmapTooltip);
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("View")) {
+                ImGui::MenuItem("Toolbar", nullptr, &showEditorToolbar);
+                ImGui::MenuItem("Status / Selection Info", nullptr, &showEditorStatus);
+                ImGui::Separator();
+                ImGui::MenuItem("Grid Overlay", nullptr, &showGridOverlay);
+                ImGui::MenuItem("Bounds Gizmos", nullptr, &showBoundsOverlay);
+                ImGui::MenuItem("Object Labels", nullptr, &showObjectLabels);
+                ImGui::MenuItem("Reference Links", nullptr, &showReferenceLinks);
+                ImGui::MenuItem("Interaction Radius", nullptr, &showInteractionRadiusOverlay);
+                ImGui::MenuItem("Service Radius", nullptr, &showServiceRadiusOverlay);
+                ImGui::Separator();
+                if (ImGui::MenuItem("Show All Levels", nullptr, !filterCurrentEditorLevel)) {
+                    filterCurrentEditorLevel = false;
+                    statusText = "Render Window shows all editor floors.";
+                }
+                if (ImGui::MenuItem("Filter Current Level", nullptr, filterCurrentEditorLevel)) {
+                    filterCurrentEditorLevel = true;
+                    statusText = "Render Window filters to selected editor floor.";
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("World")) {
+                if (ImGui::MenuItem("Focus Selected", "NumPad0 / Shift+F", false, hasSelectedReference)) {
+                    focusSelectedReference();
+                    ViewportPreviewShowOverlayMessage(statusText.c_str());
+                }
+                if (ImGui::MenuItem("Open Reference Properties", nullptr, false, hasSelectedReference)) {
+                    openSelectedReferenceProperties();
+                }
+                if (ImGui::MenuItem("Assign Selected To Current Level", nullptr, false, hasSelectedReference)) {
+                    const auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+                    setObjectFloorAssignment(selectedObject.registryId, selectedPlanningLevelIndex);
+                    statusText = "Assigned selected object to editor floor: " +
+                        editorFloorStack[static_cast<std::size_t>(selectedPlanningLevelIndex)] + ".";
+                }
+                disabledMenuItem("Worldspace Browser", futureRoadmapTooltip);
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Visibility")) {
+                if (ImGui::MenuItem("Show All Layers")) {
+                    showAllEditorLayers();
+                }
+                if (ImGui::MenuItem("Unlock All Layers")) {
+                    unlockAllEditorLayers();
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Show All Levels")) {
+                    filterCurrentEditorLevel = false;
+                    statusText = "Render Window shows all editor floors.";
+                }
+                if (ImGui::MenuItem("Filter Current Level")) {
+                    filterCurrentEditorLevel = true;
+                    statusText = "Render Window filters to selected editor floor.";
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Character")) {
+                disabledMenuItem("Actor Browser", futureRoadmapTooltip);
+                disabledMenuItem("Dialogue / Scene Tools", futureRoadmapTooltip);
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Gameplay")) {
+                if (ImGui::MenuItem("Open Runtime Validation", nullptr, false, true)) {
+                    showExportRuntime = true;
+                    statusText = "Opened Runtime / Validation tools.";
+                }
+                disabledMenuItem("NavMesh Tools", futureRoadmapTooltip);
+                disabledMenuItem("Weather / Time Controls", futureRoadmapTooltip);
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Tools")) {
+                ImGui::MenuItem("Snap To Grid", nullptr, &snapToGrid);
+                if (snapToGrid) {
+                    ImGui::SliderFloat("Grid Step", &snapStep, 0.25f, 4.0f, "%.2f");
+                }
+                ImGui::MenuItem("Preview As Player", nullptr, &previewAsPlayer);
+                disabledMenuItem("Batch Validation Suite", futureRoadmapTooltip);
+                disabledMenuItem("LOD Generator", futureRoadmapTooltip);
+                ImGui::EndMenu();
+            }
             if (ImGui::BeginMenu("Windows")) {
+                ImGui::MenuItem("Toolbar", nullptr, &showEditorToolbar);
+                ImGui::MenuItem("Status / Selection Info", nullptr, &showEditorStatus);
+                ImGui::Separator();
                 ImGui::MenuItem("Asset Palette", nullptr, &showAssetPalette);
                 ImGui::MenuItem("Object Window", nullptr, &showObjectWindow);
                 ImGui::MenuItem("World Authoring", nullptr, &showWorldAuthoring);
@@ -3582,24 +2983,74 @@ int main() {
                 ImGui::MenuItem("Locations / Cells", nullptr, &showLocationsWindow);
                 ImGui::MenuItem("Export / Runtime", nullptr, &showExportRuntime);
                 ImGui::MenuItem("Import Assistant", nullptr, &showImportAssistant);
+                if (ImGui::MenuItem("Reference Properties", nullptr, showReferencePropertiesWindow, hasSelectedReference || showReferencePropertiesWindow)) {
+                    if (showReferencePropertiesWindow) {
+                        showReferencePropertiesWindow = false;
+                    } else {
+                        openSelectedReferenceProperties();
+                    }
+                }
+                if (!hasSelectedReference && !showReferencePropertiesWindow && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                    ImGui::SetTooltip("Select a placed reference before opening Reference Properties.");
+                }
                 ImGui::Separator();
-                if (ImGui::MenuItem("Show All Windows")) {
-                    showAssetPalette = true;
-                    showObjectWindow = true;
-                    showWorldAuthoring = true;
-                    showCellView = true;
-                    showRenderWindow = true;
-                    showLevelsWindow = true;
-                    showLocationsWindow = true;
-                    showExportRuntime = true;
-                    showImportAssistant = true;
+                if (ImGui::MenuItem("Show Core Workspace")) {
+                    showAllEditorWindows();
                 }
                 if (ImGui::MenuItem("Reset Window Layout")) {
                     resetWorkspaceLayout = true;
+                    showAllEditorWindows();
+                    statusText = "Workspace layout requested.";
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Help")) {
+                if (ImGui::MenuItem("Controls / Hotkeys")) {
+                    showControlsHelp = true;
+                    statusText = "Opened editor controls reference.";
+                }
+                if (ImGui::MenuItem("About Bunker Protocol Editor")) {
+                    showAboutEditor = true;
+                    statusText = "Opened editor about panel.";
                 }
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
+        }
+
+        const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        const ImGuiID dockspaceId = ImGui::DockSpaceOverViewport(
+            ImGui::GetID("BunkerEditor_MainDockSpace"),
+            mainViewport,
+            ImGuiDockNodeFlags_None);
+        if (resetWorkspaceLayout || !workspaceLayoutInitialized) {
+            ImGui::DockBuilderRemoveNode(dockspaceId);
+            ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodePos(dockspaceId, mainViewport->WorkPos);
+            ImGui::DockBuilderSetNodeSize(dockspaceId, mainViewport->WorkSize);
+            ImGuiID dockMain = dockspaceId;
+            ImGuiID dockLeft = 0;
+            ImGuiID dockRight = 0;
+            ImGuiID dockBottom = 0;
+            ImGuiID dockTop = 0;
+            ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Left, 0.22f, &dockLeft, &dockMain);
+            ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.28f, &dockRight, &dockMain);
+            ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Down, 0.26f, &dockBottom, &dockMain);
+            ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Up, 0.11f, &dockTop, &dockMain);
+            ImGui::DockBuilderDockWindow("Editor Toolbar###EditorShell_Toolbar", dockTop);
+            ImGui::DockBuilderDockWindow("Render Window / Viewport", dockMain);
+            ImGui::DockBuilderDockWindow("Object Window###ObjectWindow_Window", dockLeft);
+            ImGui::DockBuilderDockWindow("Asset Palette", dockLeft);
+            ImGui::DockBuilderDockWindow("World Authoring", dockRight);
+            ImGui::DockBuilderDockWindow("Levels / Floors / Layers###LevelsWindow_Window", dockRight);
+            ImGui::DockBuilderDockWindow("Reference Properties###RenderWindow_ReferenceProperties", dockRight);
+            ImGui::DockBuilderDockWindow("Export / Runtime", dockRight);
+            ImGui::DockBuilderDockWindow("Editor Status###EditorShell_Status", dockBottom);
+            ImGui::DockBuilderDockWindow("Cell View", dockBottom);
+            ImGui::DockBuilderDockWindow("Locations / Cells", dockBottom);
+            ImGui::DockBuilderDockWindow("Import Assistant", dockBottom);
+            ImGui::DockBuilderFinish(dockspaceId);
+            workspaceLayoutInitialized = true;
         }
 
         const bool applyWorkspaceLayoutReset = resetWorkspaceLayout;
@@ -3610,6 +3061,151 @@ int main() {
             ImGui::SetNextWindowPos(position, topLevelWindowCond);
             ImGui::SetNextWindowSize(size, topLevelWindowCond);
         };
+
+        if (showEditorToolbar) {
+            ImGui::Begin("Editor Toolbar###EditorShell_Toolbar", &showEditorToolbar, ImGuiWindowFlags_NoCollapse);
+            ImGui::BeginDisabled(undoStack.PeekUndo() == nullptr);
+            if (ImGui::Button("Undo###EditorToolbar_Undo", ImVec2(72.0f, 0.0f))) {
+                applyUndoOutcome(undoStack.Undo(editorWorld));
+                ViewportPreviewShowOverlayMessage(statusText.c_str());
+            }
+            ImGui::EndDisabled();
+            if (undoStack.PeekUndo() == nullptr && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("Nothing to undo.");
+            }
+            ImGui::SameLine();
+            ImGui::BeginDisabled(undoStack.PeekRedo() == nullptr);
+            if (ImGui::Button("Redo###EditorToolbar_Redo", ImVec2(72.0f, 0.0f))) {
+                applyUndoOutcome(undoStack.Redo(editorWorld));
+                ViewportPreviewShowOverlayMessage(statusText.c_str());
+            }
+            ImGui::EndDisabled();
+            if (undoStack.PeekRedo() == nullptr && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("Nothing to redo.");
+            }
+            ImGui::SameLine();
+            if (hasSelectedReference) {
+                if (ImGui::Button("Focus###EditorToolbar_FocusSelected", ImVec2(78.0f, 0.0f))) {
+                    focusSelectedReference();
+                    ViewportPreviewShowOverlayMessage(statusText.c_str());
+                }
+            } else {
+                disabledButton("Focus###EditorToolbar_FocusSelected", "Select a placed reference first.", ImVec2(78.0f, 0.0f));
+            }
+            ImGui::SameLine();
+            if (hasSelectedReference) {
+                if (ImGui::Button("Properties###EditorToolbar_OpenProperties", ImVec2(98.0f, 0.0f))) {
+                    openSelectedReferenceProperties();
+                }
+            } else {
+                disabledButton("Properties###EditorToolbar_OpenProperties", "Select a placed reference first.", ImVec2(98.0f, 0.0f));
+            }
+            ImGui::SameLine();
+            if (canDeleteSelectedReference) {
+                if (ImGui::Button("Delete Ref###EditorToolbar_DeleteReference", ImVec2(96.0f, 0.0f))) {
+                    if (deletePlacedReferenceByIndex(selectedObjectIndex, "Delete placed reference")) {
+                        selectedObjectUndoHandledThisFrame = true;
+                        ViewportPreviewShowOverlayMessage(statusText.c_str());
+                    }
+                }
+            } else {
+                disabledButton(
+                    "Delete Ref###EditorToolbar_DeleteReference",
+                    selectedReferenceLocked ? "Selected object layer is locked; delete is disabled." : "Select a placed reference first.",
+                    ImVec2(96.0f, 0.0f));
+            }
+            ImGui::Separator();
+            if (ImGui::Button("Show All Levels###EditorToolbar_ShowAllLevels", ImVec2(126.0f, 0.0f))) {
+                filterCurrentEditorLevel = false;
+                statusText = "Render Window shows all editor floors.";
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Filter Current Level###EditorToolbar_FilterCurrentLevel", ImVec2(152.0f, 0.0f))) {
+                filterCurrentEditorLevel = true;
+                statusText = "Render Window filters to selected editor floor.";
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Show All Layers###EditorToolbar_ShowAllLayers", ImVec2(128.0f, 0.0f))) {
+                showAllEditorLayers();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Unlock All Layers###EditorToolbar_UnlockAllLayers", ImVec2(132.0f, 0.0f))) {
+                unlockAllEditorLayers();
+            }
+            ImGui::Separator();
+            if (ImGui::Button("Render###EditorToolbar_ShowRender", ImVec2(76.0f, 0.0f))) { showRenderWindow = true; }
+            ImGui::SameLine();
+            if (ImGui::Button("Objects###EditorToolbar_ShowObjects", ImVec2(78.0f, 0.0f))) { showObjectWindow = true; }
+            ImGui::SameLine();
+            if (ImGui::Button("Levels###EditorToolbar_ShowLevels", ImVec2(76.0f, 0.0f))) { showLevelsWindow = true; }
+            ImGui::SameLine();
+            if (ImGui::Button("Runtime###EditorToolbar_ShowRuntime", ImVec2(82.0f, 0.0f))) { showExportRuntime = true; }
+            ImGui::SameLine();
+            if (ImGui::Button("Workspace###EditorToolbar_ResetLayout", ImVec2(98.0f, 0.0f))) {
+                resetWorkspaceLayout = true;
+                showAllEditorWindows();
+                statusText = "Workspace windows opened.";
+            }
+            ImGui::End();
+        }
+
+        if (showEditorStatus) {
+            ImGui::Begin("Editor Status###EditorShell_Status", &showEditorStatus, ImGuiWindowFlags_NoCollapse);
+            ImGui::TextWrapped("%s", statusText.c_str());
+            ImGui::Separator();
+            ImGui::TextDisabled("Selection");
+            if (hasSelectedReference) {
+                const auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+                const int selectedFloor = findObjectFloorAssignment(selectedObject.registryId);
+                ImGui::TextWrapped("%s", selectedObject.displayName.c_str());
+                ImGui::TextDisabled("ID: %s", selectedObject.registryId.c_str());
+                ImGui::TextDisabled("Layer: %s%s", selectedObject.editorLayer.c_str(), selectedReferenceLocked ? " (locked)" : "");
+                ImGui::TextDisabled(
+                    "Floor: %s",
+                    editorFloorStack[static_cast<std::size_t>(selectedFloor)].c_str());
+            } else {
+                ImGui::TextDisabled("No placed reference selected.");
+            }
+            ImGui::SameLine(320.0f);
+            ImGui::BeginGroup();
+            ImGui::TextDisabled("View");
+            ImGui::TextDisabled(
+                "Floor filter: %s",
+                filterCurrentEditorLevel ? editorFloorStack[static_cast<std::size_t>(clampEditorFloorIndex(selectedPlanningLevelIndex))].c_str() : "all levels");
+            ImGui::TextDisabled("Objects: %d", static_cast<int>(editorWorld.objects.size()));
+            ImGui::TextDisabled("Hotkeys: LMB select, RMB context, NumPad* camera-pick, NumPad0/Shift+F focus, Del delete.");
+            ImGui::EndGroup();
+            ImGui::End();
+        }
+
+        if (showControlsHelp) {
+            setTopLevelWindowDefaults(ImVec2(480.0f, 128.0f), ImVec2(420.0f, 320.0f));
+            ImGui::Begin("Controls / Hotkeys###EditorShell_ControlsHelp", &showControlsHelp, ImGuiWindowFlags_NoCollapse);
+            ImGui::TextWrapped("Viewport and reference editing controls");
+            ImGui::Separator();
+            ImGui::BulletText("LMB selects visible placed references; LMB empty space updates the placement cursor.");
+            ImGui::BulletText("RMB opens the placed-reference context menu without changing Object Window selection.");
+            ImGui::BulletText("NumPad * selects the object under the camera look ray.");
+            ImGui::BulletText("NumPad 8/2/4/6 moves the selected reference camera-relative.");
+            ImGui::BulletText("- / + move the selected reference on Z.");
+            ImGui::BulletText("Hold O + NumPad rotates the selected reference.");
+            ImGui::BulletText("PgUp / PgDn adjusts camera distance.");
+            ImGui::BulletText("NumPad0 or Shift+F focuses the selected reference.");
+            ImGui::BulletText("Del deletes an unlocked placed reference immediately; Ctrl+Z restores through undo.");
+            ImGui::Separator();
+            ImGui::TextWrapped("Layer lock blocks edits and delete. Hidden layers and filtered floors are not rendered or picked.");
+            ImGui::End();
+        }
+
+        if (showAboutEditor) {
+            setTopLevelWindowDefaults(ImVec2(520.0f, 172.0f), ImVec2(360.0f, 220.0f));
+            ImGui::Begin("About Bunker Protocol Editor###EditorShell_About", &showAboutEditor, ImGuiWindowFlags_NoCollapse);
+            ImGui::TextWrapped("Bunker Protocol / Game_Project Editor");
+            ImGui::Separator();
+            ImGui::TextWrapped("Desktop ImGui editor shell for placed references, object catalog placement, runtime export preparation, editor floors, and layer visibility/lock workflows.");
+            ImGui::TextDisabled("Full CK toolbar parity, NavMesh, LOD, weather/time, and plugin/archive pipelines are future roadmap items.");
+            ImGui::End();
+        }
 
         if (showAssetPalette) {
             setTopLevelWindowDefaults(ImVec2(16.0f, 476.0f), ImVec2(320.0f, 408.0f));
@@ -3767,11 +3363,18 @@ int main() {
                     object.discovered = true;
                     object.manualLoot = preset.manualLoot;
                     object.manualLootIds = {loot0, loot1, loot2, loot3};
+                    object.lootEntries.clear();
+                    for (const auto& lootId : object.manualLootIds) {
+                        if (!lootId.empty()) {
+                            object.lootEntries.push_back({lootId, 1, 1, 1.0f});
+                        }
+                    }
                     object.editorLayer = bunker::NormalizeEditorLayerName(draftLayerInput);
                     if (object.editorLayer.empty()) {
                         object.editorLayer = bunker::DefaultEditorLayerName(object);
                     }
                     editorWorld.AddObject(object);
+                    setObjectFloorAssignment(editorWorld.objects.back().registryId, selectedPlanningLevelIndex);
                     undoStack.PushObjectAdded("Add object", editorWorld.objects.back(), static_cast<int>(editorWorld.objects.size()) - 1, object.registryId);
                     selectedObjectUndoHandledThisFrame = true;
                     syncEditorLayerStateTable();
@@ -3801,6 +3404,7 @@ int main() {
                     }
                     placed.prefabSourceId = savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)].id;
                     editorWorld.AddObject(placed);
+                    setObjectFloorAssignment(editorWorld.objects.back().registryId, selectedPlanningLevelIndex);
                     undoStack.PushObjectAdded(
                         "Place prefab: " + savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)].label,
                         editorWorld.objects.back(),
@@ -4033,7 +3637,7 @@ int main() {
                     presetIndex = index;
                     selectedPrefabIndex = -1;
                     refreshDraftLayerForPreset();
-                    statusText = "Object Window selected base object. Selection does not place object yet.";
+                    statusText = "Object Window selected base object. Drag/drop into Render Window to place this object.";
                     if (editorWorld.objects.size() != beforeSelectionObjectCount) {
                         statusText = "Object Window selection count safety failed.";
                     }
@@ -4066,7 +3670,7 @@ int main() {
                     const std::size_t beforeSelectionObjectCount = editorWorld.objects.size();
                     selectedPrefabIndex = index;
                     CopyStringToBuffer(prefab.label, prefabLabelInput, IM_ARRAYSIZE(prefabLabelInput));
-                    statusText = "Object Window selected prefab source. Selection does not place object yet.";
+                    statusText = "Object Window selected prefab source. Drag/drop into Render Window to place this object.";
                     if (editorWorld.objects.size() != beforeSelectionObjectCount) {
                         statusText = "Object Window selection count safety failed.";
                     }
@@ -4095,9 +3699,12 @@ int main() {
             ImGui::Text("Selected Item");
             ImGui::PopID();
             ImGui::BeginChild("ObjectWindow_DetailsPanel", ImVec2(0.0f, 0.0f), true);
-            if (!selectedObjectWindowItemVisible) {
-                ImGui::TextDisabled("Selected item is outside current category/filter.");
-                ImGui::TextDisabled("Selection does not place object yet.");
+            if (visibleItemCount == 0) {
+                ImGui::TextWrapped("No item selected in this category/filter.");
+                ImGui::TextWrapped("Choose a category with visible items or clear the search filter.");
+            } else if (!selectedObjectWindowItemVisible) {
+                ImGui::TextWrapped("Selected item is hidden by current category/search filter.");
+                ImGui::TextWrapped("Select a visible item, then drag/drop into Render Window to place this object.");
             } else if (selectedPrefabIndex >= 0 && selectedPrefabIndex < static_cast<int>(savedPrefabs.size())) {
                 const auto& prefab = savedPrefabs[static_cast<std::size_t>(selectedPrefabIndex)];
                 ImGui::TextWrapped("Display Name: %s", prefab.label.c_str());
@@ -4115,7 +3722,8 @@ int main() {
                 if (!prefab.object.scriptTag.empty()) {
                     ImGui::TextDisabled("Script Tag: %s", prefab.object.scriptTag.c_str());
                 }
-                ImGui::TextDisabled("Selection does not place object yet.");
+                ImGui::TextWrapped("Drag/drop into Render Window to place this object.");
+                ImGui::TextWrapped("Dragging from Object Window into Render Window creates a placed object.");
             } else {
                 const auto& preset = objectPresets[static_cast<std::size_t>(presetIndex)];
                 ImGui::TextWrapped("Display Name: %s", objectPresetLabels[presetIndex]);
@@ -4128,7 +3736,8 @@ int main() {
                     preset.width,
                     preset.depth,
                     preset.height);
-                ImGui::TextDisabled("Selection does not place object yet.");
+                ImGui::TextWrapped("Drag/drop into Render Window to place this object.");
+                ImGui::TextWrapped("Dragging from Object Window into Render Window creates a placed object.");
             }
             ImGui::EndChild();
             ImGui::EndGroup();
@@ -5197,29 +4806,10 @@ int main() {
                 ImGui::Checkbox("Discovered", &selectedObject.discovered);
                 ImGui::Separator();
                 ImGui::TextDisabled("Loot");
-                ImGui::Checkbox("Manual Loot", &selectedObject.manualLoot);
-                if (selectedObject.manualLoot) {
-                    char editLoot0[64] = "";
-                    char editLoot1[64] = "";
-                    char editLoot2[64] = "";
-                    char editLoot3[64] = "";
-                    CopyStringToBuffer(selectedObject.manualLootIds[0], editLoot0, IM_ARRAYSIZE(editLoot0));
-                    CopyStringToBuffer(selectedObject.manualLootIds[1], editLoot1, IM_ARRAYSIZE(editLoot1));
-                    CopyStringToBuffer(selectedObject.manualLootIds[2], editLoot2, IM_ARRAYSIZE(editLoot2));
-                    CopyStringToBuffer(selectedObject.manualLootIds[3], editLoot3, IM_ARRAYSIZE(editLoot3));
-                    if (ImGui::InputText("Edit Loot 1", editLoot0, IM_ARRAYSIZE(editLoot0))) {
-                        selectedObject.manualLootIds[0] = editLoot0;
-                    }
-                    if (ImGui::InputText("Edit Loot 2", editLoot1, IM_ARRAYSIZE(editLoot1))) {
-                        selectedObject.manualLootIds[1] = editLoot1;
-                    }
-                    if (ImGui::InputText("Edit Loot 3", editLoot2, IM_ARRAYSIZE(editLoot2))) {
-                        selectedObject.manualLootIds[2] = editLoot2;
-                    }
-                    if (ImGui::InputText("Edit Loot 4", editLoot3, IM_ARRAYSIZE(editLoot3))) {
-                        selectedObject.manualLootIds[3] = editLoot3;
-                    }
-                }
+                ImGui::TextDisabled(
+                    "%s | entries: %d. Edit scalable loot in Reference Properties -> Loot / Links.",
+                    selectedObject.lootMode == bunker::LootMode::RandomTable ? "Random Loot Chest" : "Manual Filled Chest",
+                    static_cast<int>(selectedObject.lootEntries.size()));
                 ImGui::Separator();
                 ImGui::TextDisabled("Actions");
                 if (ImGui::Button("Use Selected Object As Player Spawn", ImVec2(-1.0f, 28.0f))) {
@@ -5237,6 +4827,7 @@ int main() {
                     duplicate.x = snapCoordinate(duplicate.x + duplicateOffset);
                     duplicate.y = snapCoordinate(duplicate.y + duplicateOffset);
                     editorWorld.AddObject(duplicate);
+                    setObjectFloorAssignment(editorWorld.objects.back().registryId, findObjectFloorAssignment(selectedObject.registryId));
                     undoStack.PushObjectAdded(
                         "Duplicate object",
                         editorWorld.objects.back(),
@@ -5546,12 +5137,156 @@ int main() {
             setTopLevelWindowDefaults(ImVec2(930.0f, 210.0f), ImVec2(468.0f, 684.0f));
             ImGui::Begin("Levels / Floors / Layers###LevelsWindow_Window", &showLevelsWindow, ImGuiWindowFlags_NoCollapse);
             ImGui::TextDisabled("Drag this window by its title bar outside the main editor to detach it.");
-            ImGui::TextDisabled("Level and layer organization only. Construction parts are placed as objects.");
+            ImGui::TextWrapped("Levels filter Render Window visibility when Filter Current Level is enabled; construction parts are placed as objects.");
             ImGui::Separator();
             ImGui::BeginChild("LevelsWindow_Scroll", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
             ImGui::Text("Level / Floor Stack###LevelsWindow_LevelStack");
-            ImGui::Combo("Planning Level###LevelsWindow_PlanningLevel", &selectedPlanningLevelIndex, levelPlanningLabels, IM_ARRAYSIZE(levelPlanningLabels));
-            ImGui::TextWrapped("This selector is an editor organization label only; it does not create floors, walls, stairs, ramps, or geometry.");
+            selectedPlanningLevelIndex = std::clamp(
+                selectedPlanningLevelIndex,
+                0,
+                std::max(0, static_cast<int>(editorFloorStack.size()) - 1));
+            ImGui::TextWrapped("Floor stack is editor filter state. It does not create geometry.");
+            ImGui::BeginChild("LevelsWindow_FloorStackList", ImVec2(0.0f, 132.0f), true);
+            for (int levelIndex = 0; levelIndex < static_cast<int>(editorFloorStack.size()); ++levelIndex) {
+                const bool selected = selectedPlanningLevelIndex == levelIndex;
+                if (ImGui::Selectable(
+                        (editorFloorStack[static_cast<std::size_t>(levelIndex)] + "###LevelsWindow_Floor_" + std::to_string(levelIndex)).c_str(),
+                        selected)) {
+                    selectedPlanningLevelIndex = levelIndex;
+                    CopyStringToBuffer(
+                        editorFloorStack[static_cast<std::size_t>(selectedPlanningLevelIndex)],
+                        selectedPlanningLevelEdit,
+                        IM_ARRAYSIZE(selectedPlanningLevelEdit));
+                    statusText = filterCurrentEditorLevel
+                        ? "Current editor level changed. Render Window is filtered to this level."
+                        : "Current editor level changed. Show All Levels is active.";
+                }
+            }
+            ImGui::EndChild();
+            const int currentLevelIndex = clampEditorFloorIndex(selectedPlanningLevelIndex);
+            const std::string& currentLevelName = editorFloorStack[static_cast<std::size_t>(currentLevelIndex)];
+            ImGui::TextWrapped("Current level is used as the Render Window floor filter when Filter Current Level is enabled.");
+            ImGui::TextWrapped("Assign objects to levels to make the filter meaningful.");
+            ImGui::TextWrapped("This does not create floor/wall/stair geometry.");
+            ImGui::Separator();
+            ImGui::Text("Current Filter Summary###LevelsWindow_FilterSummary");
+            ImGui::BulletText("Selected level: %s", currentLevelName.c_str());
+            ImGui::BulletText("Objects assigned to selected level: %d", countObjectsAssignedToEditorFloor(currentLevelIndex));
+            ImGui::BulletText("Total objects: %d", static_cast<int>(editorWorld.objects.size()));
+            ImGui::BulletText("Objects visible after current floor + layer filters: %d", countObjectsVisibleAfterEditorFilters());
+            ImGui::BulletText("Current mode: %s", filterCurrentEditorLevel ? "Current Level" : "All Levels");
+            if (!editorFloorStack.empty()) {
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::InputText("Rename Selected Level###LevelsWindow_RenameLevel", selectedPlanningLevelEdit, IM_ARRAYSIZE(selectedPlanningLevelEdit))) {
+                    if (IsBlank(selectedPlanningLevelEdit)) {
+                        CopyStringToBuffer("Unnamed Level", selectedPlanningLevelEdit, IM_ARRAYSIZE(selectedPlanningLevelEdit));
+                    }
+                    editorFloorStack[static_cast<std::size_t>(selectedPlanningLevelIndex)] = selectedPlanningLevelEdit;
+                    statusText = "Renamed editor floor organization level.";
+                }
+            }
+            if (ImGui::Button("Add Level###LevelsWindow_AddLevel", ImVec2(120.0f, 0.0f))) {
+                const std::string newLevel = "Bunker Level " + std::to_string(static_cast<int>(editorFloorStack.size()));
+                editorFloorStack.push_back(newLevel);
+                selectedPlanningLevelIndex = static_cast<int>(editorFloorStack.size()) - 1;
+                CopyStringToBuffer(newLevel, selectedPlanningLevelEdit, IM_ARRAYSIZE(selectedPlanningLevelEdit));
+                statusText = filterCurrentEditorLevel
+                    ? "Current editor level changed. Render Window is filtered to this level."
+                    : "Current editor level changed. Show All Levels is active.";
+            }
+            ImGui::SameLine();
+            ImGui::BeginDisabled(editorFloorStack.size() <= 1);
+            if (ImGui::Button("Delete Level###LevelsWindow_DeleteLevel", ImVec2(120.0f, 0.0f))) {
+                const std::string removedLevel = editorFloorStack[static_cast<std::size_t>(selectedPlanningLevelIndex)];
+                const int deletedLevelIndex = selectedPlanningLevelIndex;
+                editorFloorStack.erase(editorFloorStack.begin() + selectedPlanningLevelIndex);
+                for (auto& assignment : objectFloorAssignments) {
+                    if (assignment.second == deletedLevelIndex) {
+                        assignment.second = std::max(0, deletedLevelIndex - 1);
+                    } else if (assignment.second > deletedLevelIndex) {
+                        --assignment.second;
+                    }
+                }
+                selectedPlanningLevelIndex = std::clamp(
+                    selectedPlanningLevelIndex,
+                    0,
+                    static_cast<int>(editorFloorStack.size()) - 1);
+                CopyStringToBuffer(
+                    editorFloorStack[static_cast<std::size_t>(selectedPlanningLevelIndex)],
+                    selectedPlanningLevelEdit,
+                    IM_ARRAYSIZE(selectedPlanningLevelEdit));
+                statusText = "Deleted editor floor organization level: " + removedLevel;
+            }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            ImGui::BeginDisabled(selectedPlanningLevelIndex <= 0);
+            if (ImGui::Button("Move Up###LevelsWindow_MoveLevelUp", ImVec2(100.0f, 0.0f))) {
+                const int fromLevelIndex = selectedPlanningLevelIndex;
+                const int toLevelIndex = selectedPlanningLevelIndex - 1;
+                std::swap(
+                    editorFloorStack[static_cast<std::size_t>(fromLevelIndex)],
+                    editorFloorStack[static_cast<std::size_t>(toLevelIndex)]);
+                for (auto& assignment : objectFloorAssignments) {
+                    if (assignment.second == fromLevelIndex) {
+                        assignment.second = toLevelIndex;
+                    } else if (assignment.second == toLevelIndex) {
+                        assignment.second = fromLevelIndex;
+                    }
+                }
+                --selectedPlanningLevelIndex;
+                statusText = "Moved selected editor floor organization level up.";
+            }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            ImGui::BeginDisabled(selectedPlanningLevelIndex + 1 >= static_cast<int>(editorFloorStack.size()));
+            if (ImGui::Button("Move Down###LevelsWindow_MoveLevelDown", ImVec2(110.0f, 0.0f))) {
+                const int fromLevelIndex = selectedPlanningLevelIndex;
+                const int toLevelIndex = selectedPlanningLevelIndex + 1;
+                std::swap(
+                    editorFloorStack[static_cast<std::size_t>(fromLevelIndex)],
+                    editorFloorStack[static_cast<std::size_t>(toLevelIndex)]);
+                for (auto& assignment : objectFloorAssignments) {
+                    if (assignment.second == fromLevelIndex) {
+                        assignment.second = toLevelIndex;
+                    } else if (assignment.second == toLevelIndex) {
+                        assignment.second = fromLevelIndex;
+                    }
+                }
+                ++selectedPlanningLevelIndex;
+                statusText = "Moved selected editor floor organization level down.";
+            }
+            ImGui::EndDisabled();
+            if (ImGui::Button("Show All Levels###LevelsWindow_ShowAllLevels", ImVec2(140.0f, 0.0f))) {
+                filterCurrentEditorLevel = false;
+                statusText = "Render Window shows all editor floors.";
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Filter Current Level###LevelsWindow_FilterCurrentLevelButton", ImVec2(160.0f, 0.0f))) {
+                filterCurrentEditorLevel = true;
+                statusText = "Render Window filters to selected editor floor.";
+            }
+            if (selectedObjectIndex >= 0 && selectedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
+                if (ImGui::Button("Assign Selected Object To Current Level###LevelsWindow_AssignSelectedObject", ImVec2(280.0f, 0.0f))) {
+                    const auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+                    setObjectFloorAssignment(selectedObject.registryId, selectedPlanningLevelIndex);
+                    statusText = "Assigned selected object to editor floor: " + editorFloorStack[static_cast<std::size_t>(selectedPlanningLevelIndex)] + ".";
+                }
+                ImGui::SameLine();
+                const auto& selectedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
+                ImGui::TextDisabled("Selected object floor: %s", editorFloorStack[static_cast<std::size_t>(findObjectFloorAssignment(selectedObject.registryId))].c_str());
+            } else {
+                ImGui::TextDisabled("Select a placed object to assign it to the current level.");
+            }
+            ImGui::TextWrapped("Floor assignment is editor-only until a save format migration is approved; use Editor Layer for persistent visibility/lock control.");
+            ImGui::TextDisabled("Filter Current Level is enabled by default and uses the selected level.");
+            ImGui::TextDisabled("Floor stack is session-only in this MVP; no world save format migration was added.");
+            if (ImGui::CollapsingHeader("Advanced View Filter Settings###LevelsWindow_AdvancedViewFilterSettings")) {
+                if (ImGui::Checkbox("Filter Render Window To Current Level###LevelsWindow_FilterCurrentLevel", &filterCurrentEditorLevel)) {
+                    statusText = filterCurrentEditorLevel
+                        ? "Render Window filters to selected editor floor."
+                        : "Render Window shows all editor floors.";
+                }
+            }
 
             ImGui::Separator();
             ImGui::Text("Layer Overview###LevelsWindow_LayerOverview");
@@ -5559,25 +5294,70 @@ int main() {
             if (editorLayerStates.empty()) {
                 ImGui::TextDisabled("No editor layers in the current workspace.");
             } else {
-                ImGui::BeginChild("LevelsWindow_LayerList", ImVec2(0.0f, 150.0f), true);
-                for (const auto& layerState : editorLayerStates) {
-                    const int objectCount = editorWorld.CountObjectsInEditorLayer(layerState.name);
-                    ImGui::BulletText(
-                        "%s | visible=%s | locked=%s | objects=%d",
-                        layerState.name.c_str(),
-                        layerState.visible ? "yes" : "no",
-                        layerState.locked ? "yes" : "no",
-                        objectCount);
+                if (ImGui::Button("Show All Layers###LevelsWindow_ShowAllLayers", ImVec2(150.0f, 0.0f))) {
+                    for (auto& layerState : editorLayerStates) {
+                        layerState.visible = true;
+                    }
+                    statusText = "All editor layers are visible in Render Window.";
                 }
+                ImGui::SameLine();
+                if (ImGui::Button("Hide Empty Layers###LevelsWindow_HideEmptyLayers", ImVec2(160.0f, 0.0f))) {
+                    for (auto& layerState : editorLayerStates) {
+                        if (editorWorld.CountObjectsInEditorLayer(layerState.name) == 0) {
+                            layerState.visible = false;
+                        }
+                    }
+                    statusText = "Empty editor layers are hidden.";
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Unlock All Layers###LevelsWindow_UnlockAllLayers", ImVec2(150.0f, 0.0f))) {
+                    for (auto& layerState : editorLayerStates) {
+                        layerState.locked = false;
+                    }
+                    statusText = "All editor layers are unlocked.";
+                }
+                ImGui::BeginChild("LevelsWindow_LayerList", ImVec2(0.0f, 190.0f), true);
+                ImGui::Columns(4, "LevelsWindow_LayerColumns", false);
+                ImGui::TextDisabled("Visible");
+                ImGui::NextColumn();
+                ImGui::TextDisabled("Locked");
+                ImGui::NextColumn();
+                ImGui::TextDisabled("Objects");
+                ImGui::NextColumn();
+                ImGui::TextDisabled("Layer");
+                ImGui::NextColumn();
+                ImGui::Separator();
+                for (auto& layerState : editorLayerStates) {
+                    const int objectCount = editorWorld.CountObjectsInEditorLayer(layerState.name);
+                    ImGui::PushID(layerState.name.c_str());
+                    if (ImGui::Checkbox("###LevelsWindow_LayerVisible", &layerState.visible)) {
+                        statusText = layerState.visible
+                            ? "Layer visible in Render Window: " + layerState.name
+                            : "Layer hidden in Render Window: " + layerState.name;
+                    }
+                    ImGui::NextColumn();
+                    if (ImGui::Checkbox("###LevelsWindow_LayerLocked", &layerState.locked)) {
+                        statusText = layerState.locked
+                            ? "Layer locked against selection/move/edit: " + layerState.name
+                            : "Layer unlocked: " + layerState.name;
+                    }
+                    ImGui::NextColumn();
+                    ImGui::Text("%d", objectCount);
+                    ImGui::NextColumn();
+                    ImGui::TextUnformatted(layerState.name.c_str());
+                    ImGui::NextColumn();
+                    ImGui::PopID();
+                }
+                ImGui::Columns(1);
                 ImGui::EndChild();
             }
 
             ImGui::Separator();
             ImGui::Text("Object Placement Workflow###LevelsWindow_ObjectPlacementWorkflow");
-            ImGui::TextWrapped("Place floor, wall, ceiling, stair, ramp, and room modules as objects or prefabs from Object Window into Render Window.");
-            ImGui::TextWrapped("Surface presets and construction modules belong in object presets, prefabs, or the future placed-reference inspector.");
+            ImGui::TextWrapped("Floor/wall/ceiling/stair/ramp are placed as objects/prefabs from Object Window.");
+            ImGui::TextWrapped("Surface presets and construction modules belong in object presets or prefabs.");
             ImGui::BulletText("Current snap step: %.2f", resolvedSnapStep());
-            ImGui::TextDisabled("No fake planning buttons live here; this window does not place geometry.");
+            ImGui::TextWrapped("This window only manages editor level filters and layer visibility/lock state.");
             ImGui::EndChild();
             ImGui::End();
         }
@@ -5679,15 +5459,43 @@ int main() {
                 showServiceRadiusOverlay,
                 resolvedSnapStep()
             };
+            bunker::World renderWorld = editorWorld;
+            std::vector<int> renderObjectToWorldObjectIndex;
+            renderObjectToWorldObjectIndex.reserve(editorWorld.objects.size());
+            renderWorld.objects.clear();
+            for (int objectIndex = 0; objectIndex < static_cast<int>(editorWorld.objects.size()); ++objectIndex) {
+                const auto& object = editorWorld.objects[static_cast<std::size_t>(objectIndex)];
+                if (!isLayerVisibleForObject(object) || !isObjectVisibleForCurrentEditorFloor(object)) {
+                    continue;
+                }
+                renderObjectToWorldObjectIndex.push_back(objectIndex);
+                renderWorld.objects.push_back(object);
+            }
+            int renderSelectedObjectIndex = -1;
+            if (selectedObjectIndex >= 0) {
+                for (int renderIndex = 0; renderIndex < static_cast<int>(renderObjectToWorldObjectIndex.size()); ++renderIndex) {
+                    if (renderObjectToWorldObjectIndex[static_cast<std::size_t>(renderIndex)] == selectedObjectIndex) {
+                        renderSelectedObjectIndex = renderIndex;
+                        break;
+                    }
+                }
+            }
             const PreviewInteraction previewInteraction = DrawWorldPreview3D(
-                editorWorld,
-                selectedObjectIndex,
+                renderWorld,
+                renderSelectedObjectIndex,
                 previewAsPlayer,
                 previewViewport,
                 editorLayerStates,
                 previewRenderOptions);
+            auto mapRenderObjectIndexToWorld = [&](int renderObjectIndex) {
+                if (renderObjectIndex < 0 ||
+                    renderObjectIndex >= static_cast<int>(renderObjectToWorldObjectIndex.size())) {
+                    return -1;
+                }
+                return renderObjectToWorldObjectIndex[static_cast<std::size_t>(renderObjectIndex)];
+            };
             viewportObjectUnderMouseIndex = previewInteraction.objectUnderMouse
-                ? previewInteraction.objectUnderMouseIndex
+                ? mapRenderObjectIndexToWorld(previewInteraction.objectUnderMouseIndex)
                 : -1;
             if (gViewportPreviewTransientState.moveGizmoStatusRequested) {
                 statusText = "Move preview: use NumPad 8/2/4/6 for camera-relative movement and -/+ for Z.";
@@ -5704,9 +5512,9 @@ int main() {
                 selectedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
                 auto& draggedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
                 if (isLayerLockedForObject(draggedObject)) {
-                    statusText = "Selected object layer is locked; preview drag is disabled.";
+                    statusText = "Selected object layer is locked; edit is disabled.";
                 } else if (!isLayerVisibleForObject(draggedObject)) {
-                    statusText = "Selected object layer is hidden; preview drag is disabled.";
+                    statusText = "Selected object layer is hidden; edit is disabled.";
                 } else {
                     draggedObject.x = snapCoordinate(previewInteraction.worldX);
                     draggedObject.y = snapCoordinate(previewInteraction.worldY);
@@ -5720,9 +5528,9 @@ int main() {
                 selectedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
                 auto& draggedObject = editorWorld.objects[static_cast<std::size_t>(selectedObjectIndex)];
                 if (isLayerLockedForObject(draggedObject)) {
-                    statusText = "Selected object layer is locked; preview bounds gizmos are disabled.";
+                    statusText = "Selected object layer is locked; edit is disabled.";
                 } else if (!isLayerVisibleForObject(draggedObject)) {
-                    statusText = "Selected object layer is hidden; preview bounds gizmos are disabled.";
+                    statusText = "Selected object layer is hidden; edit is disabled.";
                 } else {
                     if (previewInteraction.draggingSelectedWidth) {
                         draggedObject.width = snapDimension(previewInteraction.suggestedWidth);
@@ -5751,11 +5559,14 @@ int main() {
                 }
             }
             if (previewInteraction.rightClickedObject &&
-                previewInteraction.rightClickedObjectIndex >= 0 &&
-                previewInteraction.rightClickedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
-                if (focusObjectInEditor(previewInteraction.rightClickedObjectIndex, previewViewport.zoom)) {
+                mapRenderObjectIndexToWorld(previewInteraction.rightClickedObjectIndex) >= 0) {
+                const int worldRightClickedObjectIndex = mapRenderObjectIndexToWorld(previewInteraction.rightClickedObjectIndex);
+                if (focusObjectInEditor(worldRightClickedObjectIndex, previewViewport.zoom)) {
                     previewViewport.hasFocusRequest = false;
-                    contextObjectIndex = previewInteraction.rightClickedObjectIndex;
+                    // Render Window RMB selects placed references only; it must not change Object Window catalog selection.
+                    contextObjectIndex = worldRightClickedObjectIndex;
+                    referencePropertiesObjectIndex = worldRightClickedObjectIndex;
+                    referencePropertiesBufferObjectIndex = -1;
                     statusText = "Selected object from context click.";
                     ImGui::OpenPopup("Object Context###RenderWindow_ObjectContext");
                 }
@@ -5764,9 +5575,9 @@ int main() {
                 placeX = snapCoordinate(previewInteraction.worldX);
                 placeY = snapCoordinate(previewInteraction.worldY);
                 if (previewInteraction.clickedObject &&
-                    previewInteraction.clickedObjectIndex >= 0 &&
-                    previewInteraction.clickedObjectIndex < static_cast<int>(editorWorld.objects.size())) {
-                    if (focusObjectInEditor(previewInteraction.clickedObjectIndex,
+                    mapRenderObjectIndexToWorld(previewInteraction.clickedObjectIndex) >= 0) {
+                    const int worldClickedObjectIndex = mapRenderObjectIndexToWorld(previewInteraction.clickedObjectIndex);
+                    if (focusObjectInEditor(worldClickedObjectIndex,
                             previewInteraction.doubleClickedObject ? 1.6f : previewViewport.zoom)) {
                         if (!previewInteraction.doubleClickedObject) {
                             previewViewport.hasFocusRequest = false;
@@ -5780,36 +5591,40 @@ int main() {
             if (ImGui::BeginPopup("Object Context###RenderWindow_ObjectContext")) {
                 if (contextObjectIndex >= 0 && contextObjectIndex < static_cast<int>(editorWorld.objects.size())) {
                     const auto& contextObject = editorWorld.objects[static_cast<std::size_t>(contextObjectIndex)];
-                    ImGui::TextUnformatted("Object Properties");
+                    ImGui::TextUnformatted("Object Context");
                     ImGui::Separator();
                     ImGui::TextWrapped("Display Name: %s", contextObject.displayName.c_str());
                     ImGui::TextDisabled("ID: %s", contextObject.registryId.c_str());
                     ImGui::TextDisabled("Category: %s", ToLabel(contextObject.category));
-                    ImGui::TextDisabled(
-                        "Position: %.2f, %.2f, %.2f",
-                        contextObject.x,
-                        contextObject.y,
-                        contextObject.z);
-                    ImGui::TextDisabled(
-                        "Rotation: %.0f, %.0f, %.0f",
-                        contextObject.rotationX,
-                        contextObject.rotationY,
-                        contextObject.rotationZ);
-                    ImGui::TextDisabled(
-                        "Dimensions: %.1f x %.1f x %.1f",
-                        contextObject.width,
-                        contextObject.depth,
-                        contextObject.height);
-                    if (!contextObject.prefabSourceId.empty()) {
-                        ImGui::TextDisabled("Prefab Source: %s", contextObject.prefabSourceId.c_str());
+                    ImGui::TextDisabled("Interaction: %s", ToLabel(contextObject.interaction));
+                    ImGui::TextDisabled("Placed reference in current world.");
+                    if (ImGui::Button("Open Properties###RenderWindow_ObjectContext_OpenProperties", ImVec2(160.0f, 0.0f))) {
+                        if (focusObjectInEditor(contextObjectIndex, previewViewport.zoom)) {
+                            previewViewport.hasFocusRequest = false;
+                        }
+                        referencePropertiesObjectIndex = contextObjectIndex;
+                        referencePropertiesBufferObjectIndex = -1;
+                        showReferencePropertiesWindow = true;
+                        statusText = "Opened reference properties for placed object.";
+                        ImGui::CloseCurrentPopup();
                     }
-                    ImGui::TextDisabled("Full Reference Inspector is future work.");
                     if (ImGui::Button("Focus Selected###RenderWindow_ObjectContext_Focus", ImVec2(160.0f, 0.0f))) {
                         focusObjectInEditor(contextObjectIndex, 1.45f);
                         statusText = "Focused context object.";
                         ImGui::CloseCurrentPopup();
                     }
-                    ImGui::SameLine();
+                    ImGui::BeginDisabled(isLayerLockedForObject(contextObject));
+                    if (ImGui::Button("Delete Reference###RenderWindow_ObjectContext_DeleteReference", ImVec2(160.0f, 0.0f))) {
+                        if (deletePlacedReferenceByIndex(contextObjectIndex, "Delete placed reference")) {
+                            selectedObjectUndoHandledThisFrame = true;
+                            contextObjectIndex = -1;
+                            ImGui::CloseCurrentPopup();
+                        }
+                    }
+                    ImGui::EndDisabled();
+                    if (isLayerLockedForObject(contextObject) && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                        ImGui::SetTooltip("Selected object layer is locked; delete is disabled.");
+                    }
                     if (ImGui::Button("Close###RenderWindow_ObjectContext_Close", ImVec2(100.0f, 0.0f))) {
                         ImGui::CloseCurrentPopup();
                     }
@@ -5820,6 +5635,643 @@ int main() {
                     }
                 }
                 ImGui::EndPopup();
+            }
+            if (showReferencePropertiesWindow) {
+                if (referencePropertiesObjectIndex < 0 ||
+                    referencePropertiesObjectIndex >= static_cast<int>(editorWorld.objects.size())) {
+                    showReferencePropertiesWindow = false;
+                    referencePropertiesObjectIndex = -1;
+                    referencePropertiesBufferObjectIndex = -1;
+                }
+            }
+            if (showReferencePropertiesWindow) {
+                auto& referenceObject = editorWorld.objects[static_cast<std::size_t>(referencePropertiesObjectIndex)];
+                normalizeObjectLayer(referenceObject);
+                if (referencePropertiesBufferObjectIndex != referencePropertiesObjectIndex) {
+                    CopyStringToBuffer(referenceObject.displayName, referenceDisplayNameEdit, IM_ARRAYSIZE(referenceDisplayNameEdit));
+                    CopyStringToBuffer(referenceObject.scriptTag, referenceScriptTagEdit, IM_ARRAYSIZE(referenceScriptTagEdit));
+                    CopyStringToBuffer(referenceObject.linkTarget, referenceLinkTargetEdit, IM_ARRAYSIZE(referenceLinkTargetEdit));
+                    CopyStringToBuffer(referenceObject.editorLayer, referenceLayerEdit, IM_ARRAYSIZE(referenceLayerEdit));
+                    if (referenceObject.lootEntries.empty()) {
+                        for (const auto& lootId : referenceObject.manualLootIds) {
+                            if (!lootId.empty()) {
+                                referenceObject.lootEntries.push_back({lootId, 1, 1, 1.0f});
+                            }
+                        }
+                    }
+                    referenceLootSelectedSlot = 0;
+                    CopyStringToBuffer(
+                        referenceObject.lootEntries.empty() ? std::string{} : referenceObject.lootEntries.front().itemId,
+                        referenceLootEntryEdit,
+                        IM_ARRAYSIZE(referenceLootEntryEdit));
+                    referencePropertiesBufferObjectIndex = referencePropertiesObjectIndex;
+                }
+                auto syncSelectedReferenceBuffers = [&]() {
+                    if (selectedObjectIndex == referencePropertiesObjectIndex) {
+                        CopyStringToBuffer(referenceObject.displayName, selectedDisplayNameEdit, IM_ARRAYSIZE(selectedDisplayNameEdit));
+                        CopyStringToBuffer(referenceObject.scriptTag, selectedScriptTagEdit, IM_ARRAYSIZE(selectedScriptTagEdit));
+                        CopyStringToBuffer(referenceObject.linkTarget, selectedLinkTargetEdit, IM_ARRAYSIZE(selectedLinkTargetEdit));
+                        CopyStringToBuffer(referenceObject.editorLayer, selectedLayerEdit, IM_ARRAYSIZE(selectedLayerEdit));
+                    }
+                };
+                auto syncReferenceLootBuffers = [&]() {
+                    if (referenceLootSelectedSlot < 0 ||
+                        referenceLootSelectedSlot >= static_cast<int>(referenceObject.lootEntries.size())) {
+                        CopyStringToBuffer("", referenceLootEntryEdit, IM_ARRAYSIZE(referenceLootEntryEdit));
+                        return;
+                    }
+                    CopyStringToBuffer(
+                        referenceObject.lootEntries[static_cast<std::size_t>(referenceLootSelectedSlot)].itemId,
+                        referenceLootEntryEdit,
+                        IM_ARRAYSIZE(referenceLootEntryEdit));
+                };
+                auto syncLegacyManualLootIdsFromEntries = [&]() {
+                    referenceObject.manualLootIds = {};
+                    for (std::size_t lootIndex = 0;
+                         lootIndex < referenceObject.manualLootIds.size() && lootIndex < referenceObject.lootEntries.size();
+                         ++lootIndex) {
+                        referenceObject.manualLootIds[lootIndex] = referenceObject.lootEntries[lootIndex].itemId;
+                    }
+                };
+                auto ensureLootEntryRow = [&](int rowIndex) -> bunker::LootEntry* {
+                    if (rowIndex < 0) {
+                        return nullptr;
+                    }
+                    const std::size_t targetSize = static_cast<std::size_t>(rowIndex) + 1;
+                    if (referenceObject.lootEntries.size() < targetSize) {
+                        referenceObject.lootEntries.resize(targetSize);
+                    }
+                    referenceLootSelectedSlot = rowIndex;
+                    return &referenceObject.lootEntries[static_cast<std::size_t>(rowIndex)];
+                };
+                auto ensureEditableLootEntryDefaults = [](bunker::LootEntry& entry) {
+                    entry.minCount = std::max(1, entry.minCount);
+                    entry.maxCount = std::max(entry.minCount, entry.maxCount);
+                    if (!std::isfinite(entry.weight) || entry.weight <= 0.0f) {
+                        entry.weight = 1.0f;
+                    }
+                };
+                auto referenceLootSourceLabel = [&](const std::string& lootId) {
+                    if (lootId.empty()) {
+                        return std::string("Empty");
+                    }
+                    if (lootId.rfind("preset:", 0) == 0) {
+                        return std::string("Object Window preset");
+                    }
+                    if (bunker::FindPrefabRecordIndexById(savedPrefabs, lootId) >= 0) {
+                        return std::string("Object Window prefab");
+                    }
+                    return std::string("Manual string");
+                };
+                auto addLootReferenceToSelectedObject = [&](const std::string& lootReference, const std::string& sourceLabel, bool replaceSelected) {
+                    if (lootReference.empty()) {
+                        statusText = "Cannot add empty loot reference.";
+                        return false;
+                    }
+                    if (replaceSelected) {
+                        if (auto* entry = ensureLootEntryRow(referenceLootSelectedSlot)) {
+                            ensureEditableLootEntryDefaults(*entry);
+                            entry->itemId = lootReference;
+                        }
+                    } else {
+                        referenceObject.lootEntries.push_back({lootReference, 1, 1, 1.0f});
+                        referenceLootSelectedSlot = static_cast<int>(referenceObject.lootEntries.size()) - 1;
+                    }
+                    referenceObject.manualLoot = true;
+                    syncLegacyManualLootIdsFromEntries();
+                    syncReferenceLootBuffers();
+                    statusText = (replaceSelected ? "Picked loot reference from " : "Added loot reference from ") +
+                        sourceLabel + " at row " + std::to_string(referenceLootSelectedSlot + 1) + ".";
+                    return true;
+                };
+                const auto lootDisplayRowCountForCurrentObject = [&]() {
+                    return std::max(20, static_cast<int>(referenceObject.lootEntries.size()) + 1);
+                };
+                if (referenceLootSelectedSlot < 0) {
+                    referenceLootSelectedSlot = 0;
+                } else if (referenceLootSelectedSlot >= lootDisplayRowCountForCurrentObject()) {
+                    referenceLootSelectedSlot = lootDisplayRowCountForCurrentObject() - 1;
+                }
+                const bool referenceLayerVisible = isLayerVisibleForObject(referenceObject);
+                const bool referenceLayerLocked = isLayerLockedForObject(referenceObject);
+                const bool referenceEditable = referenceLayerVisible && !referenceLayerLocked;
+
+                ImGui::SetNextWindowSize(ImVec2(520.0f, 560.0f), ImGuiCond_FirstUseEver);
+                if (ImGui::Begin(
+                        "Reference Properties###RenderWindow_ReferenceProperties",
+                        &showReferencePropertiesWindow,
+                        ImGuiWindowFlags_NoCollapse)) {
+                    if (!referenceLayerVisible) {
+                        ImGui::TextDisabled("This reference is on a hidden layer; edits are disabled until the layer is visible.");
+                    } else if (referenceLayerLocked) {
+                        ImGui::TextDisabled("This object's layer is locked; reference edits are disabled.");
+                    }
+                    if (ImGui::BeginTabBar("Reference Properties Tabs###RenderWindow_ReferencePropertiesTabs")) {
+                        if (ImGui::BeginTabItem("Reference###RenderWindow_ReferenceProperties_ReferenceTab")) {
+                            ImGui::TextWrapped("Placed reference properties. Edits affect this world object only.");
+                            ImGui::TextWrapped("Object Window catalog/template selection is separate.");
+                            ImGui::Separator();
+                            ImGui::BeginDisabled(!referenceEditable);
+                            if (ImGui::InputText("Display Name###RenderWindow_ReferenceProperties_DisplayName", referenceDisplayNameEdit, IM_ARRAYSIZE(referenceDisplayNameEdit))) {
+                                referenceObject.displayName = referenceDisplayNameEdit;
+                                syncSelectedReferenceBuffers();
+                                statusText = "Updated placed reference display name.";
+                            }
+                            ImGui::TextDisabled("Registry ID: %s", referenceObject.registryId.c_str());
+                            ImGui::TextDisabled(
+                                "Base / Prefab Source ID: %s",
+                                referenceObject.prefabSourceId.empty() ? "(none)" : referenceObject.prefabSourceId.c_str());
+                            int categoryIndex = ToIndex(referenceObject.category);
+                            if (ImGui::Combo("Category###RenderWindow_ReferenceProperties_Category", &categoryIndex, categoryLabels, IM_ARRAYSIZE(categoryLabels))) {
+                                referenceObject.category = CategoryFromIndex(categoryIndex);
+                                statusText = "Updated placed reference category.";
+                            }
+                            int interactionIndex = ToIndex(referenceObject.interaction);
+                            if (ImGui::Combo("Interaction Type###RenderWindow_ReferenceProperties_Interaction", &interactionIndex, interactionLabels, IM_ARRAYSIZE(interactionLabels))) {
+                                referenceObject.interaction = static_cast<bunker::InteractionType>(interactionIndex);
+                                statusText = "Updated placed reference interaction type.";
+                            }
+                            if (ImGui::InputText("Editor Layer###RenderWindow_ReferenceProperties_EditorLayer", referenceLayerEdit, IM_ARRAYSIZE(referenceLayerEdit))) {
+                                referenceObject.editorLayer = bunker::NormalizeEditorLayerName(referenceLayerEdit);
+                                if (referenceObject.editorLayer.empty()) {
+                                    referenceObject.editorLayer = bunker::DefaultEditorLayerName(referenceObject);
+                                }
+                                CopyStringToBuffer(referenceObject.editorLayer, referenceLayerEdit, IM_ARRAYSIZE(referenceLayerEdit));
+                                syncSelectedReferenceBuffers();
+                                syncEditorLayerStateTable();
+                                statusText = "Updated placed reference editor layer.";
+                            }
+                            ImGui::EndDisabled();
+                            ImGui::TextDisabled("Selected index: %d", selectedObjectIndex);
+                            ImGui::TextDisabled("Object index in world: %d", referencePropertiesObjectIndex);
+                            if (ImGui::Button("Focus Selected###RenderWindow_ReferenceProperties_Focus", ImVec2(150.0f, 0.0f))) {
+                                focusObjectInEditor(referencePropertiesObjectIndex, 1.45f);
+                                statusText = "Focused placed reference.";
+                            }
+                            ImGui::SameLine();
+                            ImGui::BeginDisabled(referenceLayerLocked);
+                            if (ImGui::Button("Delete Reference###RenderWindow_ReferenceProperties_Delete", ImVec2(150.0f, 0.0f))) {
+                                if (deletePlacedReferenceByIndex(referencePropertiesObjectIndex, "Delete placed reference")) {
+                                    selectedObjectUndoHandledThisFrame = true;
+                                }
+                            }
+                            ImGui::EndDisabled();
+                            if (referenceLayerLocked && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                                ImGui::SetTooltip("Selected object layer is locked; delete is disabled.");
+                            }
+                            ImGui::SameLine();
+                            if (ImGui::Button("Close###RenderWindow_ReferenceProperties_Close", ImVec2(100.0f, 0.0f))) {
+                                showReferencePropertiesWindow = false;
+                            }
+                            ImGui::EndTabItem();
+                        }
+                        if (ImGui::BeginTabItem("Transform###RenderWindow_ReferenceProperties_TransformTab")) {
+                            ImGui::TextWrapped("NumPad moves selected object relative to camera; -/+ changes Z.");
+                            ImGui::BeginDisabled(!referenceEditable);
+                            bool positionEdited = false;
+                            positionEdited = ImGui::InputFloat("Position X###RenderWindow_ReferenceProperties_PositionX", &referenceObject.x, 0.25f, 1.0f, "%.3f") || positionEdited;
+                            positionEdited = ImGui::InputFloat("Position Y###RenderWindow_ReferenceProperties_PositionY", &referenceObject.y, 0.25f, 1.0f, "%.3f") || positionEdited;
+                            positionEdited = ImGui::InputFloat("Position Z###RenderWindow_ReferenceProperties_PositionZ", &referenceObject.z, 0.25f, 1.0f, "%.3f") || positionEdited;
+                            if (positionEdited) {
+                                statusText = "Updated placed reference position.";
+                            }
+                            bool rotationEdited = false;
+                            rotationEdited = ImGui::InputFloat("Rotation X###RenderWindow_ReferenceProperties_RotationX", &referenceObject.rotationX, 4.0f, 16.0f, "%.1f") || rotationEdited;
+                            rotationEdited = ImGui::InputFloat("Rotation Y###RenderWindow_ReferenceProperties_RotationY", &referenceObject.rotationY, 4.0f, 16.0f, "%.1f") || rotationEdited;
+                            rotationEdited = ImGui::InputFloat("Rotation Z###RenderWindow_ReferenceProperties_RotationZ", &referenceObject.rotationZ, 4.0f, 16.0f, "%.1f") || rotationEdited;
+                            if (rotationEdited) {
+                                referenceObject.rotationX = NormalizeDegrees(referenceObject.rotationX);
+                                referenceObject.rotationY = NormalizeDegrees(referenceObject.rotationY);
+                                referenceObject.rotationZ = NormalizeDegrees(referenceObject.rotationZ);
+                                statusText = "Updated placed reference rotation.";
+                            }
+                            bool sizeEdited = false;
+                            sizeEdited = ImGui::InputFloat("Width###RenderWindow_ReferenceProperties_Width", &referenceObject.width, 0.1f, 0.5f, "%.2f") || sizeEdited;
+                            sizeEdited = ImGui::InputFloat("Depth###RenderWindow_ReferenceProperties_Depth", &referenceObject.depth, 0.1f, 0.5f, "%.2f") || sizeEdited;
+                            sizeEdited = ImGui::InputFloat("Height###RenderWindow_ReferenceProperties_Height", &referenceObject.height, 0.1f, 0.5f, "%.2f") || sizeEdited;
+                            if (sizeEdited) {
+                                referenceObject.width = std::max(0.1f, referenceObject.width);
+                                referenceObject.depth = std::max(0.1f, referenceObject.depth);
+                                referenceObject.height = std::max(0.1f, referenceObject.height);
+                                statusText = "Updated placed reference dimensions.";
+                            }
+                            ImGui::EndDisabled();
+                            ImGui::EndTabItem();
+                        }
+                        if (ImGui::BeginTabItem("Runtime###RenderWindow_ReferenceProperties_RuntimeTab")) {
+                            ImGui::BeginDisabled(!referenceEditable);
+                            if (ImGui::InputFloat("Health###RenderWindow_ReferenceProperties_Health", &referenceObject.health, 5.0f, 20.0f, "%.0f")) {
+                                statusText = "Updated placed reference health.";
+                            }
+                            if (ImGui::Checkbox("Blocks Movement###RenderWindow_ReferenceProperties_BlocksMovement", &referenceObject.blocksMovement)) {
+                                statusText = "Updated placed reference movement blocking.";
+                            }
+                            ImGui::SameLine();
+                            ImGui::TextDisabled("Stored on this placed reference; runtime/export systems consume this flag.");
+                            if (ImGui::Checkbox("Discovered###RenderWindow_ReferenceProperties_Discovered", &referenceObject.discovered)) {
+                                statusText = "Updated placed reference discovery flag.";
+                            }
+                            ImGui::SameLine();
+                            ImGui::TextDisabled("Stored on this placed reference; runtime/export systems consume this flag.");
+                            ImGui::TextDisabled(
+                                "Manual Loot: %s. Edit loot entries in Loot / Links.",
+                                referenceObject.manualLoot ? "enabled" : "disabled");
+                            int interactionIndex = ToIndex(referenceObject.interaction);
+                            if (ImGui::Combo("Interaction Type###RenderWindow_ReferenceProperties_RuntimeInteraction", &interactionIndex, interactionLabels, IM_ARRAYSIZE(interactionLabels))) {
+                                referenceObject.interaction = static_cast<bunker::InteractionType>(interactionIndex);
+                                statusText = "Updated placed reference interaction type; viewport helper marker refreshed.";
+                            }
+                            ImGui::SameLine();
+                            ImGui::TextDisabled("Stored on this placed reference; marker and type section update immediately.");
+                            if (ImGui::InputText("Script Tag###RenderWindow_ReferenceProperties_ScriptTag", referenceScriptTagEdit, IM_ARRAYSIZE(referenceScriptTagEdit))) {
+                                referenceObject.scriptTag = referenceScriptTagEdit;
+                                syncSelectedReferenceBuffers();
+                                statusText = "Updated placed reference script tag.";
+                            }
+                            if (ImGui::InputText("Link Target###RenderWindow_ReferenceProperties_LinkTarget", referenceLinkTargetEdit, IM_ARRAYSIZE(referenceLinkTargetEdit))) {
+                                referenceObject.linkTarget = referenceLinkTargetEdit;
+                                syncSelectedReferenceBuffers();
+                                statusText = "Updated placed reference link target.";
+                            }
+                            ImGui::EndDisabled();
+                            ImGui::EndTabItem();
+                        }
+                        if (ImGui::BeginTabItem("Loot / Links###RenderWindow_ReferenceProperties_LootLinksTab")) {
+                            ImGui::BeginDisabled(!referenceEditable);
+                            if (ImGui::Checkbox("Manual Loot###RenderWindow_ReferenceProperties_LootManualLoot", &referenceObject.manualLoot)) {
+                                statusText = referenceObject.manualLoot
+                                    ? "Manual loot enabled for this placed reference."
+                                    : "Manual loot disabled; entries are kept in the placed reference.";
+                            }
+                            int lootModeIndex = referenceObject.lootMode == bunker::LootMode::RandomTable ? 1 : 0;
+                            const char* lootModeLabels[] = {"Manual Filled Chest", "Random Loot Chest"};
+                            if (ImGui::Combo("Loot Mode###RenderWindow_ReferenceProperties_LootMode", &lootModeIndex, lootModeLabels, IM_ARRAYSIZE(lootModeLabels))) {
+                                referenceObject.lootMode = lootModeIndex == 1
+                                    ? bunker::LootMode::RandomTable
+                                    : bunker::LootMode::ManualList;
+                                referenceObject.manualLoot = true;
+                                statusText = referenceObject.lootMode == bunker::LootMode::RandomTable
+                                    ? "Loot mode changed to Random Loot Chest."
+                                    : "Loot mode changed to Manual Filled Chest.";
+                            }
+                            ImGui::Separator();
+                            ImGui::TextUnformatted("Loot Entries");
+                            ImGui::TextWrapped("Manual Filled Chest stores explicit loot entries.");
+                            ImGui::TextWrapped("Random Loot Chest uses weighted entries at runtime.");
+                            ImGui::TextWrapped("Legacy manualLootIds are migrated into this list.");
+                            ImGui::TextWrapped("Drag Object Window item onto a loot row to replace that row.");
+                            ImGui::TextWrapped("Add Object Window Selection appends a new row.");
+                            const int lootDisplayRowCount = lootDisplayRowCountForCurrentObject();
+                            const float lootTableHeight = ImGui::GetTextLineHeightWithSpacing() * 22.0f;
+                            ImGui::BeginChild("RenderWindow_ReferenceProperties_LootEntryList", ImVec2(0.0f, lootTableHeight), true);
+                            bool lootDropHandledOnRow = false;
+                            if (ImGui::BeginTable("RenderWindow_ReferenceProperties_LootEntryTable", 6, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY)) {
+                                ImGui::TableSetupColumn("Row", ImGuiTableColumnFlags_WidthFixed, 48.0f);
+                                ImGui::TableSetupColumn("Item ID");
+                                ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthFixed, 54.0f);
+                                ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthFixed, 54.0f);
+                                ImGui::TableSetupColumn("Weight", ImGuiTableColumnFlags_WidthFixed, 72.0f);
+                                ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+                                ImGui::TableHeadersRow();
+                                ImGuiListClipper clipper;
+                                clipper.Begin(lootDisplayRowCount);
+                                while (clipper.Step()) {
+                                    for (int rowIndex = clipper.DisplayStart; rowIndex < clipper.DisplayEnd; ++rowIndex) {
+                                        const bool rowExists = rowIndex < static_cast<int>(referenceObject.lootEntries.size());
+                                        const auto* lootEntry = rowExists
+                                            ? &referenceObject.lootEntries[static_cast<std::size_t>(rowIndex)]
+                                            : nullptr;
+                                        ImGui::TableNextRow();
+                                        ImGui::TableSetColumnIndex(0);
+                                        ImGui::Text("%d", rowIndex + 1);
+                                        ImGui::TableSetColumnIndex(1);
+                                        const bool selected = referenceLootSelectedSlot == rowIndex;
+                                        const std::string rowText = lootEntry == nullptr || lootEntry->itemId.empty()
+                                            ? std::string("(empty)")
+                                            : lootEntry->itemId;
+                                        if (ImGui::Selectable(
+                                                (rowText + "###RenderWindow_ReferenceProperties_LootRow" + std::to_string(rowIndex)).c_str(),
+                                                selected,
+                                                ImGuiSelectableFlags_SpanAllColumns)) {
+                                            referenceLootSelectedSlot = rowIndex;
+                                            if (rowExists) {
+                                                syncReferenceLootBuffers();
+                                            } else {
+                                                CopyStringToBuffer("", referenceLootEntryEdit, IM_ARRAYSIZE(referenceLootEntryEdit));
+                                            }
+                                        }
+                                        if (ImGui::BeginDragDropTarget()) {
+                                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kObjectWindowDragPayloadType)) {
+                                                if (payload->DataSize == static_cast<int>(sizeof(ObjectWindowDragPayload))) {
+                                                    const auto* dragPayload = static_cast<const ObjectWindowDragPayload*>(payload->Data);
+                                                    referenceLootSelectedSlot = rowIndex;
+                                                    if (const auto lootReference = objectWindowDragPayloadLootReference(*dragPayload)) {
+                                                        lootDropHandledOnRow = addLootReferenceToSelectedObject(lootReference->first, lootReference->second, true);
+                                                    } else {
+                                                        statusText = "Object Window loot drag/drop payload was not usable.";
+                                                    }
+                                                }
+                                            }
+                                            ImGui::EndDragDropTarget();
+                                        }
+                                        ImGui::TableSetColumnIndex(2);
+                                        ImGui::Text("%d", lootEntry != nullptr ? lootEntry->minCount : 1);
+                                        ImGui::TableSetColumnIndex(3);
+                                        ImGui::Text("%d", lootEntry != nullptr ? lootEntry->maxCount : 1);
+                                        ImGui::TableSetColumnIndex(4);
+                                        ImGui::Text("%.2f", lootEntry != nullptr ? lootEntry->weight : 1.0f);
+                                        ImGui::TableSetColumnIndex(5);
+                                        ImGui::TextDisabled("%s", referenceLootSourceLabel(lootEntry != nullptr ? lootEntry->itemId : std::string{}).c_str());
+                                    }
+                                }
+                                ImGui::EndTable();
+                            }
+                            if (!lootDropHandledOnRow && ImGui::BeginDragDropTarget()) {
+                                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kObjectWindowDragPayloadType)) {
+                                    if (payload->DataSize == static_cast<int>(sizeof(ObjectWindowDragPayload))) {
+                                        const auto* dragPayload = static_cast<const ObjectWindowDragPayload*>(payload->Data);
+                                        if (const auto lootReference = objectWindowDragPayloadLootReference(*dragPayload)) {
+                                            addLootReferenceToSelectedObject(lootReference->first, lootReference->second, false);
+                                        } else {
+                                            statusText = "Object Window loot drag/drop payload was not usable.";
+                                        }
+                                    }
+                                }
+                                ImGui::EndDragDropTarget();
+                            }
+                            ImGui::EndChild();
+                            const bool selectedLootRowExists =
+                                referenceLootSelectedSlot >= 0 &&
+                                referenceLootSelectedSlot < static_cast<int>(referenceObject.lootEntries.size());
+                            if (selectedLootRowExists) {
+                                const std::size_t selectedLootIndex = static_cast<std::size_t>(referenceLootSelectedSlot);
+                                ImGui::SetNextItemWidth(-1.0f);
+                                if (ImGui::InputText(
+                                        "Selected Loot ID###RenderWindow_ReferenceProperties_SelectedLootId",
+                                        referenceLootEntryEdit,
+                                        IM_ARRAYSIZE(referenceLootEntryEdit))) {
+                                    referenceObject.lootEntries[selectedLootIndex].itemId = referenceLootEntryEdit;
+                                    referenceObject.manualLoot = true;
+                                    syncLegacyManualLootIdsFromEntries();
+                                    statusText = "Updated selected placed reference loot entry.";
+                                }
+                                int minCount = referenceObject.lootEntries[selectedLootIndex].minCount;
+                                int maxCount = referenceObject.lootEntries[selectedLootIndex].maxCount;
+                                float weight = referenceObject.lootEntries[selectedLootIndex].weight;
+                                if (ImGui::InputInt("Min Count###RenderWindow_ReferenceProperties_LootMinCount", &minCount)) {
+                                    referenceObject.lootEntries[selectedLootIndex].minCount = std::max(1, minCount);
+                                    if (referenceObject.lootEntries[selectedLootIndex].maxCount < referenceObject.lootEntries[selectedLootIndex].minCount) {
+                                        referenceObject.lootEntries[selectedLootIndex].maxCount = referenceObject.lootEntries[selectedLootIndex].minCount;
+                                    }
+                                    statusText = "Updated selected loot minimum count.";
+                                }
+                                if (ImGui::InputInt("Max Count###RenderWindow_ReferenceProperties_LootMaxCount", &maxCount)) {
+                                    referenceObject.lootEntries[selectedLootIndex].maxCount = std::max(referenceObject.lootEntries[selectedLootIndex].minCount, maxCount);
+                                    statusText = "Updated selected loot maximum count.";
+                                }
+                                if (ImGui::InputFloat("Weight / Chance###RenderWindow_ReferenceProperties_LootWeight", &weight, 0.1f, 1.0f, "%.2f")) {
+                                    referenceObject.lootEntries[selectedLootIndex].weight = std::max(0.01f, weight);
+                                    statusText = "Updated selected loot random weight.";
+                                }
+                            } else {
+                                ImGui::TextDisabled("Drop or pick an item to create this row.");
+                            }
+                            if (ImGui::Button("Add Empty Entry###RenderWindow_ReferenceProperties_AddLootSlot", ImVec2(160.0f, 0.0f))) {
+                                referenceObject.lootEntries.push_back({});
+                                referenceLootSelectedSlot = static_cast<int>(referenceObject.lootEntries.size()) - 1;
+                                syncReferenceLootBuffers();
+                                syncLegacyManualLootIdsFromEntries();
+                                statusText = "Added empty loot entry.";
+                            }
+                            ImGui::SameLine();
+                            const auto objectWindowLootSelection = objectWindowSelectionLootReference();
+                            ImGui::BeginDisabled(!objectWindowLootSelection.has_value());
+                            if (ImGui::Button("Add Object Window Selection###RenderWindow_ReferenceProperties_AddObjectWindowLoot", ImVec2(220.0f, 0.0f))) {
+                                if (objectWindowLootSelection.has_value()) {
+                                    addLootReferenceToSelectedObject(
+                                        objectWindowLootSelection->first,
+                                        objectWindowLootSelection->second,
+                                        false);
+                                }
+                            }
+                            ImGui::EndDisabled();
+                            if (!objectWindowLootSelection.has_value()) {
+                                ImGui::TextDisabled("Select an item in Object Window to add it as loot.");
+                            } else {
+                                ImGui::TextDisabled("Object Window selection: %s", objectWindowLootSelection->second.c_str());
+                            }
+                            if (ImGui::Button("Pick From Object Window Selection###RenderWindow_ReferenceProperties_PickObjectWindowLoot", ImVec2(240.0f, 0.0f))) {
+                                if (objectWindowLootSelection.has_value()) {
+                                    addLootReferenceToSelectedObject(
+                                        objectWindowLootSelection->first,
+                                        objectWindowLootSelection->second,
+                                        true);
+                                }
+                            }
+                            ImGui::SameLine();
+                            ImGui::BeginDisabled(referenceObject.lootEntries.empty());
+                            if (ImGui::Button("Remove Selected###RenderWindow_ReferenceProperties_RemoveLootSlot", ImVec2(150.0f, 0.0f))) {
+                                if (selectedLootRowExists) {
+                                    referenceObject.lootEntries.erase(referenceObject.lootEntries.begin() + referenceLootSelectedSlot);
+                                    if (referenceObject.lootEntries.empty()) {
+                                        referenceLootSelectedSlot = 0;
+                                    } else {
+                                        referenceLootSelectedSlot = std::min(referenceLootSelectedSlot, static_cast<int>(referenceObject.lootEntries.size()) - 1);
+                                    }
+                                    syncReferenceLootBuffers();
+                                    syncLegacyManualLootIdsFromEntries();
+                                    statusText = "Removed selected placed reference loot entry.";
+                                } else {
+                                    statusText = "Selected loot row is virtual; nothing was removed.";
+                                }
+                            }
+                            ImGui::SameLine();
+                            if (ImGui::Button("Clear Selected###RenderWindow_ReferenceProperties_ClearLootSlot", ImVec2(140.0f, 0.0f))) {
+                                if (selectedLootRowExists) {
+                                    referenceObject.lootEntries[static_cast<std::size_t>(referenceLootSelectedSlot)].itemId.clear();
+                                    referenceObject.manualLoot = true;
+                                    syncReferenceLootBuffers();
+                                    syncLegacyManualLootIdsFromEntries();
+                                    statusText = "Cleared selected placed reference loot entry.";
+                                } else {
+                                    statusText = "Selected loot row is virtual; nothing was cleared.";
+                                }
+                            }
+                            ImGui::EndDisabled();
+                            if (ImGui::Button("Clear All###RenderWindow_ReferenceProperties_ClearAllLoot", ImVec2(120.0f, 0.0f))) {
+                                referenceObject.lootEntries.clear();
+                                referenceObject.manualLootIds = {};
+                                referenceLootSelectedSlot = 0;
+                                syncReferenceLootBuffers();
+                                statusText = "Cleared all placed reference loot entries.";
+                            }
+                            if (ImGui::InputText("Script Tag###RenderWindow_ReferenceProperties_LootScriptTag", referenceScriptTagEdit, IM_ARRAYSIZE(referenceScriptTagEdit))) {
+                                referenceObject.scriptTag = referenceScriptTagEdit;
+                                syncSelectedReferenceBuffers();
+                                statusText = "Updated placed reference script tag.";
+                            }
+                            if (ImGui::InputText("Link Target###RenderWindow_ReferenceProperties_LootLinkTarget", referenceLinkTargetEdit, IM_ARRAYSIZE(referenceLinkTargetEdit))) {
+                                referenceObject.linkTarget = referenceLinkTargetEdit;
+                                syncSelectedReferenceBuffers();
+                                statusText = "Updated placed reference link target.";
+                            }
+                            ImGui::EndDisabled();
+                            ImGui::EndTabItem();
+                        }
+                        if (ImGui::BeginTabItem("Type Specific###RenderWindow_ReferenceProperties_TypeSpecificTab")) {
+                            ImGui::BeginDisabled(!referenceEditable);
+                            bool showedTypeSpecificSection = false;
+                            if (referenceObject.category == bunker::ObjectCategory::Container ||
+                                referenceObject.interaction == bunker::InteractionType::Container) {
+                                showedTypeSpecificSection = true;
+                                ImGui::TextDisabled("Container Reference");
+                                ImGui::TextDisabled("Container loot is edited in Loot / Links.");
+                                if (ImGui::Checkbox("Blocks Movement###RenderWindow_ReferenceProperties_TypeContainerBlocksMovement", &referenceObject.blocksMovement)) {
+                                    statusText = "Updated container reference collision flag.";
+                                }
+                                if (ImGui::InputFloat("Health###RenderWindow_ReferenceProperties_TypeContainerHealth", &referenceObject.health, 5.0f, 20.0f, "%.0f")) {
+                                    statusText = "Updated container reference health.";
+                                }
+                                ImGui::Separator();
+                            }
+                            if (referenceObject.interaction == bunker::InteractionType::Terminal) {
+                                showedTypeSpecificSection = true;
+                                ImGui::TextDisabled("Terminal Reference");
+                                if (ImGui::InputText("Script Tag###RenderWindow_ReferenceProperties_TypeTerminalScriptTag", referenceScriptTagEdit, IM_ARRAYSIZE(referenceScriptTagEdit))) {
+                                    referenceObject.scriptTag = referenceScriptTagEdit;
+                                    syncSelectedReferenceBuffers();
+                                    statusText = "Updated terminal reference script tag.";
+                                }
+                                if (ImGui::InputText("Link Target###RenderWindow_ReferenceProperties_TypeTerminalLinkTarget", referenceLinkTargetEdit, IM_ARRAYSIZE(referenceLinkTargetEdit))) {
+                                    referenceObject.linkTarget = referenceLinkTargetEdit;
+                                    syncSelectedReferenceBuffers();
+                                    statusText = "Updated terminal reference link target.";
+                                }
+                                if (ImGui::Checkbox("Discovered###RenderWindow_ReferenceProperties_TypeTerminalDiscovered", &referenceObject.discovered)) {
+                                    statusText = "Updated terminal reference discovered flag.";
+                                }
+                                ImGui::Separator();
+                            }
+                            if (referenceObject.interaction == bunker::InteractionType::Transition) {
+                                showedTypeSpecificSection = true;
+                                ImGui::TextDisabled("Door / Transition Reference");
+                                if (ImGui::InputText("Link Target###RenderWindow_ReferenceProperties_TypeTransitionLinkTarget", referenceLinkTargetEdit, IM_ARRAYSIZE(referenceLinkTargetEdit))) {
+                                    referenceObject.linkTarget = referenceLinkTargetEdit;
+                                    syncSelectedReferenceBuffers();
+                                    statusText = "Updated transition reference link target.";
+                                }
+                                if (ImGui::InputText("Script Tag###RenderWindow_ReferenceProperties_TypeTransitionScriptTag", referenceScriptTagEdit, IM_ARRAYSIZE(referenceScriptTagEdit))) {
+                                    referenceObject.scriptTag = referenceScriptTagEdit;
+                                    syncSelectedReferenceBuffers();
+                                    statusText = "Updated transition reference script tag.";
+                                }
+                                if (ImGui::Checkbox("Blocks Movement###RenderWindow_ReferenceProperties_TypeTransitionBlocksMovement", &referenceObject.blocksMovement)) {
+                                    statusText = "Updated transition reference collision flag.";
+                                }
+                                ImGui::Separator();
+                            }
+                            if (referenceObject.category == bunker::ObjectCategory::Structure ||
+                                referenceObject.interaction == bunker::InteractionType::Static) {
+                                showedTypeSpecificSection = true;
+                                ImGui::TextDisabled("Static / Furniture Reference");
+                                if (ImGui::Checkbox("Blocks Movement###RenderWindow_ReferenceProperties_TypeStaticBlocksMovement", &referenceObject.blocksMovement)) {
+                                    statusText = "Updated static reference collision flag.";
+                                }
+                                ImGui::TextDisabled(
+                                    "Dimensions: %.2f x %.2f x %.2f",
+                                    referenceObject.width,
+                                    referenceObject.depth,
+                                    referenceObject.height);
+                                if (ImGui::InputText("Editor Layer###RenderWindow_ReferenceProperties_TypeStaticEditorLayer", referenceLayerEdit, IM_ARRAYSIZE(referenceLayerEdit))) {
+                                    referenceObject.editorLayer = bunker::NormalizeEditorLayerName(referenceLayerEdit);
+                                    if (referenceObject.editorLayer.empty()) {
+                                        referenceObject.editorLayer = bunker::DefaultEditorLayerName(referenceObject);
+                                    }
+                                    CopyStringToBuffer(referenceObject.editorLayer, referenceLayerEdit, IM_ARRAYSIZE(referenceLayerEdit));
+                                    syncSelectedReferenceBuffers();
+                                    syncEditorLayerStateTable();
+                                    statusText = "Updated static reference editor layer.";
+                                }
+                                ImGui::Separator();
+                            }
+                            if (referenceObject.category == bunker::ObjectCategory::ResourceNode) {
+                                showedTypeSpecificSection = true;
+                                ImGui::TextDisabled("Resource / Flora Reference");
+                                if (ImGui::Checkbox("Discovered###RenderWindow_ReferenceProperties_TypeResourceDiscovered", &referenceObject.discovered)) {
+                                    statusText = "Updated resource reference discovered flag.";
+                                }
+                                ImGui::TextDisabled("Resource loot is edited in Loot / Links.");
+                                if (ImGui::InputText("Script Tag###RenderWindow_ReferenceProperties_TypeResourceScriptTag", referenceScriptTagEdit, IM_ARRAYSIZE(referenceScriptTagEdit))) {
+                                    referenceObject.scriptTag = referenceScriptTagEdit;
+                                    syncSelectedReferenceBuffers();
+                                    statusText = "Updated resource reference script tag.";
+                                }
+                                ImGui::Separator();
+                            }
+                            if (referenceObject.category == bunker::ObjectCategory::Vehicle ||
+                                referenceObject.category == bunker::ObjectCategory::Hangar ||
+                                referenceObject.interaction == bunker::InteractionType::VehicleAnchor) {
+                                showedTypeSpecificSection = true;
+                                ImGui::TextDisabled("Vehicle / Anchor Reference");
+                                if (ImGui::Checkbox("Blocks Movement###RenderWindow_ReferenceProperties_TypeVehicleBlocksMovement", &referenceObject.blocksMovement)) {
+                                    statusText = "Updated vehicle reference collision flag.";
+                                }
+                                if (ImGui::InputText("Link Target###RenderWindow_ReferenceProperties_TypeVehicleLinkTarget", referenceLinkTargetEdit, IM_ARRAYSIZE(referenceLinkTargetEdit))) {
+                                    referenceObject.linkTarget = referenceLinkTargetEdit;
+                                    syncSelectedReferenceBuffers();
+                                    statusText = "Updated vehicle reference link target.";
+                                }
+                                if (ImGui::InputFloat("Health###RenderWindow_ReferenceProperties_TypeVehicleHealth", &referenceObject.health, 5.0f, 20.0f, "%.0f")) {
+                                    statusText = "Updated vehicle reference health.";
+                                }
+                                ImGui::Separator();
+                            }
+                            if (!showedTypeSpecificSection) {
+                                ImGui::TextDisabled("No specialized section for this reference type yet.");
+                            }
+                            ImGui::EndDisabled();
+                            ImGui::EndTabItem();
+                        }
+                        if (ImGui::BeginTabItem("Inherited / Base###RenderWindow_ReferenceProperties_InheritedTab")) {
+                            ImGui::TextWrapped("Base/template values are read-only here. This tab never edits the Object Window catalog or prefab template.");
+                            ImGui::Separator();
+                            ImGui::TextDisabled(
+                                "Prefab Source ID: %s",
+                                referenceObject.prefabSourceId.empty() ? "(none)" : referenceObject.prefabSourceId.c_str());
+                            if (referenceObject.prefabSourceId.empty()) {
+                                ImGui::TextDisabled("This reference has no prefab source.");
+                            } else {
+                                const int prefabIndex = bunker::FindPrefabRecordIndexById(savedPrefabs, referenceObject.prefabSourceId);
+                                if (prefabIndex >= 0) {
+                                    const auto& sourcePrefab = savedPrefabs[static_cast<std::size_t>(prefabIndex)];
+                                    ImGui::TextDisabled("Prefab Label: %s", sourcePrefab.label.c_str());
+                                    ImGui::TextDisabled("Prefab ID: %s", sourcePrefab.id.c_str());
+                                    ImGui::TextDisabled("Source Label: %s", sourcePrefab.sourceLabel.empty() ? "(none)" : sourcePrefab.sourceLabel.c_str());
+                                    ImGui::TextDisabled("Base Object Display Name: %s", sourcePrefab.object.displayName.c_str());
+                                    ImGui::TextDisabled("Base Category: %s", ToLabel(sourcePrefab.object.category));
+                                    ImGui::TextDisabled("Base Interaction: %s", ToLabel(sourcePrefab.object.interaction));
+                                    ImGui::TextDisabled(
+                                        "Base Dimensions: %.1f x %.1f x %.1f",
+                                        sourcePrefab.object.width,
+                                        sourcePrefab.object.depth,
+                                        sourcePrefab.object.height);
+                                    ImGui::TextDisabled("Base Health: %.0f", sourcePrefab.object.health);
+                                    ImGui::TextDisabled("Base Script Tag: %s", sourcePrefab.object.scriptTag.empty() ? "(none)" : sourcePrefab.object.scriptTag.c_str());
+                                    ImGui::TextDisabled("Base Link Target: %s", sourcePrefab.object.linkTarget.empty() ? "(none)" : sourcePrefab.object.linkTarget.c_str());
+                                } else {
+                                    ImGui::TextDisabled("Base lookup pending or prefab source not found.");
+                                }
+                            }
+                            ImGui::EndTabItem();
+                        }
+                        ImGui::EndTabBar();
+                    }
+                }
+                ImGui::End();
+                if (!showReferencePropertiesWindow) {
+                    referencePropertiesObjectIndex = -1;
+                    referencePropertiesBufferObjectIndex = -1;
+                }
             }
             if (ImGui::Button("Reset View", ImVec2(120.0f, 0.0f))) {
                 previewViewport = {};
@@ -6561,6 +7013,7 @@ int main() {
                     statusText = "Import assistant needs a source label or concept note before conversion.";
                 } else {
                     SavedPrefab prefabDraft = buildImportedPrefabDraft(conceptInput, targetTypeIndex, completionIndex);
+                    bool importLibrarySaveOk = true;
                     if (importToPrefabLibrary) {
                         const int existingPrefabIndex = bunker::FindPrefabRecordIndexById(savedPrefabs, prefabDraft.id);
                         if (existingPrefabIndex >= 0) {
@@ -6571,13 +7024,18 @@ int main() {
                             selectedPrefabIndex = static_cast<int>(savedPrefabs.size()) - 1;
                         }
                         CopyStringToBuffer(prefabDraft.label, prefabLabelInput, IM_ARRAYSIZE(prefabLabelInput));
+                        importLibrarySaveOk = editor_support::SavePrefabLibrary(savedPrefabs);
                     }
                     if (seedDraftFromImport) {
                         syncDraftFromPrefab(prefabDraft);
                         CopyStringToBuffer(prefabDraft.label, objectNameInput, IM_ARRAYSIZE(objectNameInput));
-                        statusText = "Prepared import concept as prefab draft and seeded current object draft.";
+                        statusText = importLibrarySaveOk
+                            ? "Prepared import concept as prefab draft and seeded current object draft."
+                            : "Prepared import concept as prefab draft and seeded current object draft, but failed to save prefab library.";
                     } else {
-                        statusText = "Prepared import concept as prefab draft.";
+                        statusText = importLibrarySaveOk
+                            ? "Prepared import concept as prefab draft."
+                            : "Prepared import concept as prefab draft, but failed to save prefab library.";
                     }
                     importedConcepts.push_back({
                         conceptInput,
@@ -6627,6 +7085,8 @@ int main() {
                 frameBeginObject.discovered != frameEndObject.discovered ||
                 frameBeginObject.manualLoot != frameEndObject.manualLoot ||
                 frameBeginObject.manualLootIds != frameEndObject.manualLootIds ||
+                frameBeginObject.lootMode != frameEndObject.lootMode ||
+                frameBeginObject.lootEntries != frameEndObject.lootEntries ||
                 frameBeginObject.scriptTag != frameEndObject.scriptTag ||
                 frameBeginObject.linkTarget != frameEndObject.linkTarget ||
                 frameBeginObject.prefabSourceId != frameEndObject.prefabSourceId ||

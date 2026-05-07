@@ -118,6 +118,28 @@ struct WorldExportHistorySelection {
     std::string fallbackMessage;
 };
 
+enum class SupportedFileFormatLayer {
+    BunkerWorld,
+    RecordPlugin,
+    AssetArchive,
+    RuntimeSave,
+    MeshTextureMaterial,
+    Script,
+    AudioLip,
+    Localization,
+    GeneratedDialogue,
+    ConfigTextLog
+};
+
+struct SupportedFileFormat {
+    std::string extension;
+    SupportedFileFormatLayer layer = SupportedFileFormatLayer::ConfigTextLog;
+    std::string label;
+    std::string description;
+    bool canonicalAuthoringWorld = false;
+    bool bunkerNative = false;
+};
+
 struct WorldExportResult {
     bool ok = false;
     bool blockedByValidation = false;
@@ -141,6 +163,10 @@ const char* ExportValidationPolicyLabel(ExportValidationPolicy policy);
 const char* WorldExportDecisionLabel(const WorldExportResult& result);
 const char* WorldExportHistoryFilterLabel(WorldExportHistoryFilter filter);
 const char* WorldExportComparePresetLabel(WorldExportComparePreset preset);
+const char* SupportedFileFormatLayerLabel(SupportedFileFormatLayer layer);
+const std::vector<SupportedFileFormat>& SupportedFileFormats();
+const SupportedFileFormat* FindSupportedFileFormat(std::string_view extension);
+std::string BuildSupportedFileFormatRegistryReport();
 std::filesystem::path ValidationReportPathForWorld(const std::filesystem::path& worldPath);
 std::filesystem::path ExportAuditTrailPathForWorld(const std::filesystem::path& worldPath);
 std::filesystem::path ValidationSnapshotArchivePathForWorld(const std::filesystem::path& worldPath, std::string_view exportToken);

@@ -941,12 +941,11 @@ int main() {
         glfwSwapBuffers(window);
     }
 
-    const auto finalWorldSave = bunker::SaveWorldAtomically(world, worldPath);
     const auto finalProfileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
     staticEraser.Save(sessionProfile.selectedWorld);
     ReportRuntimeSaveOutcome(
-        "Final runtime save",
-        BuildRuntimeSaveOutcome(&finalWorldSave, &finalProfileSave, sessionProfile.selectedWorld, true));
+        "Final runtime profile save",
+        BuildRuntimeSaveOutcome(nullptr, &finalProfileSave, sessionProfile.selectedWorld, true));
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

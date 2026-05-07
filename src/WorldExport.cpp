@@ -1,6 +1,7 @@
 #include "../include/WorldExport.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <ctime>
 #include <fstream>
@@ -79,6 +80,20 @@ bool TryParseInt(const std::string& text, int& value) {
         value = 0;
         return false;
     }
+}
+
+std::string NormalizeFileExtension(std::string_view extension) {
+    std::string normalized(extension);
+    if (normalized.empty()) {
+        return {};
+    }
+    if (normalized.front() != '.') {
+        normalized.insert(normalized.begin(), '.');
+    }
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char value) {
+        return static_cast<char>(std::tolower(value));
+    });
+    return normalized;
 }
 
 bool ParseYesNo(const std::string& text) {
@@ -337,6 +352,90 @@ const char* WorldExportComparePresetLabel(WorldExportComparePreset preset) {
     default:
         return "Manual Selection";
     }
+}
+
+const char* SupportedFileFormatLayerLabel(SupportedFileFormatLayer layer) {
+    switch (layer) {
+    case SupportedFileFormatLayer::BunkerWorld:
+        return "Bunker Protocol world/record";
+    case SupportedFileFormatLayer::RecordPlugin:
+        return "Creation-style record/plugin";
+    case SupportedFileFormatLayer::AssetArchive:
+        return "Asset archive";
+    case SupportedFileFormatLayer::RuntimeSave:
+        return "Runtime save/sidecar";
+    case SupportedFileFormatLayer::MeshTextureMaterial:
+        return "Mesh/texture/material asset";
+    case SupportedFileFormatLayer::Script:
+        return "Script source/compiled";
+    case SupportedFileFormatLayer::AudioLip:
+        return "Audio/lip package";
+    case SupportedFileFormatLayer::Localization:
+        return "Localization strings";
+    case SupportedFileFormatLayer::GeneratedDialogue:
+        return "Generated/dialogue sidecar";
+    case SupportedFileFormatLayer::ConfigTextLog:
+    default:
+        return "Config/text/log/meta";
+    }
+}
+
+const std::vector<SupportedFileFormat>& SupportedFileFormats() {
+    static const std::vector<SupportedFileFormat> formats = {
+        {".bwld", SupportedFileFormatLayer::BunkerWorld, "Bunker Protocol world", "Project-native source-of-truth world/record file.", true, true},
+        {".esm", SupportedFileFormatLayer::RecordPlugin, "Creation master plugin", "Reference class only; not imported/exported as Fallout data.", false, false},
+        {".esp", SupportedFileFormatLayer::RecordPlugin, "Creation plugin", "Reference class only; not imported/exported as Fallout data.", false, false},
+        {".esl", SupportedFileFormatLayer::RecordPlugin, "Creation light plugin", "Reference class only; not imported/exported as Fallout data.", false, false},
+        {".ba2", SupportedFileFormatLayer::AssetArchive, "Creation asset archive", "Future asset-packaging reference class.", false, false},
+        {".fos", SupportedFileFormatLayer::RuntimeSave, "Fallout save", "Runtime save reference class; not an authoring world file.", false, false},
+        {".f4se", SupportedFileFormatLayer::RuntimeSave, "Script extender co-save", "Runtime sidecar reference class.", false, false},
+        {".nif", SupportedFileFormatLayer::MeshTextureMaterial, "NetImmerse/Gamebryo mesh", "Mesh asset reference class.", false, false},
+        {".dds", SupportedFileFormatLayer::MeshTextureMaterial, "DirectDraw texture", "Texture asset reference class.", false, false},
+        {".bgsm", SupportedFileFormatLayer::MeshTextureMaterial, "Material", "Material asset reference class.", false, false},
+        {".bgem", SupportedFileFormatLayer::MeshTextureMaterial, "Effect material", "Material asset reference class.", false, false},
+        {".psc", SupportedFileFormatLayer::Script, "Papyrus source", "Script source reference class.", false, false},
+        {".pex", SupportedFileFormatLayer::Script, "Papyrus compiled script", "Compiled script reference class.", false, false},
+        {".fuz", SupportedFileFormatLayer::AudioLip, "Voice package", "Audio/lip reference class.", false, false},
+        {".lip", SupportedFileFormatLayer::AudioLip, "Lip sync", "Lip animation reference class.", false, false},
+        {".xwm", SupportedFileFormatLayer::AudioLip, "XWMA audio", "Audio asset reference class.", false, false},
+        {".wav", SupportedFileFormatLayer::AudioLip, "Wave audio", "Audio asset reference class.", false, false},
+        {".strings", SupportedFileFormatLayer::Localization, "Localized strings", "Localization reference class.", false, false},
+        {".dlstrings", SupportedFileFormatLayer::Localization, "Localized dialogue strings", "Localization reference class.", false, false},
+        {".ilstrings", SupportedFileFormatLayer::Localization, "Localized interface strings", "Localization reference class.", false, false},
+        {".seq", SupportedFileFormatLayer::GeneratedDialogue, "Quest sequence sidecar", "Generated/dialogue sidecar reference class.", false, false},
+        {".ini", SupportedFileFormatLayer::ConfigTextLog, "Configuration", "Config reference class.", false, false},
+        {".json", SupportedFileFormatLayer::ConfigTextLog, "JSON metadata", "Tooling metadata/config reference class.", false, false},
+        {".xml", SupportedFileFormatLayer::ConfigTextLog, "XML metadata", "Tooling metadata/config reference class.", false, false},
+        {".txt", SupportedFileFormatLayer::ConfigTextLog, "Text report", "Human-readable report/tooling artifact.", false, false},
+        {".log", SupportedFileFormatLayer::ConfigTextLog, "Log", "Human-readable runtime/tooling log.", false, false},
+    };
+    return formats;
+}
+
+const SupportedFileFormat* FindSupportedFileFormat(std::string_view extension) {
+    const std::string normalized = NormalizeFileExtension(extension);
+    const auto& formats = SupportedFileFormats();
+    const auto it = std::find_if(formats.begin(), formats.end(), [&](const SupportedFileFormat& format) {
+        return format.extension == normalized;
+    });
+    return it == formats.end() ? nullptr : &*it;
+}
+
+std::string BuildSupportedFileFormatRegistryReport() {
+    std::ostringstream report;
+    report << "Supported file format registry:\n";
+    for (const auto& format : SupportedFileFormats()) {
+        report << "- " << format.extension << " :: " << SupportedFileFormatLayerLabel(format.layer)
+               << " :: " << format.label;
+        if (format.canonicalAuthoringWorld) {
+            report << " :: canonical authoring world";
+        }
+        if (format.bunkerNative) {
+            report << " :: bunker-native";
+        }
+        report << '\n';
+    }
+    return report.str();
 }
 
 namespace {
@@ -927,9 +1026,21 @@ std::string BuildWorldValidationReport(
     const auto brokenPrefabReferenceIndices = CollectBrokenPrefabReferenceObjectIndices(world, prefabs);
     const auto layerNames = world.CollectEditorLayerNames();
     int semanticObjectCount = 0;
+    int scalableLootObjectCount = 0;
+    std::size_t scalableLootEntryCount = 0;
+    std::size_t nonEmptyScalableLootEntryCount = 0;
     for (const auto& object : world.objects) {
         if (!object.scriptTag.empty()) {
             ++semanticObjectCount;
+        }
+        if (!object.lootEntries.empty()) {
+            ++scalableLootObjectCount;
+            scalableLootEntryCount += object.lootEntries.size();
+            for (const auto& entry : object.lootEntries) {
+                if (!entry.itemId.empty()) {
+                    ++nonEmptyScalableLootEntryCount;
+                }
+            }
         }
     }
 
@@ -949,12 +1060,25 @@ std::string BuildWorldValidationReport(
     report << "Shipping baseline updated: " << (result.baselineUpdated ? "yes" : "no") << '\n';
     report << "Objects: " << world.objects.size() << '\n';
     report << "Semantic objects: " << semanticObjectCount << '\n';
+    report << "Scalable loot objects: " << scalableLootObjectCount << '\n';
+    report << "Scalable loot entries: " << scalableLootEntryCount << '\n';
+    report << "Non-empty scalable loot entries: " << nonEmptyScalableLootEntryCount << '\n';
     report << "Layers: " << layerNames.size() << '\n';
     report << "Prefab-derived objects: " << CountPrefabDerivedObjects(world) << '\n';
     report << "Broken prefab references: " << brokenPrefabReferenceIndices.size() << '\n';
     report << "Prefab library entries: " << (prefabLibraryLoaded ? prefabs.size() : 0) << '\n';
     report << "Prefab library loaded: " << (prefabLibraryLoaded ? "yes" : "no") << '\n';
+    if (const auto* targetFormat = FindSupportedFileFormat(result.worldPath.extension().string())) {
+        report << "Target extension class: " << SupportedFileFormatLayerLabel(targetFormat->layer) << '\n';
+        report << "Target extension label: " << targetFormat->label << '\n';
+        report << "Target extension canonical authoring world: " << (targetFormat->canonicalAuthoringWorld ? "yes" : "no") << '\n';
+    } else {
+        report << "Target extension class: Unknown\n";
+        report << "Target extension label: Unknown extension, report-only artifact handling\n";
+        report << "Target extension canonical authoring world: no\n";
+    }
     report << "Message: " << result.message << '\n';
+    report << BuildSupportedFileFormatRegistryReport();
 
     if (!layerNames.empty()) {
         report << "Layer names:\n";

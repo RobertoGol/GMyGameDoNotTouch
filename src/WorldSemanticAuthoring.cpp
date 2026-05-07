@@ -33,6 +33,8 @@ void SeedGenericDescriptorShape(const GameplayDescriptorSpec& spec, MapObject& o
     object.discovered = true;
     object.manualLoot = false;
     object.manualLootIds = {};
+    object.lootMode = LootMode::ManualList;
+    object.lootEntries.clear();
     object.blocksMovement = false;
 
     if (spec.preferredCategory == ObjectCategory::Landmark ||

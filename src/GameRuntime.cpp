@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <string_view>
 
@@ -2880,6 +2881,67 @@ void AddInventoryItem(SessionProfile& profile, const std::string& itemId, int co
     profile.character.inventory.push_back({itemId, count, weight});
 }
 
+int RollLootCount(const LootEntry& entry) {
+    const int minCount = std::max(1, entry.minCount);
+    const int maxCount = std::max(minCount, entry.maxCount);
+    if (maxCount == minCount) {
+        return minCount;
+    }
+    return minCount + (std::rand() % (maxCount - minCount + 1));
+}
+
+void AddLootEntryToInventory(SessionProfile& profile, const LootEntry& entry, float weight) {
+    if (entry.itemId.empty()) {
+        return;
+    }
+    AddInventoryItem(profile, entry.itemId, RollLootCount(entry), weight);
+}
+
+void GrantContainerLoot(SessionProfile& profile, const MapObject& object, float inventoryWeight) {
+    if (object.lootEntries.empty()) {
+        for (const auto& lootId : object.manualLootIds) {
+            if (!lootId.empty()) {
+                AddInventoryItem(profile, lootId, 1, inventoryWeight);
+            }
+        }
+        return;
+    }
+
+    if (object.lootMode == LootMode::RandomTable) {
+        float totalWeight = 0.0f;
+        const LootEntry* lastValidEntry = nullptr;
+        for (const auto& entry : object.lootEntries) {
+            if (!entry.itemId.empty() && entry.weight > 0.0f) {
+                totalWeight += entry.weight;
+                lastValidEntry = &entry;
+            }
+        }
+        if (totalWeight <= 0.0f) {
+            return;
+        }
+        const float roll = (static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX)) * totalWeight;
+        float cursor = 0.0f;
+        for (const auto& entry : object.lootEntries) {
+            if (entry.itemId.empty() || entry.weight <= 0.0f) {
+                continue;
+            }
+            cursor += entry.weight;
+            if (roll <= cursor) {
+                AddLootEntryToInventory(profile, entry, inventoryWeight);
+                return;
+            }
+        }
+        if (lastValidEntry != nullptr) {
+            AddLootEntryToInventory(profile, *lastValidEntry, inventoryWeight);
+        }
+        return;
+    }
+
+    for (const auto& entry : object.lootEntries) {
+        AddLootEntryToInventory(profile, entry, inventoryWeight);
+    }
+}
+
 bool HasInventoryItem(const SessionProfile& profile, const std::string& itemId) {
     return std::any_of(profile.character.inventory.begin(), profile.character.inventory.end(), [&](const InventoryEntry& item) {
         return item.itemId == itemId && item.count > 0;
@@ -5418,9 +5480,7 @@ void HandleInteraction(const MapObject* nearest,
             return;
         }
         if (!profile.firstPlayableRoute.clearanceMaterialsRecovered) {
-            for (const auto& lootId : nearest->manualLootIds) {
-                AddInventoryItem(profile, lootId, 1, 0.4f);
-            }
+            GrantContainerLoot(profile, *nearest, 0.4f);
             profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
             gameState.lastEvent = "Bucket rack broken down into usable clearance parts. Bring BT-72 in for final install.";
             return;
@@ -5491,9 +5551,7 @@ void HandleInteraction(const MapObject* nearest,
             profile.partnerTank.energyReserve = std::max(0.0f, profile.partnerTank.energyReserve - tankEnergyCost);
             profile.partnerTank.damage.bucket = std::max(0.0f, profile.partnerTank.damage.bucket - 1.5f);
             if (mutableObject->health <= 0.0f) {
-                for (const auto& lootId : mutableObject->manualLootIds) {
-                    AddInventoryItem(profile, lootId, 1, 0.5f);
-                }
+                GrantContainerLoot(profile, *mutableObject, 0.5f);
                 staticEraser.Erase(mutableObject->registryId);
                 staticEraser.Save(profile.selectedWorld);
                 world.RemoveObject(mutableObject->registryId);
@@ -5702,12 +5760,7 @@ void HandleInteraction(const MapObject* nearest,
             break;
         }
         case InteractionType::Container:
-            for (const auto& lootId : nearest->manualLootIds) {
-                if (lootId.empty()) {
-                    continue;
-                }
-                AddInventoryItem(profile, lootId, 1, 0.4f);
-            }
+            GrantContainerLoot(profile, *nearest, 0.4f);
             staticEraser.Erase(nearest->registryId);
             staticEraser.Save(profile.selectedWorld);
             world.RemoveObject(nearest->registryId);
