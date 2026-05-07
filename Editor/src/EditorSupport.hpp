@@ -115,6 +115,19 @@ int ToIndex(bunker::InteractionType interaction);
 int ToIndex(bunker::ObjectCategory category);
 bunker::ObjectCategory CategoryFromIndex(int index);
 bool LoadOrCreateEditorWorld(bunker::World& world, std::string& statusText);
+bool CreateNewEditorWorld(bunker::World& world, std::string& statusText);
+bool IsNativeWorldFilePath(const std::filesystem::path& path);
+std::vector<std::filesystem::path> ListNativeWorldFiles();
+bool TryLoadEditorWorldAtPath(
+    const std::filesystem::path& requestedPath,
+    bunker::World& world,
+    std::string& statusText,
+    std::filesystem::path* resolvedPath = nullptr);
+bool TrySaveEditorWorldAtPath(
+    const bunker::World& world,
+    const std::filesystem::path& requestedPath,
+    std::string& statusText,
+    std::filesystem::path* resolvedPath = nullptr);
 bool SetActiveWorldInProfile(const std::string& worldFileName, std::string& statusText);
 void CopyStringToBuffer(const std::string& value, char* buffer, std::size_t size);
 void SyncEditorWorldBindings(const bunker::World& editorWorld,

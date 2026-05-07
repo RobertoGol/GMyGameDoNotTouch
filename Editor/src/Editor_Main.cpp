@@ -1304,7 +1304,7 @@ int main() {
     bool showRenderWindow = true;
     bool showLevelsWindow = true;
     bool showLocationsWindow = true;
-    bool showExportRuntime = true;
+    bool showExportRuntime = false;
     bool showImportAssistant = true;
     bool showEditorToolbar = true;
     bool showEditorStatus = true;
@@ -1424,6 +1424,8 @@ int main() {
     int viewportObjectUnderMouseIndex = -1;
     int contextObjectIndex = -1;
     bool showReferencePropertiesWindow = false;
+    bool showLoadWorldModal = false;
+    bool showSaveAsWorldModal = false;
     int referencePropertiesObjectIndex = -1;
     int referencePropertiesBufferObjectIndex = -1;
     int referenceLootSelectedSlot = 0;
@@ -1469,9 +1471,14 @@ int main() {
     float worldSpawnX = editorWorld.metadata.playerSpawnX;
     float worldSpawnY = editorWorld.metadata.playerSpawnY;
     char exportWorldFileInput[128] = "";
+    char loadWorldPathInput[260] = "";
+    char saveAsWorldPathInput[260] = "";
     char objectSearchInput[128] = "";
     char objectWindowFilterInput[128] = "";
     char prefabLabelInput[128] = "New Prefab";
+    std::filesystem::path currentEditorWorldPath{};
+    std::vector<std::filesystem::path> cachedWorldFiles{};
+    int selectedLoadWorldFileIndex = -1;
     CopyStringToBuffer(editorWorld.metadata.name, worldNameInput, IM_ARRAYSIZE(worldNameInput));
     CopyStringToBuffer(editorWorld.metadata.biome, worldBiomeInput, IM_ARRAYSIZE(worldBiomeInput));
     CopyStringToBuffer(editorWorld.metadata.objective, worldObjectiveInput, IM_ARRAYSIZE(worldObjectiveInput));
@@ -1487,6 +1494,9 @@ int main() {
         }
         bunker::NormalizeSessionProfile(initialProfile);
         CopyStringToBuffer(initialProfile.selectedWorld, exportWorldFileInput, IM_ARRAYSIZE(exportWorldFileInput));
+        currentEditorWorldPath = bunker::ResolveWorldPath(initialProfile.selectedWorld);
+        CopyStringToBuffer(currentEditorWorldPath.string(), loadWorldPathInput, IM_ARRAYSIZE(loadWorldPathInput));
+        CopyStringToBuffer(currentEditorWorldPath.string(), saveAsWorldPathInput, IM_ARRAYSIZE(saveAsWorldPathInput));
     }
     const char* interactionLabels[] = {"Static", "Container", "Resource", "Terminal", "Transition", "Vehicle Anchor", "Workshop", "Hostile"};
     const char* categoryLabels[] = {"Structure", "Resource Node", "Terminal", "Vehicle", "Landmark", "Container", "Hangar", "Hostile"};
@@ -1612,6 +1622,79 @@ int main() {
             setObjectFloorAssignment(object.registryId, findObjectFloorAssignment(object.registryId));
         }
     };
+    auto resetEditorSelectionAndBuffers = [&]() {
+        selectedObjectIndex = -1;
+        referencePropertiesObjectIndex = -1;
+        referencePropertiesBufferObjectIndex = -1;
+        referenceLootSelectedSlot = 0;
+        showReferencePropertiesWindow = false;
+        clearSemanticOverlay();
+        CopyStringToBuffer("", selectedDisplayNameEdit, IM_ARRAYSIZE(selectedDisplayNameEdit));
+        CopyStringToBuffer("", selectedRegistryEdit, IM_ARRAYSIZE(selectedRegistryEdit));
+        CopyStringToBuffer("", selectedScriptTagEdit, IM_ARRAYSIZE(selectedScriptTagEdit));
+        CopyStringToBuffer("", selectedLinkTargetEdit, IM_ARRAYSIZE(selectedLinkTargetEdit));
+        CopyStringToBuffer("", selectedLayerEdit, IM_ARRAYSIZE(selectedLayerEdit));
+        CopyStringToBuffer("", referenceDisplayNameEdit, IM_ARRAYSIZE(referenceDisplayNameEdit));
+        CopyStringToBuffer("", referenceScriptTagEdit, IM_ARRAYSIZE(referenceScriptTagEdit));
+        CopyStringToBuffer("", referenceLinkTargetEdit, IM_ARRAYSIZE(referenceLinkTargetEdit));
+        CopyStringToBuffer("", referenceLayerEdit, IM_ARRAYSIZE(referenceLayerEdit));
+        CopyStringToBuffer("", referenceLootEntryEdit, IM_ARRAYSIZE(referenceLootEntryEdit));
+        for (auto& legacyLootEdit : referenceLootEdits) {
+            CopyStringToBuffer("", legacyLootEdit.data(), legacyLootEdit.size());
+        }
+    };
+    auto syncEditorWorldUiState = [&]() {
+        SyncEditorWorldBindings(
+            editorWorld,
+            selectedObjectIndex,
+            selectedRegistryEdit, IM_ARRAYSIZE(selectedRegistryEdit),
+            selectedScriptTagEdit, IM_ARRAYSIZE(selectedScriptTagEdit),
+            selectedLinkTargetEdit, IM_ARRAYSIZE(selectedLinkTargetEdit),
+            worldNameInput, IM_ARRAYSIZE(worldNameInput),
+            worldBiomeInput, IM_ARRAYSIZE(worldBiomeInput),
+            worldObjectiveInput, IM_ARRAYSIZE(worldObjectiveInput),
+            worldSpawnX, worldSpawnY);
+        resetEditorSelectionAndBuffers();
+        syncEditorLayerStateTable();
+        syncObjectFloorAssignments();
+        if (currentEditorWorldPath.empty()) {
+            CopyStringToBuffer("", exportWorldFileInput, IM_ARRAYSIZE(exportWorldFileInput));
+            CopyStringToBuffer(bunker::DefaultWorldPath().string(), loadWorldPathInput, IM_ARRAYSIZE(loadWorldPathInput));
+            CopyStringToBuffer(bunker::DefaultWorldPath().string(), saveAsWorldPathInput, IM_ARRAYSIZE(saveAsWorldPathInput));
+        } else {
+            CopyStringToBuffer(
+                bunker::NormalizeWorldReference(currentEditorWorldPath.string()),
+                exportWorldFileInput,
+                IM_ARRAYSIZE(exportWorldFileInput));
+            CopyStringToBuffer(currentEditorWorldPath.string(), loadWorldPathInput, IM_ARRAYSIZE(loadWorldPathInput));
+            CopyStringToBuffer(currentEditorWorldPath.string(), saveAsWorldPathInput, IM_ARRAYSIZE(saveAsWorldPathInput));
+        }
+    };
+    auto refreshCachedWorldFiles = [&]() {
+        cachedWorldFiles = editor_support::ListNativeWorldFiles();
+        if (cachedWorldFiles.empty()) {
+            selectedLoadWorldFileIndex = -1;
+            return;
+        }
+        selectedLoadWorldFileIndex = std::clamp(selectedLoadWorldFileIndex, 0, static_cast<int>(cachedWorldFiles.size()) - 1);
+    };
+    auto openLoadWorldModal = [&]() {
+        refreshCachedWorldFiles();
+        if (currentEditorWorldPath.empty()) {
+            CopyStringToBuffer(bunker::DefaultWorldPath().string(), loadWorldPathInput, IM_ARRAYSIZE(loadWorldPathInput));
+        } else {
+            CopyStringToBuffer(currentEditorWorldPath.string(), loadWorldPathInput, IM_ARRAYSIZE(loadWorldPathInput));
+        }
+        showLoadWorldModal = true;
+    };
+    auto openSaveAsWorldModal = [&]() {
+        if (currentEditorWorldPath.empty()) {
+            CopyStringToBuffer(bunker::DefaultWorldPath().string(), saveAsWorldPathInput, IM_ARRAYSIZE(saveAsWorldPathInput));
+        } else {
+            CopyStringToBuffer(currentEditorWorldPath.string(), saveAsWorldPathInput, IM_ARRAYSIZE(saveAsWorldPathInput));
+        }
+        showSaveAsWorldModal = true;
+    };
     auto isObjectVisibleForCurrentEditorFloor = [&](const bunker::MapObject& object) {
         if (!filterCurrentEditorLevel) {
             return true;
@@ -1714,6 +1797,27 @@ int main() {
             return nullptr;
         }
         return &externalDataScan.files[static_cast<std::size_t>(selectedExternalDataFileIndex)];
+    };
+    auto stageExternalReferenceNote = [&](const bunker::ExternalDataFileRecord& file) {
+        std::filesystem::create_directories(bunker::ExportsDirectory());
+        std::ofstream noteFile(bunker::ExportsDirectory() / "external_reference_notes.txt", std::ios::app);
+        if (!noteFile.is_open()) {
+            statusText = "Failed to stage external reference note for " + file.fileName + ".";
+            return false;
+        }
+        noteFile << file.fileName
+                 << " | " << file.extension
+                 << " | " << file.layerLabel
+                 << " | " << file.formatLabel
+                 << " | mode=" << bunker::ExternalDataImportModeLabel(file.importMode)
+                 << " | native=" << (file.bunkerNative ? "yes" : "no")
+                 << " | canonical=" << (file.canonicalAuthoringWorld ? "yes" : "no")
+                 << " | package=" << (file.packageFormat ? "yes" : "no")
+                 << " | dangerous=" << (file.executableDanger ? "yes" : "no")
+                 << " | path=" << file.path.string()
+                 << '\n';
+        statusText = "Staged external reference note for " + file.fileName + ".";
+        return true;
     };
     auto buildImportedPrefabDraft = [&](std::string_view sourceLabel, int targetIndex, int completionModeIndex) {
         SavedPrefab prefab;
@@ -2826,7 +2930,6 @@ int main() {
             showRenderWindow = true;
             showLevelsWindow = true;
             showLocationsWindow = true;
-            showExportRuntime = true;
             showImportAssistant = true;
             showEditorToolbar = true;
             showEditorStatus = true;
@@ -2873,14 +2976,30 @@ int main() {
 
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu("File")) {
-                disabledMenuItem("New World", futureRoadmapTooltip);
-                disabledMenuItem("Load World...", futureRoadmapTooltip);
-                disabledMenuItem("Save", "Use the Export / Runtime window for the current runtime export path.");
-                disabledMenuItem("Save As...", "Save format migration and file picker are future roadmap items.");
-                ImGui::Separator();
-                if (ImGui::MenuItem("Open Export / Runtime Window")) {
-                    showExportRuntime = true;
-                    statusText = "Opened Export / Runtime window.";
+                if (ImGui::MenuItem("New World")) {
+                    editor_support::CreateNewEditorWorld(editorWorld, statusText);
+                    currentEditorWorldPath.clear();
+                    syncEditorWorldUiState();
+                    undoStack.Clear();
+                }
+                if (ImGui::MenuItem("Load World...")) {
+                    openLoadWorldModal();
+                }
+                if (ImGui::MenuItem("Save")) {
+                    if (currentEditorWorldPath.empty()) {
+                        openSaveAsWorldModal();
+                        statusText = "Save requires a target .bwld path.";
+                    } else {
+                        std::filesystem::path savedPath;
+                        if (editor_support::TrySaveEditorWorldAtPath(editorWorld, currentEditorWorldPath, statusText, &savedPath)) {
+                            currentEditorWorldPath = savedPath;
+                            undoStack.MarkSaved();
+                            refreshCachedWorldFiles();
+                        }
+                    }
+                }
+                if (ImGui::MenuItem("Save As...")) {
+                    openSaveAsWorldModal();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Exit")) {
@@ -2973,10 +3092,6 @@ int main() {
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Gameplay")) {
-                if (ImGui::MenuItem("Open Runtime Validation", nullptr, false, true)) {
-                    showExportRuntime = true;
-                    statusText = "Opened Runtime / Validation tools.";
-                }
                 disabledMenuItem("NavMesh Tools", futureRoadmapTooltip);
                 disabledMenuItem("Weather / Time Controls", futureRoadmapTooltip);
                 ImGui::EndMenu();
@@ -3002,7 +3117,6 @@ int main() {
                 ImGui::MenuItem("Render Window / Viewport", nullptr, &showRenderWindow);
                 ImGui::MenuItem("Levels / Floors / Layers", nullptr, &showLevelsWindow);
                 ImGui::MenuItem("Locations / Cells", nullptr, &showLocationsWindow);
-                ImGui::MenuItem("Export / Runtime", nullptr, &showExportRuntime);
                 ImGui::MenuItem("Import Assistant", nullptr, &showImportAssistant);
                 if (ImGui::MenuItem("Reference Properties", nullptr, showReferencePropertiesWindow, hasSelectedReference || showReferencePropertiesWindow)) {
                     if (showReferencePropertiesWindow) {
@@ -3039,6 +3153,94 @@ int main() {
             ImGui::EndMainMenuBar();
         }
 
+        if (showLoadWorldModal) {
+            ImGui::OpenPopup("Load World...");
+            showLoadWorldModal = false;
+        }
+        if (ImGui::BeginPopupModal("Load World...", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextWrapped("Load a native authored world (.bwld). Current workspace stays untouched until load succeeds.");
+            ImGui::InputText("Path###EditorLoadWorldPath", loadWorldPathInput, IM_ARRAYSIZE(loadWorldPathInput));
+            if (ImGui::Button("Refresh World List", ImVec2(160.0f, 0.0f))) {
+                refreshCachedWorldFiles();
+                statusText = cachedWorldFiles.empty()
+                    ? "No .bwld worlds found in the world directory."
+                    : "Refreshed authored world list.";
+            }
+            ImGui::Separator();
+            ImGui::BeginChild("EditorLoadWorldList", ImVec2(560.0f, 180.0f), true);
+            if (cachedWorldFiles.empty()) {
+                ImGui::TextDisabled("No .bwld files found in %s", bunker::WorldDirectory().string().c_str());
+            } else {
+                for (int fileIndex = 0; fileIndex < static_cast<int>(cachedWorldFiles.size()); ++fileIndex) {
+                    const auto& worldPath = cachedWorldFiles[static_cast<std::size_t>(fileIndex)];
+                    const bool selected = fileIndex == selectedLoadWorldFileIndex;
+                    if (ImGui::Selectable(worldPath.filename().string().c_str(), selected)) {
+                        selectedLoadWorldFileIndex = fileIndex;
+                        CopyStringToBuffer(worldPath.string(), loadWorldPathInput, IM_ARRAYSIZE(loadWorldPathInput));
+                    }
+                }
+            }
+            ImGui::EndChild();
+            if (ImGui::Button("Load", ImVec2(120.0f, 0.0f))) {
+                bunker::World loadedWorld;
+                std::filesystem::path loadedPath;
+                if (editor_support::TryLoadEditorWorldAtPath(loadWorldPathInput, loadedWorld, statusText, &loadedPath)) {
+                    editorWorld = std::move(loadedWorld);
+                    currentEditorWorldPath = loadedPath;
+                    syncEditorWorldUiState();
+                    undoStack.Clear();
+                    undoStack.MarkSaved();
+                    refreshCachedWorldFiles();
+                    statusText = "Loaded world: " + currentEditorWorldPath.string();
+                    std::string profileStatus;
+                    if (!SetActiveWorldInProfile(bunker::NormalizeWorldReference(currentEditorWorldPath.string()), profileStatus)) {
+                        statusText += " " + profileStatus;
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+
+        if (showSaveAsWorldModal) {
+            ImGui::OpenPopup("Save World As...");
+            showSaveAsWorldModal = false;
+        }
+        if (ImGui::BeginPopupModal("Save World As...", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextWrapped("Save the current authored workspace as a .bwld world file.");
+            ImGui::InputText("Path###EditorSaveAsWorldPath", saveAsWorldPathInput, IM_ARRAYSIZE(saveAsWorldPathInput));
+            ImGui::TextDisabled("World directory: %s", bunker::WorldDirectory().string().c_str());
+            if (ImGui::Button("Save", ImVec2(120.0f, 0.0f))) {
+                std::filesystem::path savedPath;
+                if (editor_support::TrySaveEditorWorldAtPath(editorWorld, saveAsWorldPathInput, statusText, &savedPath)) {
+                    currentEditorWorldPath = savedPath;
+                    CopyStringToBuffer(currentEditorWorldPath.string(), loadWorldPathInput, IM_ARRAYSIZE(loadWorldPathInput));
+                    CopyStringToBuffer(currentEditorWorldPath.string(), saveAsWorldPathInput, IM_ARRAYSIZE(saveAsWorldPathInput));
+                    CopyStringToBuffer(
+                        bunker::NormalizeWorldReference(currentEditorWorldPath.string()),
+                        exportWorldFileInput,
+                        IM_ARRAYSIZE(exportWorldFileInput));
+                    undoStack.MarkSaved();
+                    refreshCachedWorldFiles();
+                    statusText = "Saved world as: " + currentEditorWorldPath.string();
+                    std::string profileStatus;
+                    if (!SetActiveWorldInProfile(bunker::NormalizeWorldReference(currentEditorWorldPath.string()), profileStatus)) {
+                        statusText += " " + profileStatus;
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
         const ImGuiID dockspaceId = ImGui::DockSpaceOverViewport(
             ImGui::GetID("BunkerEditor_MainDockSpace"),
@@ -3065,7 +3267,6 @@ int main() {
             ImGui::DockBuilderDockWindow("World Authoring", dockRight);
             ImGui::DockBuilderDockWindow("Levels / Floors / Layers###LevelsWindow_Window", dockRight);
             ImGui::DockBuilderDockWindow("Reference Properties###RenderWindow_ReferenceProperties", dockRight);
-            ImGui::DockBuilderDockWindow("Export / Runtime", dockRight);
             ImGui::DockBuilderDockWindow("Editor Status###EditorShell_Status", dockBottom);
             ImGui::DockBuilderDockWindow("Cell View", dockBottom);
             ImGui::DockBuilderDockWindow("Locations / Cells", dockBottom);
@@ -3160,8 +3361,6 @@ int main() {
             ImGui::SameLine();
             if (ImGui::Button("Levels###EditorToolbar_ShowLevels", ImVec2(76.0f, 0.0f))) { showLevelsWindow = true; }
             ImGui::SameLine();
-            if (ImGui::Button("Runtime###EditorToolbar_ShowRuntime", ImVec2(82.0f, 0.0f))) { showExportRuntime = true; }
-            ImGui::SameLine();
             if (ImGui::Button("Workspace###EditorToolbar_ResetLayout", ImVec2(98.0f, 0.0f))) {
                 resetWorkspaceLayout = true;
                 showAllEditorWindows();
@@ -3190,6 +3389,10 @@ int main() {
             ImGui::SameLine(320.0f);
             ImGui::BeginGroup();
             ImGui::TextDisabled("View");
+            ImGui::TextDisabled(
+                "Authoring world: %s",
+                currentEditorWorldPath.empty() ? "(unsaved new world)" : currentEditorWorldPath.string().c_str());
+            ImGui::TextDisabled("Unsaved edits: %s", undoStack.IsDirty() ? "yes" : "no");
             ImGui::TextDisabled(
                 "Floor filter: %s",
                 filterCurrentEditorLevel ? editorFloorStack[static_cast<std::size_t>(clampEditorFloorIndex(selectedPlanningLevelIndex))].c_str() : "all levels");
@@ -7077,8 +7280,14 @@ int main() {
                     externalDataFile->bunkerNative ? "yes" : "no",
                     externalDataFile->canonicalAuthoringWorld ? "yes" : "no");
                 ImGui::TextDisabled("Import mode: %s", bunker::ExternalDataImportModeLabel(externalDataFile->importMode));
+                ImGui::TextDisabled("Package / Dangerous: %s / %s",
+                    externalDataFile->packageFormat ? "yes" : "no",
+                    externalDataFile->executableDanger ? "yes" : "no");
                 if (externalDataFile->referenceOnly) {
                     ImGui::TextWrapped("Reference-only file: this build classifies it safely and can attach a manifest/reference note, but does not parse it as a world.");
+                }
+                if (externalDataFile->executableDanger) {
+                    ImGui::TextWrapped("Dangerous executable/native plugin reference: recognized for audit only and never launched from the editor.");
                 }
                 const bool canUseAsSource =
                     externalDataFile->importMode == bunker::ExternalDataImportMode::MetadataTextSource ||
@@ -7097,31 +7306,27 @@ int main() {
                 }
                 ImGui::EndDisabled();
                 ImGui::BeginDisabled(!externalDataFile->referenceOnly && externalDataFile->recognized);
-                if (ImGui::Button("Attach As External Reference", ImVec2(240.0f, 0.0f))) {
-                    statusText = "Attached external reference note for " + externalDataFile->fileName + ".";
+                if (ImGui::Button("Stage External Reference Note", ImVec2(240.0f, 0.0f))) {
+                    stageExternalReferenceNote(*externalDataFile);
                 }
                 ImGui::EndDisabled();
                 ImGui::SameLine();
                 ImGui::BeginDisabled(externalDataFile->extension != ".bwld");
                 if (ImGui::Button("Load Native World", ImVec2(180.0f, 0.0f))) {
                     bunker::World loadedWorld;
-                    if (loadedWorld.Load(externalDataFile->path.string())) {
+                    std::filesystem::path loadedPath;
+                    if (editor_support::TryLoadEditorWorldAtPath(externalDataFile->path, loadedWorld, statusText, &loadedPath)) {
                         editorWorld = std::move(loadedWorld);
-                        selectedObjectIndex = -1;
-                        SyncEditorWorldBindings(
-                            editorWorld,
-                            selectedObjectIndex,
-                            selectedRegistryEdit, IM_ARRAYSIZE(selectedRegistryEdit),
-                            selectedScriptTagEdit, IM_ARRAYSIZE(selectedScriptTagEdit),
-                            selectedLinkTargetEdit, IM_ARRAYSIZE(selectedLinkTargetEdit),
-                            worldNameInput, IM_ARRAYSIZE(worldNameInput),
-                            worldBiomeInput, IM_ARRAYSIZE(worldBiomeInput),
-                            worldObjectiveInput, IM_ARRAYSIZE(worldObjectiveInput),
-                            worldSpawnX, worldSpawnY);
-                        syncEditorLayerStateTable();
+                        currentEditorWorldPath = loadedPath;
+                        syncEditorWorldUiState();
+                        undoStack.Clear();
+                        undoStack.MarkSaved();
+                        refreshCachedWorldFiles();
                         statusText = "Loaded native world from Export_data: " + externalDataFile->fileName + ".";
-                    } else {
-                        statusText = "Failed to load native world from Export_data.";
+                        std::string profileStatus;
+                        if (!SetActiveWorldInProfile(bunker::NormalizeWorldReference(currentEditorWorldPath.string()), profileStatus)) {
+                            statusText += " " + profileStatus;
+                        }
                     }
                 }
                 ImGui::EndDisabled();

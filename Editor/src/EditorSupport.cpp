@@ -189,6 +189,105 @@ bool LoadOrCreateEditorWorld(bunker::World& world, std::string& statusText) {
     return false;
 }
 
+bool CreateNewEditorWorld(bunker::World& world, std::string& statusText) {
+    world = bunker::World{};
+    world.GeneratePrototypeZone();
+    statusText = "Created new unsaved world.";
+    return true;
+}
+
+bool IsNativeWorldFilePath(const std::filesystem::path& path) {
+    return !path.empty() && path.extension() == ".bwld";
+}
+
+std::vector<std::filesystem::path> ListNativeWorldFiles() {
+    std::vector<std::filesystem::path> worldFiles;
+    std::error_code ec;
+    std::filesystem::create_directories(bunker::WorldDirectory(), ec);
+    for (const auto& entry : std::filesystem::directory_iterator(bunker::WorldDirectory(), ec)) {
+        if (ec || !entry.is_regular_file()) {
+            continue;
+        }
+        if (!IsNativeWorldFilePath(entry.path())) {
+            continue;
+        }
+        worldFiles.push_back(entry.path().lexically_normal());
+    }
+    std::sort(worldFiles.begin(), worldFiles.end());
+    return worldFiles;
+}
+
+bool TryLoadEditorWorldAtPath(
+    const std::filesystem::path& requestedPath,
+    bunker::World& world,
+    std::string& statusText,
+    std::filesystem::path* resolvedPath) {
+    if (requestedPath.empty()) {
+        statusText = "Load World requires a .bwld path.";
+        return false;
+    }
+
+    std::filesystem::path candidate = requestedPath;
+    if (!candidate.has_extension()) {
+        candidate += ".bwld";
+    }
+    if (!IsNativeWorldFilePath(candidate)) {
+        statusText = "Load World only accepts .bwld authored worlds.";
+        return false;
+    }
+
+    const std::filesystem::path normalizedPath = candidate.is_absolute()
+        ? candidate.lexically_normal()
+        : bunker::ResolveWorldPath(candidate.generic_string()).lexically_normal();
+    bunker::World loadedWorld;
+    if (!loadedWorld.Load(normalizedPath.string())) {
+        statusText = "Failed to load world: " + normalizedPath.string();
+        return false;
+    }
+
+    world = std::move(loadedWorld);
+    if (resolvedPath != nullptr) {
+        *resolvedPath = normalizedPath;
+    }
+    statusText = "Loaded world: " + normalizedPath.string();
+    return true;
+}
+
+bool TrySaveEditorWorldAtPath(
+    const bunker::World& world,
+    const std::filesystem::path& requestedPath,
+    std::string& statusText,
+    std::filesystem::path* resolvedPath) {
+    if (requestedPath.empty()) {
+        statusText = "Save World requires a .bwld path.";
+        return false;
+    }
+
+    std::filesystem::path candidate = requestedPath;
+    if (!candidate.has_extension()) {
+        candidate += ".bwld";
+    }
+    if (!IsNativeWorldFilePath(candidate)) {
+        statusText = "Save World only writes .bwld authored worlds.";
+        return false;
+    }
+
+    const std::filesystem::path normalizedPath = candidate.is_absolute()
+        ? candidate.lexically_normal()
+        : bunker::ResolveWorldPath(candidate.generic_string()).lexically_normal();
+    const auto saveResult = bunker::SaveWorldAtomically(world, normalizedPath);
+    if (!saveResult.ok) {
+        statusText = "Failed to save world: " + saveResult.message;
+        return false;
+    }
+
+    if (resolvedPath != nullptr) {
+        *resolvedPath = normalizedPath;
+    }
+    statusText = "Saved world: " + normalizedPath.string();
+    return true;
+}
+
 bool SetActiveWorldInProfile(const std::string& worldFileName, std::string& statusText) {
     bunker::SessionProfile sessionProfile;
     const auto profilePath = bunker::DefaultSessionProfilePath();

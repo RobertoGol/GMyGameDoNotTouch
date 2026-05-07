@@ -358,23 +358,38 @@ const char* SupportedFileFormatLayerLabel(SupportedFileFormatLayer layer) {
     switch (layer) {
     case SupportedFileFormatLayer::BunkerWorld:
         return "Bunker Protocol world/record";
+    case SupportedFileFormatLayer::BunkerPackage:
+        return "Bunker package/archive";
     case SupportedFileFormatLayer::RecordPlugin:
         return "Creation-style record/plugin";
     case SupportedFileFormatLayer::AssetArchive:
         return "Asset archive";
     case SupportedFileFormatLayer::RuntimeSave:
         return "Runtime save/sidecar";
-    case SupportedFileFormatLayer::MeshTextureMaterial:
-        return "Mesh/texture/material asset";
+    case SupportedFileFormatLayer::MeshModelGeometry:
+        return "Mesh/model/geometry";
+    case SupportedFileFormatLayer::AnimationPhysics:
+        return "Animation/physics/behavior";
+    case SupportedFileFormatLayer::Texture:
+        return "Texture/source image";
+    case SupportedFileFormatLayer::MaterialShader:
+        return "Material/shader";
     case SupportedFileFormatLayer::Script:
         return "Script source/compiled";
-    case SupportedFileFormatLayer::AudioLip:
-        return "Audio/lip package";
+    case SupportedFileFormatLayer::AudioVoiceLip:
+        return "Audio/voice/lip";
     case SupportedFileFormatLayer::Localization:
         return "Localization strings";
-    case SupportedFileFormatLayer::GeneratedDialogue:
-        return "Generated/dialogue sidecar";
+    case SupportedFileFormatLayer::InterfaceUI:
+        return "Interface/UI";
+    case SupportedFileFormatLayer::GeneratedWorldData:
+        return "Generated world/dialogue support";
     case SupportedFileFormatLayer::ConfigTextLog:
+        return "Config/text/log/meta";
+    case SupportedFileFormatLayer::ModPackage:
+        return "Mod/package/tooling";
+    case SupportedFileFormatLayer::ExecutableNativePlugin:
+        return "Executable/native plugin";
     default:
         return "Config/text/log/meta";
     }
@@ -382,32 +397,82 @@ const char* SupportedFileFormatLayerLabel(SupportedFileFormatLayer layer) {
 
 const std::vector<SupportedFileFormat>& SupportedFileFormats() {
     static const std::vector<SupportedFileFormat> formats = {
-        {".bwld", SupportedFileFormatLayer::BunkerWorld, "Bunker Protocol world", "Project-native source-of-truth world/record file.", true, true},
-        {".esm", SupportedFileFormatLayer::RecordPlugin, "Creation master plugin", "Reference class only; not imported/exported as Fallout data.", false, false},
-        {".esp", SupportedFileFormatLayer::RecordPlugin, "Creation plugin", "Reference class only; not imported/exported as Fallout data.", false, false},
-        {".esl", SupportedFileFormatLayer::RecordPlugin, "Creation light plugin", "Reference class only; not imported/exported as Fallout data.", false, false},
-        {".ba2", SupportedFileFormatLayer::AssetArchive, "Creation asset archive", "Future asset-packaging reference class.", false, false},
-        {".fos", SupportedFileFormatLayer::RuntimeSave, "Fallout save", "Runtime save reference class; not an authoring world file.", false, false},
-        {".f4se", SupportedFileFormatLayer::RuntimeSave, "Script extender co-save", "Runtime sidecar reference class.", false, false},
-        {".nif", SupportedFileFormatLayer::MeshTextureMaterial, "NetImmerse/Gamebryo mesh", "Mesh asset reference class.", false, false},
-        {".dds", SupportedFileFormatLayer::MeshTextureMaterial, "DirectDraw texture", "Texture asset reference class.", false, false},
-        {".bgsm", SupportedFileFormatLayer::MeshTextureMaterial, "Material", "Material asset reference class.", false, false},
-        {".bgem", SupportedFileFormatLayer::MeshTextureMaterial, "Effect material", "Material asset reference class.", false, false},
-        {".psc", SupportedFileFormatLayer::Script, "Papyrus source", "Script source reference class.", false, false},
-        {".pex", SupportedFileFormatLayer::Script, "Papyrus compiled script", "Compiled script reference class.", false, false},
-        {".fuz", SupportedFileFormatLayer::AudioLip, "Voice package", "Audio/lip reference class.", false, false},
-        {".lip", SupportedFileFormatLayer::AudioLip, "Lip sync", "Lip animation reference class.", false, false},
-        {".xwm", SupportedFileFormatLayer::AudioLip, "XWMA audio", "Audio asset reference class.", false, false},
-        {".wav", SupportedFileFormatLayer::AudioLip, "Wave audio", "Audio asset reference class.", false, false},
-        {".strings", SupportedFileFormatLayer::Localization, "Localized strings", "Localization reference class.", false, false},
-        {".dlstrings", SupportedFileFormatLayer::Localization, "Localized dialogue strings", "Localization reference class.", false, false},
-        {".ilstrings", SupportedFileFormatLayer::Localization, "Localized interface strings", "Localization reference class.", false, false},
-        {".seq", SupportedFileFormatLayer::GeneratedDialogue, "Quest sequence sidecar", "Generated/dialogue sidecar reference class.", false, false},
-        {".ini", SupportedFileFormatLayer::ConfigTextLog, "Configuration", "Config reference class.", false, false},
-        {".json", SupportedFileFormatLayer::ConfigTextLog, "JSON metadata", "Tooling metadata/config reference class.", false, false},
-        {".xml", SupportedFileFormatLayer::ConfigTextLog, "XML metadata", "Tooling metadata/config reference class.", false, false},
-        {".txt", SupportedFileFormatLayer::ConfigTextLog, "Text report", "Human-readable report/tooling artifact.", false, false},
-        {".log", SupportedFileFormatLayer::ConfigTextLog, "Log", "Human-readable runtime/tooling log.", false, false},
+        {".bwld", SupportedFileFormatLayer::BunkerWorld, "Bunker Protocol world", "Project-native source-of-truth world/record file.", true, true, false, false, false, true, true},
+        {".dba", SupportedFileFormatLayer::BunkerPackage, "Data Bunker Archive", "Bunker-native DLC/mod package reference.", false, true, true, true, false, false, true},
+        {".bmanifest", SupportedFileFormatLayer::BunkerPackage, "Bunker manifest", "Bunker package metadata reference.", false, true, true, true, false, true, true},
+        {".bcluster", SupportedFileFormatLayer::BunkerPackage, "Bunker cluster manifest", "Planned Bunker world-cluster metadata reference.", false, true, false, true, false, true, true},
+        {".esm", SupportedFileFormatLayer::RecordPlugin, "Creation master plugin", "Reference class only; not imported/exported as Fallout data.", false, false, false, true, false, false, true},
+        {".esp", SupportedFileFormatLayer::RecordPlugin, "Creation plugin", "Reference class only; not imported/exported as Fallout data.", false, false, false, true, false, false, true},
+        {".esl", SupportedFileFormatLayer::RecordPlugin, "Creation light plugin", "Reference class only; not imported/exported as Fallout data.", false, false, false, true, false, false, true},
+        {".bsa", SupportedFileFormatLayer::AssetArchive, "Bethesda asset archive", "External asset archive reference only.", false, false, false, true, false, false, true},
+        {".ba2", SupportedFileFormatLayer::AssetArchive, "Creation asset archive", "External asset archive reference only.", false, false, false, true, false, false, true},
+        {".fos", SupportedFileFormatLayer::RuntimeSave, "Fallout save", "Runtime save reference class; not an authoring world file.", false, false, false, true, false, false, false},
+        {".f4se", SupportedFileFormatLayer::RuntimeSave, "Script extender co-save", "Runtime sidecar reference class.", false, false, false, true, false, false, false},
+        {".nvse", SupportedFileFormatLayer::RuntimeSave, "NVSE sidecar", "Runtime sidecar reference class.", false, false, false, true, false, false, false},
+        {".obse", SupportedFileFormatLayer::RuntimeSave, "OBSE sidecar", "Runtime sidecar reference class.", false, false, false, true, false, false, false},
+        {".skse", SupportedFileFormatLayer::RuntimeSave, "SKSE sidecar", "Runtime sidecar reference class.", false, false, false, true, false, false, false},
+        {".nif", SupportedFileFormatLayer::MeshModelGeometry, "NetImmerse/Gamebryo mesh", "Mesh/model asset reference class.", false, false, false, true, false, false, true},
+        {".tri", SupportedFileFormatLayer::MeshModelGeometry, "Morph/face geometry", "Face or morph geometry reference class.", false, false, false, true, false, false, true},
+        {".egm", SupportedFileFormatLayer::MeshModelGeometry, "FaceGen morph", "FaceGen morph reference class.", false, false, false, true, false, false, true},
+        {".egt", SupportedFileFormatLayer::MeshModelGeometry, "FaceGen tint/morph", "FaceGen tint/morph reference class.", false, false, false, true, false, false, true},
+        {".ctl", SupportedFileFormatLayer::MeshModelGeometry, "FaceGen control", "FaceGen control reference class.", false, false, false, true, false, false, true},
+        {".rdt", SupportedFileFormatLayer::MeshModelGeometry, "Legacy resource data", "Legacy geometry/resource reference class.", false, false, false, true, false, false, true},
+        {".spt", SupportedFileFormatLayer::MeshModelGeometry, "SpeedTree asset", "Vegetation/SpeedTree reference class.", false, false, false, true, false, false, true},
+        {".navmesh", SupportedFileFormatLayer::GeneratedWorldData, "Navmesh reference", "Loose navmesh-style reference marker.", false, false, false, true, false, false, true},
+        {".kf", SupportedFileFormatLayer::AnimationPhysics, "Animation clip", "Legacy animation reference class.", false, false, false, true, false, false, true},
+        {".kfm", SupportedFileFormatLayer::AnimationPhysics, "Animation controller", "Animation controller reference class.", false, false, false, true, false, false, true},
+        {".hkx", SupportedFileFormatLayer::AnimationPhysics, "Havok behavior/animation", "Animation/behavior/physics reference class.", false, false, false, true, false, false, true},
+        {".dds", SupportedFileFormatLayer::Texture, "DirectDraw texture", "Runtime texture asset reference class.", false, false, false, true, false, false, true},
+        {".tga", SupportedFileFormatLayer::Texture, "Targa source texture", "Source/legacy texture reference class.", false, false, false, true, false, true, true},
+        {".png", SupportedFileFormatLayer::Texture, "PNG source texture", "Tooling/source texture reference class.", false, false, false, true, false, true, false},
+        {".jpg", SupportedFileFormatLayer::Texture, "JPEG source texture", "Tooling/source texture reference class.", false, false, false, true, false, true, false},
+        {".jpeg", SupportedFileFormatLayer::Texture, "JPEG source texture", "Tooling/source texture reference class.", false, false, false, true, false, true, false},
+        {".bmp", SupportedFileFormatLayer::Texture, "Bitmap source texture", "Tooling/source texture reference class.", false, false, false, true, false, true, false},
+        {".bgsm", SupportedFileFormatLayer::MaterialShader, "Material", "Material asset reference class.", false, false, false, true, false, false, true},
+        {".bgem", SupportedFileFormatLayer::MaterialShader, "Effect material", "Effect material reference class.", false, false, false, true, false, false, true},
+        {".mat", SupportedFileFormatLayer::MaterialShader, "Generic material", "Material reference class.", false, false, false, true, false, true, true},
+        {".fx", SupportedFileFormatLayer::MaterialShader, "Shader/effect", "Shader/effect reference class.", false, false, false, true, false, true, true},
+        {".cub", SupportedFileFormatLayer::MaterialShader, "Cubemap", "Environment cubemap reference class.", false, false, false, true, false, false, true},
+        {".psc", SupportedFileFormatLayer::Script, "Papyrus source", "Script source reference class.", false, false, false, true, false, true, true},
+        {".pex", SupportedFileFormatLayer::Script, "Papyrus compiled script", "Compiled script reference class.", false, false, false, true, false, false, true},
+        {".dll", SupportedFileFormatLayer::ExecutableNativePlugin, "Native plugin", "Dangerous executable/native plugin reference. Never load automatically.", false, false, false, true, true, false, false},
+        {".exe", SupportedFileFormatLayer::ExecutableNativePlugin, "Executable", "Dangerous executable reference. Never launch from scan results.", false, false, false, true, true, false, false},
+        {".fuz", SupportedFileFormatLayer::AudioVoiceLip, "Voice package", "Audio/voice reference class.", false, false, false, true, false, false, true},
+        {".lip", SupportedFileFormatLayer::AudioVoiceLip, "Lip sync", "Lip animation reference class.", false, false, false, true, false, false, true},
+        {".xwm", SupportedFileFormatLayer::AudioVoiceLip, "XWMA audio", "Audio asset reference class.", false, false, false, true, false, false, true},
+        {".wav", SupportedFileFormatLayer::AudioVoiceLip, "Wave audio", "Audio asset reference class.", false, false, false, true, false, false, true},
+        {".ogg", SupportedFileFormatLayer::AudioVoiceLip, "Legacy audio", "Legacy audio/music reference class.", false, false, false, true, false, false, true},
+        {".mp3", SupportedFileFormatLayer::AudioVoiceLip, "Music/audio source", "Audio source reference class.", false, false, false, true, false, false, false},
+        {".dat", SupportedFileFormatLayer::AudioVoiceLip, "Legacy generated audio/lip data", "Generated audio/lip sidecar reference class.", false, false, false, true, false, false, true},
+        {".strings", SupportedFileFormatLayer::Localization, "Localized strings", "Localization reference class.", false, false, false, true, false, false, true},
+        {".dlstrings", SupportedFileFormatLayer::Localization, "Localized dialogue strings", "Localization reference class.", false, false, false, true, false, false, true},
+        {".ilstrings", SupportedFileFormatLayer::Localization, "Localized interface strings", "Localization reference class.", false, false, false, true, false, false, true},
+        {".swf", SupportedFileFormatLayer::InterfaceUI, "Scaleform UI asset", "Interface/UI reference class.", false, false, false, true, false, false, true},
+        {".gfx", SupportedFileFormatLayer::InterfaceUI, "Scaleform GFx asset", "Interface/UI reference class.", false, false, false, true, false, false, true},
+        {".fnt", SupportedFileFormatLayer::InterfaceUI, "Font asset", "Interface/font reference class.", false, false, false, true, false, false, true},
+        {".seq", SupportedFileFormatLayer::GeneratedWorldData, "Quest sequence sidecar", "Generated/dialogue sidecar reference class.", false, false, false, true, false, false, true},
+        {".lod", SupportedFileFormatLayer::GeneratedWorldData, "LOD reference", "Generic LOD/generated world-data reference class.", false, false, false, true, false, false, true},
+        {".dlod", SupportedFileFormatLayer::GeneratedWorldData, "Distant LOD reference", "Distant LOD/generated world-data reference class.", false, false, false, true, false, false, true},
+        {".bto", SupportedFileFormatLayer::GeneratedWorldData, "Object LOD", "Generated object LOD reference class.", false, false, false, true, false, false, true},
+        {".btr", SupportedFileFormatLayer::GeneratedWorldData, "Terrain LOD", "Generated terrain LOD reference class.", false, false, false, true, false, false, true},
+        {".btt", SupportedFileFormatLayer::GeneratedWorldData, "Tree LOD", "Generated tree LOD reference class.", false, false, false, true, false, false, true},
+        {".previs", SupportedFileFormatLayer::GeneratedWorldData, "Previs reference", "Generated previsibility reference class.", false, false, false, true, false, false, true},
+        {".precombined", SupportedFileFormatLayer::GeneratedWorldData, "Precombined reference", "Generated precombined geometry reference class.", false, false, false, true, false, false, true},
+        {".ini", SupportedFileFormatLayer::ConfigTextLog, "Configuration", "Config reference class.", false, false, false, false, false, true, false},
+        {".toml", SupportedFileFormatLayer::ConfigTextLog, "TOML configuration", "Config reference class.", false, false, false, false, false, true, false},
+        {".yaml", SupportedFileFormatLayer::ConfigTextLog, "YAML configuration", "Config reference class.", false, false, false, false, false, true, false},
+        {".yml", SupportedFileFormatLayer::ConfigTextLog, "YAML configuration", "Config reference class.", false, false, false, false, false, true, false},
+        {".json", SupportedFileFormatLayer::ConfigTextLog, "JSON metadata", "Tooling metadata/config reference class.", false, false, false, false, false, true, false},
+        {".xml", SupportedFileFormatLayer::ConfigTextLog, "XML metadata", "Tooling metadata/config reference class.", false, false, false, false, false, true, false},
+        {".txt", SupportedFileFormatLayer::ConfigTextLog, "Text report", "Human-readable report/tooling artifact.", false, false, false, false, false, true, false},
+        {".log", SupportedFileFormatLayer::ConfigTextLog, "Log", "Human-readable runtime/tooling log.", false, false, false, false, false, true, false},
+        {".csv", SupportedFileFormatLayer::ConfigTextLog, "Delimited table", "Table/metadata source reference class.", false, false, false, false, false, true, false},
+        {".tsv", SupportedFileFormatLayer::ConfigTextLog, "Delimited table", "Table/metadata source reference class.", false, false, false, false, false, true, false},
+        {".zip", SupportedFileFormatLayer::ModPackage, "Archive package", "Compressed package reference only.", false, false, true, true, false, false, false},
+        {".7z", SupportedFileFormatLayer::ModPackage, "Archive package", "Compressed package reference only.", false, false, true, true, false, false, false},
+        {".rar", SupportedFileFormatLayer::ModPackage, "Archive package", "Compressed package reference only.", false, false, true, true, false, false, false},
+        {".fomod", SupportedFileFormatLayer::ModPackage, "Mod installer metadata", "Mod installer/package reference class.", false, false, true, true, false, false, false},
+        {".omod", SupportedFileFormatLayer::ModPackage, "Legacy mod package", "Legacy mod package reference class.", false, false, true, true, false, false, false},
     };
     return formats;
 }
@@ -433,6 +498,18 @@ std::string BuildSupportedFileFormatRegistryReport() {
         if (format.bunkerNative) {
             report << " :: bunker-native";
         }
+        if (format.packageFormat) {
+            report << " :: package format";
+        }
+        if (format.referenceOnly) {
+            report << " :: reference-only";
+        }
+        if (format.futureExtractorCandidate) {
+            report << " :: future extractor candidate";
+        }
+        if (format.executableDanger) {
+            report << " :: dangerous executable/native plugin";
+        }
         report << '\n';
     }
     return report.str();
@@ -442,6 +519,8 @@ const char* ExternalDataImportModeLabel(ExternalDataImportMode mode) {
     switch (mode) {
     case ExternalDataImportMode::NativeWorldSource:
         return "Load Native World";
+    case ExternalDataImportMode::BunkerPackageReference:
+        return "Stage Bunker Package Reference";
     case ExternalDataImportMode::MetadataTextSource:
         return "Metadata / text source";
     case ExternalDataImportMode::TextScriptSource:
@@ -458,17 +537,29 @@ namespace {
 
 bool IsTextReadableExtension(std::string_view normalizedExtension) {
     return normalizedExtension == ".bwld" ||
+        normalizedExtension == ".bmanifest" ||
+        normalizedExtension == ".bcluster" ||
         normalizedExtension == ".json" ||
         normalizedExtension == ".xml" ||
         normalizedExtension == ".ini" ||
+        normalizedExtension == ".toml" ||
+        normalizedExtension == ".yaml" ||
+        normalizedExtension == ".yml" ||
         normalizedExtension == ".txt" ||
         normalizedExtension == ".log" ||
+        normalizedExtension == ".csv" ||
+        normalizedExtension == ".tsv" ||
         normalizedExtension == ".psc";
 }
 
 ExternalDataImportMode ClassifyExternalDataImportMode(std::string_view normalizedExtension) {
     if (normalizedExtension == ".bwld") {
         return ExternalDataImportMode::NativeWorldSource;
+    }
+    if (normalizedExtension == ".dba" ||
+        normalizedExtension == ".bmanifest" ||
+        normalizedExtension == ".bcluster") {
+        return ExternalDataImportMode::BunkerPackageReference;
     }
     if (normalizedExtension == ".psc") {
         return ExternalDataImportMode::TextScriptSource;
@@ -566,6 +657,11 @@ ExternalDataScanSummary ScanExportDataDirectory(const std::filesystem::path& sta
             record.formatLabel = format->label;
             record.bunkerNative = format->bunkerNative;
             record.canonicalAuthoringWorld = format->canonicalAuthoringWorld;
+            record.packageFormat = format->packageFormat;
+            record.referenceOnly = format->referenceOnly || record.importMode == ExternalDataImportMode::ReferenceOnly ||
+                record.importMode == ExternalDataImportMode::BunkerPackageReference;
+            record.executableDanger = format->executableDanger;
+            record.textReadable = format->canBeTextPreviewed || record.textReadable;
             ++summary.recognizedFileCount;
             if (record.extension == ".bwld") {
                 summary.bwldPresent = true;
@@ -573,6 +669,7 @@ ExternalDataScanSummary ScanExportDataDirectory(const std::filesystem::path& sta
         } else {
             record.layerLabel = "Unknown";
             record.formatLabel = "Unknown external reference";
+            record.referenceOnly = false;
             ++summary.unknownFileCount;
         }
 
@@ -607,6 +704,15 @@ std::string BuildExternalDataScanReport(const ExternalDataScanSummary& summary) 
             }
             if (file.canonicalAuthoringWorld) {
                 report << " :: canonical authoring world";
+            }
+            if (file.packageFormat) {
+                report << " :: package format";
+            }
+            if (file.referenceOnly) {
+                report << " :: reference-only";
+            }
+            if (file.executableDanger) {
+                report << " :: dangerous executable";
             }
             report << '\n';
         }
@@ -1205,12 +1311,19 @@ std::string BuildWorldValidationReport(
     int scalableLootObjectCount = 0;
     std::size_t scalableLootEntryCount = 0;
     std::size_t nonEmptyScalableLootEntryCount = 0;
+    int manualLootObjectCount = 0;
+    int randomLootObjectCount = 0;
     for (const auto& object : world.objects) {
         if (!object.scriptTag.empty()) {
             ++semanticObjectCount;
         }
         if (!object.lootEntries.empty()) {
             ++scalableLootObjectCount;
+            if (object.lootMode == LootMode::RandomTable) {
+                ++randomLootObjectCount;
+            } else {
+                ++manualLootObjectCount;
+            }
             scalableLootEntryCount += object.lootEntries.size();
             for (const auto& entry : object.lootEntries) {
                 if (!entry.itemId.empty()) {
@@ -1239,6 +1352,8 @@ std::string BuildWorldValidationReport(
     report << "Scalable loot objects: " << scalableLootObjectCount << '\n';
     report << "Scalable loot entries: " << scalableLootEntryCount << '\n';
     report << "Non-empty scalable loot entries: " << nonEmptyScalableLootEntryCount << '\n';
+    report << "Loot mode manual objects: " << manualLootObjectCount << '\n';
+    report << "Loot mode random objects: " << randomLootObjectCount << '\n';
     report << "Layers: " << layerNames.size() << '\n';
     report << "Prefab-derived objects: " << CountPrefabDerivedObjects(world) << '\n';
     report << "Broken prefab references: " << brokenPrefabReferenceIndices.size() << '\n';

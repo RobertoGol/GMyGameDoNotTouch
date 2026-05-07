@@ -10,11 +10,13 @@
 
 #include "../include/AppPaths.hpp"
 #include "../include/AtomicPersistence.hpp"
+#include "../include/GameExecution.hpp"
 #include "../include/GameRuntime.hpp"
 #include "../include/LanlineLobbyLogic.hpp"
 #include "../include/LanlineSession.hpp"
 #include "../include/LaunchSession.hpp"
 #include "../include/WorldEvents.hpp"
+#include "../include/WorldSemanticAuthoring.hpp"
 #include "../include/AtomicPersistence.hpp"
 
 
@@ -385,6 +387,9 @@ int main() {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 130");
 
+    bunker::GameState gameState;
+    gameState.phase = bunker::RuntimeGamePhase::WORLD_LOADING;
+
     bunker::World world;
     const auto worldPath = bunker::ResolveWorldPath(sessionProfile.selectedWorld);
     if (!world.Load(worldPath.string())) {
@@ -396,9 +401,14 @@ int main() {
             BuildRuntimeSaveOutcome(&initialWorldSave, nullptr, sessionProfile.selectedWorld, false));
     }
     world.EnsureStarterInfrastructure();
+    std::string semanticSealStatus;
+    const int adoptedAnchorCount = bunker::AdoptAllAutoCreatedSemanticAnchors(world, semanticSealStatus);
     bunker::ApplyStaticEraser(world, staticEraser);
     bunker::SyncStoryFlagsFromWorld(sessionProfile, staticEraser);
     bunker::UpdateWorldMetadata(world, sessionProfile, staticEraser);
+    bunker::WorldExecutionContext executionContext = bunker::BuildWorldExecutionContext(world, std::filesystem::current_path());
+    executionContext.adoptedAnchorCount = std::max(0, adoptedAnchorCount);
+    executionContext.adoptionStatus = semanticSealStatus;
 
     bunker::PlayerState player;
     player.x = world.metadata.playerSpawnX;
@@ -424,8 +434,11 @@ int main() {
         player.bucketRaised = canRaiseBucket;
     }
     bunker::SyncPartnerTankAnchor(world, player, sessionProfile);
-
-    bunker::GameState gameState;
+    gameState.phase = bunker::RuntimeGamePhase::ACTIVE_GAME;
+    if (executionContext.adoptedAnchorCount > 0) {
+        gameState.lastEvent = "Runtime sealed " + std::to_string(executionContext.adoptedAnchorCount) +
+            " semantic anchor(s) before activation.";
+    }
     double lastTime = glfwGetTime();
 
     while (!glfwWindowShouldClose(window)) {

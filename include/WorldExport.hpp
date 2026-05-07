@@ -120,15 +120,22 @@ struct WorldExportHistorySelection {
 
 enum class SupportedFileFormatLayer {
     BunkerWorld,
+    BunkerPackage,
     RecordPlugin,
     AssetArchive,
     RuntimeSave,
-    MeshTextureMaterial,
+    MeshModelGeometry,
+    AnimationPhysics,
+    Texture,
+    MaterialShader,
     Script,
-    AudioLip,
+    AudioVoiceLip,
     Localization,
-    GeneratedDialogue,
-    ConfigTextLog
+    InterfaceUI,
+    GeneratedWorldData,
+    ConfigTextLog,
+    ModPackage,
+    ExecutableNativePlugin
 };
 
 struct SupportedFileFormat {
@@ -138,11 +145,17 @@ struct SupportedFileFormat {
     std::string description;
     bool canonicalAuthoringWorld = false;
     bool bunkerNative = false;
+    bool packageFormat = false;
+    bool referenceOnly = false;
+    bool executableDanger = false;
+    bool canBeTextPreviewed = false;
+    bool futureExtractorCandidate = false;
 };
 
 enum class ExternalDataImportMode {
     UnknownReference,
     NativeWorldSource,
+    BunkerPackageReference,
     MetadataTextSource,
     TextScriptSource,
     ReferenceOnly
@@ -159,7 +172,9 @@ struct ExternalDataFileRecord {
     bool bunkerNative = false;
     bool canonicalAuthoringWorld = false;
     bool textReadable = false;
+    bool packageFormat = false;
     bool referenceOnly = false;
+    bool executableDanger = false;
 };
 
 struct ExternalDataScanSummary {

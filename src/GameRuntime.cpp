@@ -567,6 +567,34 @@ bool ObjectContainsPoint(const MapObject& object, float x, float y, float paddin
         y <= object.y + object.depth * 0.5f + padding;
 }
 
+bool ObjectIntersectsPlayerBounds(const MapObject& object, const PlayerState& player, float x, float y, float padding = 0.0f) {
+    const float halfWidth = player.collisionWidth * 0.5f + padding;
+    const float halfDepth = player.collisionDepth * 0.5f + padding;
+    const float objectHalfWidth = object.width * 0.5f + padding;
+    const float objectHalfDepth = object.depth * 0.5f + padding;
+    return std::abs(object.x - x) <= (objectHalfWidth + halfWidth) &&
+        std::abs(object.y - y) <= (objectHalfDepth + halfDepth);
+}
+
+bool BlocksPlayerMotion(const MapObject& object) {
+    if (!object.blocksMovement) {
+        return false;
+    }
+    switch (object.category) {
+        case ObjectCategory::Structure:
+        case ObjectCategory::Vehicle:
+        case ObjectCategory::Landmark:
+        case ObjectCategory::Container:
+        case ObjectCategory::Hangar:
+        case ObjectCategory::Hostile:
+            return true;
+        case ObjectCategory::ResourceNode:
+        case ObjectCategory::Terminal:
+            return object.blocksMovement;
+    }
+    return object.blocksMovement;
+}
+
 bool SegmentSamplesHitObject(const MapObject& object, float x1, float y1, float x2, float y2) {
     for (int sample = 1; sample < 12; ++sample) {
         const float t = static_cast<float>(sample) / 12.0f;
@@ -2832,6 +2860,20 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
 
 }  // namespace
 
+const char* RuntimeGamePhaseLabel(RuntimeGamePhase phase) {
+    switch (phase) {
+        case RuntimeGamePhase::MAIN_MENU:
+            return "Main Menu";
+        case RuntimeGamePhase::WORLD_LOADING:
+            return "World Loading";
+        case RuntimeGamePhase::ACTIVE_GAME:
+            return "Active Game";
+        case RuntimeGamePhase::UI_INTERACTION:
+            return "UI Interaction";
+    }
+    return "Unknown";
+}
+
 const char* TankIntegrityBand(float integrity) {
     if (integrity >= 85.0f) {
         return "Ready";
@@ -3016,6 +3058,43 @@ void AdvanceViewMode(PlayerState& player) {
             player.viewMode = ViewMode::FirstPerson;
             break;
     }
+}
+
+bool SweepMovePlayerAgainstWorld(const World& world, PlayerState& player, float deltaX, float deltaY) {
+    auto axisMoveAllowed = [&](float targetX, float targetY) {
+        const float searchRadius = std::max(player.collisionWidth, player.collisionDepth) + 1.8f;
+        if (const auto* nearest = world.FindNearestInteractive(targetX, targetY, searchRadius);
+            nearest != nullptr && BlocksPlayerMotion(*nearest) && ObjectIntersectsPlayerBounds(*nearest, player, targetX, targetY, 0.04f)) {
+            return false;
+        }
+
+        for (const auto& object : world.objects) {
+            if (!BlocksPlayerMotion(object) || object.interaction == InteractionType::Hostile) {
+                continue;
+            }
+            if (ObjectIntersectsPlayerBounds(object, player, targetX, targetY, 0.04f)) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    bool moved = false;
+    if (std::abs(deltaX) > 0.0001f) {
+        const float targetX = player.x + deltaX;
+        if (axisMoveAllowed(targetX, player.y)) {
+            player.x = targetX;
+            moved = true;
+        }
+    }
+    if (std::abs(deltaY) > 0.0001f) {
+        const float targetY = player.y + deltaY;
+        if (axisMoveAllowed(player.x, targetY)) {
+            player.y = targetY;
+            moved = true;
+        }
+    }
+    return moved;
 }
 
 void TryToggleBt72CrewSeat(PlayerState& player, SessionProfile& profile, GameState& gameState) {

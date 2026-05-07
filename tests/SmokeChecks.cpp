@@ -15,6 +15,7 @@
 #include "../include/WorldExport.hpp"
 #include "../include/WorldSemanticAuthoring.hpp"
 #include "../include/WorldValidation.hpp"
+#include "../Editor/src/EditorSupport.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -183,6 +184,74 @@ bool RunWorldRoundtrip() {
         Check(loadedWorld.FindObjectByRegistryId("[%empty_rows_only_0001]") != nullptr &&
                 loadedWorld.FindObjectByRegistryId("[%empty_rows_only_0001]")->lootEntries.empty(),
             "world roundtrip should trim all-empty trailing loot rows to zero persisted entries");
+}
+
+bool RunEditorWorldFileHelpersSmoke() {
+    const fs::path tempRoot = fs::temp_directory_path() / "bunker_editor_file_helpers_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "editor file helper smoke failed to create temp root")) {
+        return false;
+    }
+
+    WorkingDirectoryGuard workingDirectoryGuard(tempRoot);
+    bunker::EnsureProjectDirectories();
+
+    bunker::World existingWorld;
+    existingWorld.GeneratePrototypeZone();
+    existingWorld.metadata.name = "Existing Authoring World";
+    const auto existingSave = bunker::SaveWorldAtomically(existingWorld, bunker::DefaultWorldPath());
+    if (!Check(existingSave.ok, "editor file helper smoke failed to seed existing world: " + existingSave.message)) {
+        return false;
+    }
+
+    bunker::World newWorld;
+    std::string statusText;
+    if (!Check(editor_support::CreateNewEditorWorld(newWorld, statusText),
+            "editor file helper smoke expected CreateNewEditorWorld to succeed")) {
+        return false;
+    }
+
+    bunker::World reloadedExistingWorld;
+    if (!Check(reloadedExistingWorld.Load(bunker::DefaultWorldPath().string()),
+            "editor file helper smoke failed to reload seeded world after New World")) {
+        return false;
+    }
+    if (!Check(reloadedExistingWorld.metadata.name == "Existing Authoring World",
+            "editor file helper smoke expected New World helper not to overwrite existing .bwld")) {
+        return false;
+    }
+
+    newWorld.metadata.name = "Helper Save World";
+    std::filesystem::path saveAsPath;
+    if (!Check(editor_support::TrySaveEditorWorldAtPath(newWorld, "helper_save_world", statusText, &saveAsPath),
+            "editor file helper smoke expected Save helper to write .bwld")) {
+        return false;
+    }
+    if (!Check(saveAsPath.extension() == ".bwld",
+            "editor file helper smoke expected Save helper to normalize missing extension to .bwld")) {
+        return false;
+    }
+
+    bunker::World loadedSavedWorld;
+    std::filesystem::path loadedPath;
+    if (!Check(editor_support::TryLoadEditorWorldAtPath(saveAsPath, loadedSavedWorld, statusText, &loadedPath),
+            "editor file helper smoke expected Load helper to reload saved world")) {
+        return false;
+    }
+
+    const auto worldFiles = editor_support::ListNativeWorldFiles();
+    const bool foundSavedWorld = std::any_of(worldFiles.begin(), worldFiles.end(), [&](const fs::path& path) {
+        return path.filename() == saveAsPath.filename();
+    });
+
+    return Check(loadedSavedWorld.metadata.name == "Helper Save World",
+            "editor file helper smoke expected saved world metadata to roundtrip") &&
+        Check(foundSavedWorld, "editor file helper smoke expected saved world to appear in .bwld file list") &&
+        Check(!editor_support::TryLoadEditorWorldAtPath("not_a_world.esp", loadedSavedWorld, statusText, nullptr) &&
+                statusText.find(".bwld") != std::string::npos,
+            "editor file helper smoke expected non-.bwld native world load to be rejected");
 }
 
 bool RunProfileRoundtrip() {
@@ -3219,7 +3288,7 @@ bool RunPrefabUsageAndExportReportSmoke() {
         return false;
     }
 
-    const std::string report = bunker::LoadTextArtifactPreview(exportResult.validationReportPath, 8000);
+    const std::string report = bunker::LoadTextArtifactPreview(exportResult.validationReportPath, 20000);
     return Check(report.find("Format: BWL7") != std::string::npos, "prefab usage smoke expected export report to mention BWL7 format") &&
         Check(report.find("Target extension label: Bunker Protocol world") != std::string::npos,
             "prefab usage smoke expected export report to identify .bwld as Bunker Protocol world format") &&
@@ -3234,48 +3303,100 @@ bool RunPrefabUsageAndExportReportSmoke() {
 bool RunSupportedFileFormatRegistrySmoke() {
     const auto* worldFormat = bunker::FindSupportedFileFormat(".bwld");
     const auto* upperWorldFormat = bunker::FindSupportedFileFormat("BWLD");
+    const auto* packageFormat = bunker::FindSupportedFileFormat(".dba");
+    const auto* bsaFormat = bunker::FindSupportedFileFormat(".bsa");
     const auto* pluginFormat = bunker::FindSupportedFileFormat(".esp");
     const auto* archiveFormat = bunker::FindSupportedFileFormat(".ba2");
     const auto* saveFormat = bunker::FindSupportedFileFormat(".fos");
+    const auto* sidecarFormat = bunker::FindSupportedFileFormat(".f4se");
     const auto* meshFormat = bunker::FindSupportedFileFormat(".nif");
+    const auto* animationFormat = bunker::FindSupportedFileFormat(".kf");
+    const auto* behaviorFormat = bunker::FindSupportedFileFormat(".hkx");
+    const auto* morphFormat = bunker::FindSupportedFileFormat(".tri");
+    const auto* textureFormat = bunker::FindSupportedFileFormat(".dds");
+    const auto* sourceTextureFormat = bunker::FindSupportedFileFormat(".png");
     const auto* materialFormat = bunker::FindSupportedFileFormat(".bgsm");
+    const auto* shaderFormat = bunker::FindSupportedFileFormat(".fx");
     const auto* scriptFormat = bunker::FindSupportedFileFormat(".pex");
+    const auto* scriptSourceFormat = bunker::FindSupportedFileFormat(".psc");
     const auto* audioFormat = bunker::FindSupportedFileFormat(".fuz");
+    const auto* audioSourceFormat = bunker::FindSupportedFileFormat(".ogg");
     const auto* localizationFormat = bunker::FindSupportedFileFormat(".dlstrings");
+    const auto* interfaceFormat = bunker::FindSupportedFileFormat(".swf");
     const auto* generatedFormat = bunker::FindSupportedFileFormat(".seq");
+    const auto* lodFormat = bunker::FindSupportedFileFormat(".bto");
     const auto* textFormat = bunker::FindSupportedFileFormat(".json");
+    const auto* configFormat = bunker::FindSupportedFileFormat(".ini");
+    const auto* packageZipFormat = bunker::FindSupportedFileFormat(".zip");
+    const auto* executableFormat = bunker::FindSupportedFileFormat(".dll");
     const auto registryReport = bunker::BuildSupportedFileFormatRegistryReport();
 
     return Check(worldFormat != nullptr, "format registry should include .bwld") &&
         Check(upperWorldFormat == worldFormat, "format registry lookup should normalize extension case and missing dot") &&
         Check(worldFormat->canonicalAuthoringWorld && worldFormat->bunkerNative,
             "format registry should mark .bwld as bunker-native canonical authoring world") &&
+        Check(packageFormat != nullptr && packageFormat->bunkerNative && packageFormat->packageFormat &&
+                !packageFormat->canonicalAuthoringWorld,
+            "format registry should mark .dba as bunker-native package but not canonical authored world") &&
         Check(pluginFormat != nullptr && pluginFormat->layer == bunker::SupportedFileFormatLayer::RecordPlugin,
             "format registry should classify .esp as record/plugin reference") &&
+        Check(bsaFormat != nullptr && bsaFormat->layer == bunker::SupportedFileFormatLayer::AssetArchive,
+            "format registry should classify .bsa as asset archive reference") &&
         Check(archiveFormat != nullptr && archiveFormat->layer == bunker::SupportedFileFormatLayer::AssetArchive,
             "format registry should classify .ba2 as asset archive reference") &&
         Check(saveFormat != nullptr && saveFormat->layer == bunker::SupportedFileFormatLayer::RuntimeSave,
             "format registry should classify .fos as runtime save reference") &&
-        Check(meshFormat != nullptr && meshFormat->layer == bunker::SupportedFileFormatLayer::MeshTextureMaterial,
-            "format registry should classify .nif as mesh/material reference") &&
-        Check(materialFormat != nullptr && materialFormat->layer == bunker::SupportedFileFormatLayer::MeshTextureMaterial,
+        Check(sidecarFormat != nullptr && sidecarFormat->layer == bunker::SupportedFileFormatLayer::RuntimeSave,
+            "format registry should classify .f4se as runtime sidecar reference") &&
+        Check(meshFormat != nullptr && meshFormat->layer == bunker::SupportedFileFormatLayer::MeshModelGeometry,
+            "format registry should classify .nif as mesh/model reference") &&
+        Check(animationFormat != nullptr && animationFormat->layer == bunker::SupportedFileFormatLayer::AnimationPhysics,
+            "format registry should classify .kf as animation reference") &&
+        Check(behaviorFormat != nullptr && behaviorFormat->layer == bunker::SupportedFileFormatLayer::AnimationPhysics,
+            "format registry should classify .hkx as animation/physics reference") &&
+        Check(morphFormat != nullptr && morphFormat->layer == bunker::SupportedFileFormatLayer::MeshModelGeometry,
+            "format registry should classify .tri as face/morph geometry reference") &&
+        Check(textureFormat != nullptr && textureFormat->layer == bunker::SupportedFileFormatLayer::Texture,
+            "format registry should classify .dds as texture reference") &&
+        Check(sourceTextureFormat != nullptr && sourceTextureFormat->layer == bunker::SupportedFileFormatLayer::Texture,
+            "format registry should classify .png as tooling/source texture reference") &&
+        Check(materialFormat != nullptr && materialFormat->layer == bunker::SupportedFileFormatLayer::MaterialShader,
             "format registry should classify .bgsm as material reference") &&
+        Check(shaderFormat != nullptr && shaderFormat->layer == bunker::SupportedFileFormatLayer::MaterialShader,
+            "format registry should classify .fx as material/shader reference") &&
         Check(scriptFormat != nullptr && scriptFormat->layer == bunker::SupportedFileFormatLayer::Script,
             "format registry should classify .pex as script reference") &&
-        Check(audioFormat != nullptr && audioFormat->layer == bunker::SupportedFileFormatLayer::AudioLip,
+        Check(scriptSourceFormat != nullptr && scriptSourceFormat->canBeTextPreviewed,
+            "format registry should mark .psc as text-previewable script source") &&
+        Check(audioFormat != nullptr && audioFormat->layer == bunker::SupportedFileFormatLayer::AudioVoiceLip,
             "format registry should classify .fuz as audio/lip reference") &&
+        Check(audioSourceFormat != nullptr && audioSourceFormat->layer == bunker::SupportedFileFormatLayer::AudioVoiceLip,
+            "format registry should classify .ogg as audio reference") &&
         Check(localizationFormat != nullptr && localizationFormat->layer == bunker::SupportedFileFormatLayer::Localization,
             "format registry should classify .dlstrings as localization reference") &&
-        Check(generatedFormat != nullptr && generatedFormat->layer == bunker::SupportedFileFormatLayer::GeneratedDialogue,
+        Check(interfaceFormat != nullptr && interfaceFormat->layer == bunker::SupportedFileFormatLayer::InterfaceUI,
+            "format registry should classify .swf as interface reference") &&
+        Check(generatedFormat != nullptr && generatedFormat->layer == bunker::SupportedFileFormatLayer::GeneratedWorldData,
             "format registry should classify .seq as generated/dialogue sidecar reference") &&
+        Check(lodFormat != nullptr && lodFormat->layer == bunker::SupportedFileFormatLayer::GeneratedWorldData,
+            "format registry should classify .bto as generated world data") &&
         Check(textFormat != nullptr && textFormat->layer == bunker::SupportedFileFormatLayer::ConfigTextLog,
             "format registry should classify .json as config/text/log reference") &&
+        Check(configFormat != nullptr && configFormat->layer == bunker::SupportedFileFormatLayer::ConfigTextLog,
+            "format registry should classify .ini as config/text/log reference") &&
+        Check(packageZipFormat != nullptr && packageZipFormat->layer == bunker::SupportedFileFormatLayer::ModPackage,
+            "format registry should classify .zip as mod/package tooling reference") &&
+        Check(executableFormat != nullptr && executableFormat->layer == bunker::SupportedFileFormatLayer::ExecutableNativePlugin &&
+                executableFormat->executableDanger,
+            "format registry should classify .dll as dangerous executable/native plugin reference") &&
         Check(bunker::FindSupportedFileFormat(".unknown") == nullptr,
             "format registry should gracefully report unknown extensions") &&
         Check(registryReport.find(".bwld :: Bunker Protocol world/record") != std::string::npos,
             "format registry report should list .bwld explicitly") &&
-        Check(registryReport.find(".f4se :: Runtime save/sidecar") != std::string::npos,
-            "format registry report should list runtime sidecar extensions");
+        Check(registryReport.find(".dba :: Bunker package/archive") != std::string::npos,
+            "format registry report should list .dba explicitly") &&
+        Check(registryReport.find("dangerous executable/native plugin") != std::string::npos,
+            "format registry report should list dangerous executable references");
 }
 
 bool RunExportDataScanSmoke() {
@@ -3288,32 +3409,70 @@ bool RunExportDataScanSmoke() {
     }
 
     const std::vector<std::string> fileNames = {
-        "test_world.bwld",
-        "plugin.esp",
-        "master.esm",
-        "light.esl",
-        "archive.ba2",
-        "mesh.nif",
+        "bunker_world.bwld",
+        "bunker_dlc.dba",
+        "Fallout4.esm",
+        "Fallout4.esp",
+        "Fallout4.esl",
+        "Fallout4 - Main.ba2",
+        "Fallout - Meshes.bsa",
+        "weapon.nif",
+        "anim.kf",
+        "controller.kfm",
+        "behavior.hkx",
+        "face.tri",
+        "morph.egm",
+        "tint.egt",
+        "face.ctl",
+        "legacy.rdt",
+        "tree.spt",
+        "object.bto",
+        "terrain.btr",
+        "treelod.btt",
+        "world.lod",
+        "distant.dlod",
+        "nav.navmesh",
         "texture.dds",
+        "source.tga",
+        "source.png",
+        "source.jpg",
+        "source.bmp",
         "material.bgsm",
         "effect.bgem",
+        "generic.mat",
+        "shader.fx",
+        "env.cub",
         "script.psc",
-        "compiled.pex",
+        "script.pex",
         "voice.fuz",
-        "lipsync.lip",
-        "audio.xwm",
-        "wave.wav",
-        "strings.strings",
-        "dialogue.dlstrings",
-        "interface.ilstrings",
+        "voice.lip",
+        "sound.xwm",
+        "sound.wav",
+        "legacy.ogg",
+        "music.mp3",
+        "lipsync.dat",
+        "Fallout4_en.strings",
+        "Fallout4_en.dlstrings",
+        "Fallout4_en.ilstrings",
         "quest.seq",
+        "menu.swf",
+        "ui.gfx",
+        "font.fnt",
+        "save.fos",
+        "co_save.f4se",
+        "nvse_sidecar.nvse",
+        "native.dll",
+        "tool.exe",
+        "installer.fomod",
+        "old.omod",
+        "archive.zip",
+        "archive.7z",
+        "archive.rar",
         "config.ini",
         "metadata.json",
-        "layout.xml",
+        "menu.xml",
         "readme.txt",
-        "runtime.log",
-        "save.fos",
-        "cosave.f4se",
+        "scan.log",
         "unknown.xyz",
     };
     for (const auto& fileName : fileNames) {
@@ -3325,11 +3484,17 @@ bool RunExportDataScanSmoke() {
     const auto bwld = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
         return file.extension == ".bwld";
     });
+    const auto dba = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
+        return file.extension == ".dba";
+    });
     const auto esp = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
         return file.extension == ".esp";
     });
     const auto psc = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
         return file.extension == ".psc";
+    });
+    const auto dll = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
+        return file.extension == ".dll";
     });
     const auto unknown = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
         return file.extension == ".xyz";
@@ -3353,12 +3518,18 @@ bool RunExportDataScanSmoke() {
     return Check(bwld != summary.files.end() && bwld->bunkerNative && bwld->canonicalAuthoringWorld &&
                 bwld->importMode == bunker::ExternalDataImportMode::NativeWorldSource,
             "export_data scan should mark .bwld as native canonical world source") &&
+        Check(dba != summary.files.end() && dba->bunkerNative && dba->packageFormat &&
+                dba->importMode == bunker::ExternalDataImportMode::BunkerPackageReference,
+            "export_data scan should mark .dba as bunker-native package reference") &&
         Check(esp != summary.files.end() && esp->referenceOnly &&
                 esp->importMode == bunker::ExternalDataImportMode::ReferenceOnly,
             "export_data scan should mark Fallout-like plugin files as reference-only") &&
         Check(psc != summary.files.end() && psc->textReadable &&
                 psc->importMode == bunker::ExternalDataImportMode::TextScriptSource,
             "export_data scan should mark .psc as text script source") &&
+        Check(dll != summary.files.end() && dll->recognized && dll->executableDanger &&
+                dll->referenceOnly,
+            "export_data scan should mark .dll as dangerous reference-only executable data") &&
         Check(unknown != summary.files.end() && !unknown->recognized &&
                 unknown->importMode == bunker::ExternalDataImportMode::UnknownReference,
             "export_data scan should treat unknown extensions as warning-only references");
@@ -4689,6 +4860,7 @@ int main() {
     bunker::EnsureProjectDirectories();
 
     const bool ok = RunWorldRoundtrip() &&
+        RunEditorWorldFileHelpersSmoke() &&
         RunProfileRoundtrip() &&
         RunFirstPlayableRouteStorySmoke() &&
         RunRouteBeatPresentationSmoke() &&
