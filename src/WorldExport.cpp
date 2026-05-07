@@ -438,6 +438,182 @@ std::string BuildSupportedFileFormatRegistryReport() {
     return report.str();
 }
 
+const char* ExternalDataImportModeLabel(ExternalDataImportMode mode) {
+    switch (mode) {
+    case ExternalDataImportMode::NativeWorldSource:
+        return "Load Native World";
+    case ExternalDataImportMode::MetadataTextSource:
+        return "Metadata / text source";
+    case ExternalDataImportMode::TextScriptSource:
+        return "Script source reference";
+    case ExternalDataImportMode::ReferenceOnly:
+        return "Attach As External Reference";
+    case ExternalDataImportMode::UnknownReference:
+    default:
+        return "Unknown external reference";
+    }
+}
+
+namespace {
+
+bool IsTextReadableExtension(std::string_view normalizedExtension) {
+    return normalizedExtension == ".bwld" ||
+        normalizedExtension == ".json" ||
+        normalizedExtension == ".xml" ||
+        normalizedExtension == ".ini" ||
+        normalizedExtension == ".txt" ||
+        normalizedExtension == ".log" ||
+        normalizedExtension == ".psc";
+}
+
+ExternalDataImportMode ClassifyExternalDataImportMode(std::string_view normalizedExtension) {
+    if (normalizedExtension == ".bwld") {
+        return ExternalDataImportMode::NativeWorldSource;
+    }
+    if (normalizedExtension == ".psc") {
+        return ExternalDataImportMode::TextScriptSource;
+    }
+    if (IsTextReadableExtension(normalizedExtension)) {
+        return ExternalDataImportMode::MetadataTextSource;
+    }
+    if (FindSupportedFileFormat(normalizedExtension) != nullptr) {
+        return ExternalDataImportMode::ReferenceOnly;
+    }
+    return ExternalDataImportMode::UnknownReference;
+}
+
+std::vector<std::filesystem::path> ExportDataCandidatesFor(const std::filesystem::path& startPath) {
+    std::vector<std::filesystem::path> candidates;
+    auto pushCandidate = [&](std::filesystem::path candidate) {
+        if (candidate.empty()) {
+            return;
+        }
+        candidate = candidate.lexically_normal();
+        if (std::find(candidates.begin(), candidates.end(), candidate) == candidates.end()) {
+            candidates.push_back(std::move(candidate));
+        }
+    };
+
+    std::filesystem::path anchor = startPath.empty() ? std::filesystem::current_path() : startPath;
+    anchor = anchor.lexically_normal();
+    if (!anchor.empty() && anchor.has_filename() && anchor.filename() == "Export_data") {
+        pushCandidate(anchor);
+    } else {
+        pushCandidate(anchor / "Export_data");
+    }
+
+    std::filesystem::path cursor = anchor;
+    for (int depth = 0; depth < 4 && !cursor.empty(); ++depth) {
+        pushCandidate(cursor / "Export_data");
+        if (cursor.has_parent_path()) {
+            cursor = cursor.parent_path();
+        } else {
+            break;
+        }
+    }
+
+    return candidates;
+}
+
+}  // namespace
+
+std::filesystem::path ResolveExportDataDirectory(const std::filesystem::path& startPath) {
+    const auto candidates = ExportDataCandidatesFor(startPath);
+    for (const auto& candidate : candidates) {
+        std::error_code ec;
+        if (std::filesystem::exists(candidate, ec) && std::filesystem::is_directory(candidate, ec)) {
+            return candidate;
+        }
+    }
+    return candidates.empty() ? std::filesystem::path("Export_data") : candidates.front();
+}
+
+bool CreateExportDataDirectory(const std::filesystem::path& startPath, std::filesystem::path& createdPath) {
+    createdPath = ResolveExportDataDirectory(startPath);
+    std::error_code ec;
+    if (std::filesystem::exists(createdPath, ec)) {
+        return std::filesystem::is_directory(createdPath, ec);
+    }
+    return std::filesystem::create_directories(createdPath, ec);
+}
+
+ExternalDataScanSummary ScanExportDataDirectory(const std::filesystem::path& startPath) {
+    ExternalDataScanSummary summary;
+    summary.folderPath = ResolveExportDataDirectory(startPath);
+
+    std::error_code ec;
+    summary.exists = std::filesystem::exists(summary.folderPath, ec) && std::filesystem::is_directory(summary.folderPath, ec);
+    if (!summary.exists) {
+        return summary;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(summary.folderPath, ec)) {
+        if (ec || !entry.is_regular_file()) {
+            continue;
+        }
+
+        ExternalDataFileRecord record;
+        record.path = entry.path();
+        record.fileName = entry.path().filename().string();
+        record.extension = NormalizeFileExtension(entry.path().extension().string());
+        record.importMode = ClassifyExternalDataImportMode(record.extension);
+        record.textReadable = IsTextReadableExtension(record.extension);
+        record.referenceOnly = record.importMode == ExternalDataImportMode::ReferenceOnly;
+
+        if (const auto* format = FindSupportedFileFormat(record.extension)) {
+            record.recognized = true;
+            record.layerLabel = SupportedFileFormatLayerLabel(format->layer);
+            record.formatLabel = format->label;
+            record.bunkerNative = format->bunkerNative;
+            record.canonicalAuthoringWorld = format->canonicalAuthoringWorld;
+            ++summary.recognizedFileCount;
+            if (record.extension == ".bwld") {
+                summary.bwldPresent = true;
+            }
+        } else {
+            record.layerLabel = "Unknown";
+            record.formatLabel = "Unknown external reference";
+            ++summary.unknownFileCount;
+        }
+
+        summary.files.push_back(std::move(record));
+    }
+
+    std::sort(summary.files.begin(), summary.files.end(), [](const ExternalDataFileRecord& lhs, const ExternalDataFileRecord& rhs) {
+        return lhs.fileName < rhs.fileName;
+    });
+    summary.foundFileCount = summary.files.size();
+    return summary;
+}
+
+std::string BuildExternalDataScanReport(const ExternalDataScanSummary& summary) {
+    std::ostringstream report;
+    report << "Export_data folder: " << summary.folderPath.string() << '\n';
+    report << "Export_data exists: " << (summary.exists ? "yes" : "no") << '\n';
+    report << "Export_data files: " << summary.foundFileCount << '\n';
+    report << "Export_data recognized: " << summary.recognizedFileCount << '\n';
+    report << "Export_data unknown: " << summary.unknownFileCount << '\n';
+    report << "Export_data .bwld present: " << (summary.bwldPresent ? "yes" : "no") << '\n';
+    if (!summary.files.empty()) {
+        report << "Export_data entries:\n";
+        for (const auto& file : summary.files) {
+            report << "- " << file.fileName
+                   << " :: " << file.extension
+                   << " :: " << file.layerLabel
+                   << " :: " << file.formatLabel
+                   << " :: " << ExternalDataImportModeLabel(file.importMode);
+            if (file.bunkerNative) {
+                report << " :: bunker-native";
+            }
+            if (file.canonicalAuthoringWorld) {
+                report << " :: canonical authoring world";
+            }
+            report << '\n';
+        }
+    }
+    return report.str();
+}
+
 namespace {
 
 bool IsHistoryEntrySuccessful(const WorldExportHistoryEntry& entry) {
@@ -1079,6 +1255,7 @@ std::string BuildWorldValidationReport(
     }
     report << "Message: " << result.message << '\n';
     report << BuildSupportedFileFormatRegistryReport();
+    report << BuildExternalDataScanReport(ScanExportDataDirectory());
 
     if (!layerNames.empty()) {
         report << "Layer names:\n";

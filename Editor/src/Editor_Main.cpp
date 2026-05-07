@@ -1333,6 +1333,8 @@ int main() {
     std::vector<ImportedConcept> importedConcepts;
     std::vector<SavedPrefab> savedPrefabs;
     std::string statusText = "Editor ready. Prepare assets or export a runtime prototype.";
+    bunker::ExternalDataScanSummary externalDataScan;
+    int selectedExternalDataFileIndex = -1;
     bunker::WorldExportResult lastExportResult;
     std::string validationReportPreview = "No validation report loaded yet.";
     std::string exportAuditPreview = "No export audit loaded yet.";
@@ -1380,6 +1382,10 @@ int main() {
     bunker::World editorWorld;
     LoadOrCreateEditorWorld(editorWorld, statusText);
     editor_support::LoadPrefabLibrary(savedPrefabs);
+    externalDataScan = bunker::ScanExportDataDirectory(std::filesystem::current_path());
+    if (!externalDataScan.files.empty()) {
+        selectedExternalDataFileIndex = 0;
+    }
 
     const char* targetTypes[] = {
         "Prop",
@@ -1693,6 +1699,21 @@ int main() {
         useDraftCategoryOverride = true;
         draftInteractionOverride = prefab.object.interaction;
         draftCategoryOverride = prefab.object.category;
+    };
+    auto refreshExternalDataScan = [&]() {
+        externalDataScan = bunker::ScanExportDataDirectory(std::filesystem::current_path());
+        if (externalDataScan.files.empty()) {
+            selectedExternalDataFileIndex = -1;
+        } else {
+            selectedExternalDataFileIndex = std::clamp(selectedExternalDataFileIndex, 0, static_cast<int>(externalDataScan.files.size()) - 1);
+        }
+    };
+    auto selectedExternalDataFile = [&]() -> const bunker::ExternalDataFileRecord* {
+        if (selectedExternalDataFileIndex < 0 ||
+            selectedExternalDataFileIndex >= static_cast<int>(externalDataScan.files.size())) {
+            return nullptr;
+        }
+        return &externalDataScan.files[static_cast<std::size_t>(selectedExternalDataFileIndex)];
     };
     auto buildImportedPrefabDraft = [&](std::string_view sourceLabel, int targetIndex, int completionModeIndex) {
         SavedPrefab prefab;
@@ -5711,6 +5732,12 @@ int main() {
                         entry.weight = 1.0f;
                     }
                 };
+                auto trimTrailingEmptyReferenceLootEntries = [&]() {
+                    while (!referenceObject.lootEntries.empty() &&
+                           referenceObject.lootEntries.back().itemId.empty()) {
+                        referenceObject.lootEntries.pop_back();
+                    }
+                };
                 auto referenceLootSourceLabel = [&](const std::string& lootId) {
                     if (lootId.empty()) {
                         return std::string("Empty");
@@ -5734,6 +5761,7 @@ int main() {
                             entry->itemId = lootReference;
                         }
                     } else {
+                        trimTrailingEmptyReferenceLootEntries();
                         referenceObject.lootEntries.push_back({lootReference, 1, 1, 1.0f});
                         referenceLootSelectedSlot = static_cast<int>(referenceObject.lootEntries.size()) - 1;
                     }
@@ -6983,12 +7011,121 @@ int main() {
         if (showImportAssistant) {
             setTopLevelWindowDefaults(ImVec2(1088.0f, 512.0f), ImVec2(316.0f, 372.0f));
             ImGui::Begin("Import Assistant", &showImportAssistant, ImGuiWindowFlags_NoCollapse);
+            if (ImGui::IsWindowAppearing()) {
+                refreshExternalDataScan();
+            }
             ImGui::TextWrapped("Drop or describe a concept reference here. The assistant converts it into a prefab draft and optionally seeds the current object draft, without generating a finished world.");
             ImGui::InputText("Source", conceptInput, IM_ARRAYSIZE(conceptInput));
             ImGui::Combo("Target", &targetTypeIndex, targetTypes, IM_ARRAYSIZE(targetTypes));
             ImGui::Combo("Completion", &completionIndex, completionModes, IM_ARRAYSIZE(completionModes));
             ImGui::Checkbox("Add prefab draft to library", &importToPrefabLibrary);
             ImGui::Checkbox("Seed current draft fields", &seedDraftFromImport);
+            ImGui::Separator();
+            ImGui::TextUnformatted("External Data Folder: Export_data");
+            ImGui::TextWrapped("Read-only staging folder for native .bwld world files, metadata/text sources, and Fallout-like reference files.");
+            ImGui::TextDisabled("Path: %s", externalDataScan.folderPath.string().c_str());
+            ImGui::TextDisabled(
+                "Exists: %s | Found: %llu | Recognized: %llu | Unknown: %llu",
+                externalDataScan.exists ? "yes" : "no",
+                static_cast<unsigned long long>(externalDataScan.foundFileCount),
+                static_cast<unsigned long long>(externalDataScan.recognizedFileCount),
+                static_cast<unsigned long long>(externalDataScan.unknownFileCount));
+            if (ImGui::Button("Refresh Export_data", ImVec2(180.0f, 0.0f))) {
+                refreshExternalDataScan();
+                statusText = externalDataScan.exists
+                    ? "Refreshed Export_data scan."
+                    : "Export_data folder not found.";
+            }
+            ImGui::SameLine();
+            if (!externalDataScan.exists) {
+                if (ImGui::Button("Create Export_data folder", ImVec2(210.0f, 0.0f))) {
+                    std::filesystem::path createdPath;
+                    if (bunker::CreateExportDataDirectory(std::filesystem::current_path(), createdPath)) {
+                        refreshExternalDataScan();
+                        statusText = "Created Export_data folder at " + createdPath.string() + ".";
+                    } else {
+                        statusText = "Failed to create Export_data folder.";
+                    }
+                }
+            }
+            const bunker::ExternalDataFileRecord* externalDataFile = selectedExternalDataFile();
+            if (!externalDataScan.exists) {
+                ImGui::TextDisabled("Export_data folder not found.");
+            } else if (externalDataScan.files.empty()) {
+                ImGui::TextDisabled("Export_data is empty.");
+            } else {
+                ImGui::BeginChild("ImportAssistant_ExternalDataFiles", ImVec2(0.0f, 140.0f), true);
+                for (int fileIndex = 0; fileIndex < static_cast<int>(externalDataScan.files.size()); ++fileIndex) {
+                    const auto& file = externalDataScan.files[static_cast<std::size_t>(fileIndex)];
+                    const bool selected = selectedExternalDataFileIndex == fileIndex;
+                    const std::string label = file.fileName + "###ImportAssistant_ExternalDataFile_" + std::to_string(fileIndex);
+                    if (ImGui::Selectable(label.c_str(), selected)) {
+                        selectedExternalDataFileIndex = fileIndex;
+                        externalDataFile = selectedExternalDataFile();
+                    }
+                }
+                ImGui::EndChild();
+                externalDataFile = selectedExternalDataFile();
+            }
+            if (externalDataFile != nullptr) {
+                ImGui::TextDisabled("Selected file: %s", externalDataFile->fileName.c_str());
+                ImGui::TextDisabled("Extension: %s", externalDataFile->extension.c_str());
+                ImGui::TextDisabled("Class: %s", externalDataFile->layerLabel.c_str());
+                ImGui::TextDisabled("Format: %s", externalDataFile->formatLabel.c_str());
+                ImGui::TextDisabled(
+                    "Native / Canonical: %s / %s",
+                    externalDataFile->bunkerNative ? "yes" : "no",
+                    externalDataFile->canonicalAuthoringWorld ? "yes" : "no");
+                ImGui::TextDisabled("Import mode: %s", bunker::ExternalDataImportModeLabel(externalDataFile->importMode));
+                if (externalDataFile->referenceOnly) {
+                    ImGui::TextWrapped("Reference-only file: this build classifies it safely and can attach a manifest/reference note, but does not parse it as a world.");
+                }
+                const bool canUseAsSource =
+                    externalDataFile->importMode == bunker::ExternalDataImportMode::MetadataTextSource ||
+                    externalDataFile->importMode == bunker::ExternalDataImportMode::TextScriptSource;
+                ImGui::BeginDisabled(!canUseAsSource);
+                if (ImGui::Button("Use Selected As Import Source", ImVec2(240.0f, 0.0f))) {
+                    CopyStringToBuffer(externalDataFile->path.string(), conceptInput, IM_ARRAYSIZE(conceptInput));
+                    statusText = "Selected external source for import drafting: " + externalDataFile->fileName + ".";
+                }
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::BeginDisabled(!canUseAsSource);
+                if (ImGui::Button("Create Concept/Prefab Draft From Selected Metadata", ImVec2(360.0f, 0.0f))) {
+                    CopyStringToBuffer(externalDataFile->path.string(), conceptInput, IM_ARRAYSIZE(conceptInput));
+                    statusText = "Loaded metadata source into Import Assistant: " + externalDataFile->fileName + ".";
+                }
+                ImGui::EndDisabled();
+                ImGui::BeginDisabled(!externalDataFile->referenceOnly && externalDataFile->recognized);
+                if (ImGui::Button("Attach As External Reference", ImVec2(240.0f, 0.0f))) {
+                    statusText = "Attached external reference note for " + externalDataFile->fileName + ".";
+                }
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::BeginDisabled(externalDataFile->extension != ".bwld");
+                if (ImGui::Button("Load Native World", ImVec2(180.0f, 0.0f))) {
+                    bunker::World loadedWorld;
+                    if (loadedWorld.Load(externalDataFile->path.string())) {
+                        editorWorld = std::move(loadedWorld);
+                        selectedObjectIndex = -1;
+                        SyncEditorWorldBindings(
+                            editorWorld,
+                            selectedObjectIndex,
+                            selectedRegistryEdit, IM_ARRAYSIZE(selectedRegistryEdit),
+                            selectedScriptTagEdit, IM_ARRAYSIZE(selectedScriptTagEdit),
+                            selectedLinkTargetEdit, IM_ARRAYSIZE(selectedLinkTargetEdit),
+                            worldNameInput, IM_ARRAYSIZE(worldNameInput),
+                            worldBiomeInput, IM_ARRAYSIZE(worldBiomeInput),
+                            worldObjectiveInput, IM_ARRAYSIZE(worldObjectiveInput),
+                            worldSpawnX, worldSpawnY);
+                        syncEditorLayerStateTable();
+                        statusText = "Loaded native world from Export_data: " + externalDataFile->fileName + ".";
+                    } else {
+                        statusText = "Failed to load native world from Export_data.";
+                    }
+                }
+                ImGui::EndDisabled();
+            }
             ImGui::Separator();
             ImGui::TextWrapped("Completion rules:");
             ImGui::BulletText("Mirror unseen side when symmetry is likely");

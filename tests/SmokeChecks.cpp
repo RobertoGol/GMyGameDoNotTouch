@@ -114,6 +114,17 @@ bool RunWorldRoundtrip() {
     highRowContainer.lootEntries.assign(20, {});
     highRowContainer.lootEntries[19] = {"high_row_loot_real", 1, 1, 1.0f};
     savedWorld.AddObject(highRowContainer);
+    bunker::MapObject tenthRowContainer = sparseContainer;
+    tenthRowContainer.registryId = "[%tenth_row_loot_0001]";
+    tenthRowContainer.displayName = "Tenth Row Loot Container";
+    tenthRowContainer.lootEntries.assign(20, {});
+    tenthRowContainer.lootEntries[9] = {"tenth_row_loot_real", 1, 2, 1.0f};
+    savedWorld.AddObject(tenthRowContainer);
+    bunker::MapObject emptyRowsOnlyContainer = sparseContainer;
+    emptyRowsOnlyContainer.registryId = "[%empty_rows_only_0001]";
+    emptyRowsOnlyContainer.displayName = "Empty Rows Only Container";
+    emptyRowsOnlyContainer.lootEntries.assign(20, {});
+    savedWorld.AddObject(emptyRowsOnlyContainer);
 
     const auto saveStatus = bunker::SaveWorldAtomically(savedWorld, bunker::DefaultWorldPath());
     if (!Check(saveStatus.ok, "world save failed: " + saveStatus.message)) {
@@ -162,7 +173,16 @@ bool RunWorldRoundtrip() {
             "world roundtrip should preserve interior empty rows before a filled high-index loot row") &&
         Check(loadedWorld.FindObjectByRegistryId("[%high_row_loot_0001]") != nullptr &&
                 loadedWorld.FindObjectByRegistryId("[%high_row_loot_0001]")->lootEntries[19].itemId == "high_row_loot_real",
-            "world roundtrip should preserve filled high-index virtual-row loot entry");
+            "world roundtrip should preserve filled high-index virtual-row loot entry") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%tenth_row_loot_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%tenth_row_loot_0001]")->lootEntries.size() == 10,
+            "world roundtrip should trim trailing empty rows after a filled row 10 entry") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%tenth_row_loot_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%tenth_row_loot_0001]")->lootEntries[9].itemId == "tenth_row_loot_real",
+            "world roundtrip should preserve filled row 10 loot entry") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%empty_rows_only_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%empty_rows_only_0001]")->lootEntries.empty(),
+            "world roundtrip should trim all-empty trailing loot rows to zero persisted entries");
 }
 
 bool RunProfileRoundtrip() {
@@ -3258,6 +3278,92 @@ bool RunSupportedFileFormatRegistrySmoke() {
             "format registry report should list runtime sidecar extensions");
 }
 
+bool RunExportDataScanSmoke() {
+    const fs::path tempRoot = fs::temp_directory_path() / "bunker_export_data_scan_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "Export_data", ec);
+    if (!Check(!ec, "export_data scan smoke failed to create temporary Export_data folder")) {
+        return false;
+    }
+
+    const std::vector<std::string> fileNames = {
+        "test_world.bwld",
+        "plugin.esp",
+        "master.esm",
+        "light.esl",
+        "archive.ba2",
+        "mesh.nif",
+        "texture.dds",
+        "material.bgsm",
+        "effect.bgem",
+        "script.psc",
+        "compiled.pex",
+        "voice.fuz",
+        "lipsync.lip",
+        "audio.xwm",
+        "wave.wav",
+        "strings.strings",
+        "dialogue.dlstrings",
+        "interface.ilstrings",
+        "quest.seq",
+        "config.ini",
+        "metadata.json",
+        "layout.xml",
+        "readme.txt",
+        "runtime.log",
+        "save.fos",
+        "cosave.f4se",
+        "unknown.xyz",
+    };
+    for (const auto& fileName : fileNames) {
+        std::ofstream file(tempRoot / "Export_data" / fileName, std::ios::binary);
+        file << "smoke";
+    }
+
+    const auto summary = bunker::ScanExportDataDirectory(tempRoot);
+    const auto bwld = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
+        return file.extension == ".bwld";
+    });
+    const auto esp = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
+        return file.extension == ".esp";
+    });
+    const auto psc = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
+        return file.extension == ".psc";
+    });
+    const auto unknown = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
+        return file.extension == ".xyz";
+    });
+
+    fs::remove_all(tempRoot, ec);
+
+    if (!Check(summary.exists, "export_data scan should detect existing Export_data folder")) {
+        return false;
+    }
+    if (!Check(summary.foundFileCount == fileNames.size(), "export_data scan should count all fake files")) {
+        return false;
+    }
+    if (!Check(summary.recognizedFileCount + summary.unknownFileCount == fileNames.size(),
+            "export_data scan should classify every file as recognized or unknown")) {
+        return false;
+    }
+    if (!Check(summary.unknownFileCount == 1, "export_data scan should treat unknown.xyz as the only unknown file")) {
+        return false;
+    }
+    return Check(bwld != summary.files.end() && bwld->bunkerNative && bwld->canonicalAuthoringWorld &&
+                bwld->importMode == bunker::ExternalDataImportMode::NativeWorldSource,
+            "export_data scan should mark .bwld as native canonical world source") &&
+        Check(esp != summary.files.end() && esp->referenceOnly &&
+                esp->importMode == bunker::ExternalDataImportMode::ReferenceOnly,
+            "export_data scan should mark Fallout-like plugin files as reference-only") &&
+        Check(psc != summary.files.end() && psc->textReadable &&
+                psc->importMode == bunker::ExternalDataImportMode::TextScriptSource,
+            "export_data scan should mark .psc as text script source") &&
+        Check(unknown != summary.files.end() && !unknown->recognized &&
+                unknown->importMode == bunker::ExternalDataImportMode::UnknownReference,
+            "export_data scan should treat unknown extensions as warning-only references");
+}
+
 bool RunStrictSemanticExportPolicySmoke() {
     bunker::World world;
     world.metadata.name = "Strict Semantic Export Policy Smoke";
@@ -4628,6 +4734,7 @@ int main() {
         RunLegacyPrefabManualLootMigrationSmoke() &&
         RunPrefabUsageAndExportReportSmoke() &&
         RunSupportedFileFormatRegistrySmoke() &&
+        RunExportDataScanSmoke() &&
         RunStrictSemanticExportPolicySmoke() &&
         RunValidatedWorldExportArtifactSmoke() &&
         RunWorldExportAuditTrailSmoke() &&
