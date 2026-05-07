@@ -1,6 +1,7 @@
 #include "../include/AppPaths.hpp"
 #include "../include/AtomicPersistence.hpp"
 #include "../include/BuildAnnouncement.hpp"
+#include "../include/GameExecution.hpp"
 #include "../include/GameRuntime.hpp"
 #include "../include/GameplayDescriptorRegistry.hpp"
 #include "../include/HangarSystem.hpp"
@@ -4844,6 +4845,220 @@ bool RunLegacyWorldAliasMigrationSmoke() {
         Check(normalizedObject->scriptTag == "tower_sync", "loaded legacy object tag was not canonicalized");
 }
 
+const bunker::GameComponent* FindComponent(
+    const bunker::GameObjectInstance& instance,
+    bunker::GameComponentKind kind) {
+    const auto it = std::find_if(instance.components.begin(), instance.components.end(), [&](const bunker::GameComponent& component) {
+        return component.kind == kind;
+    });
+    return it == instance.components.end() ? nullptr : &(*it);
+}
+
+bool RunGameExecutionResourceLookupSmoke() {
+    const fs::path tempRoot = fs::current_path() / "game_execution_resource_lookup";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "Export_data", ec);
+    if (!Check(!ec, "game execution resource smoke failed to create temp Export_data")) {
+        return false;
+    }
+
+    const std::vector<std::string> files = {
+        "generator_0001.NIF",
+        "generator_0001.DDS",
+        "terminal_sync.PEX",
+        "terminal_sync.PSC",
+        "Fallout4.ESM",
+        "random_unknown.xyz",
+    };
+    for (const auto& fileName : files) {
+        std::ofstream file(tempRoot / "Export_data" / fileName, std::ios::binary);
+        file << "fake";
+    }
+
+    bunker::World world;
+    bunker::MapObject generator;
+    generator.registryId = "[%generator_0001]";
+    generator.displayName = "Backup Generator";
+    generator.prefabSourceId = "generator_0001";
+    generator.category = bunker::ObjectCategory::Structure;
+    world.AddObject(generator);
+
+    bunker::MapObject terminal;
+    terminal.registryId = "[%terminal_0001]";
+    terminal.displayName = "Sync Terminal";
+    terminal.interaction = bunker::InteractionType::Terminal;
+    terminal.category = bunker::ObjectCategory::Terminal;
+    terminal.scriptTag = "terminal_sync";
+    world.AddObject(terminal);
+
+    bunker::MapObject pluginProxy;
+    pluginProxy.registryId = "[%Fallout4]";
+    pluginProxy.displayName = "Plugin Proxy";
+    world.AddObject(pluginProxy);
+
+    const auto context = bunker::BuildWorldExecutionContext(world, tempRoot);
+    const auto missingContext = bunker::BuildWorldExecutionContext(world, tempRoot / "missing");
+    const auto* generatorInstance = bunker::FindGameObjectInstance(context, generator.registryId);
+    const auto* terminalInstance = bunker::FindGameObjectInstance(context, terminal.registryId);
+    const auto* pluginInstance = bunker::FindGameObjectInstance(context, pluginProxy.registryId);
+
+    fs::remove_all(tempRoot, ec);
+
+    return Check(context.externalData.exists, "game execution resource smoke expected Export_data scan to exist") &&
+        Check(context.externalData.foundFileCount == files.size(), "game execution resource smoke expected every fake file to be scanned") &&
+        Check(context.externalData.unknownFileCount == 1, "game execution resource smoke expected unknown files to stay warning-only") &&
+        Check(missingContext.objects.size() == world.objects.size(),
+            "game execution resource smoke expected missing scan root to build context without crashing") &&
+        Check(generatorInstance != nullptr && !generatorInstance->renderResourcePath.empty() &&
+                (generatorInstance->renderResourcePath.extension().string() == ".NIF" ||
+                 generatorInstance->renderResourcePath.extension().string() == ".DDS"),
+            "game execution resource smoke expected uppercase render asset lookup") &&
+        Check(terminalInstance != nullptr && !terminalInstance->compiledScriptPath.empty() &&
+                !terminalInstance->sourceScriptPath.empty(),
+            "game execution resource smoke expected script paths for terminal_sync") &&
+        Check(pluginInstance != nullptr && !pluginInstance->pluginProxyPath.empty(),
+            "game execution resource smoke expected plugin proxy match by normalized key") &&
+        Check(bunker::NormalizeResourceLookupKey("[%generator_0001]") == "generator0001",
+            "game execution resource smoke expected registry id normalization");
+}
+
+bool RunGameExecutionLootTemplateSmoke() {
+    bunker::World world;
+    auto makeContainer = [](std::string registryId, std::vector<bunker::LootEntry> loot) {
+        bunker::MapObject container;
+        container.registryId = std::move(registryId);
+        container.displayName = "Loot Container";
+        container.interaction = bunker::InteractionType::Container;
+        container.category = bunker::ObjectCategory::Container;
+        container.lootEntries = std::move(loot);
+        return container;
+    };
+
+    world.AddObject(makeContainer("[%empty_loot]", std::vector<bunker::LootEntry>(20)));
+
+    std::vector<bunker::LootEntry> row10(20);
+    row10[9].itemId = "row_10_real";
+    row10[9].minCount = 2;
+    world.AddObject(makeContainer("[%row10_loot]", row10));
+
+    std::vector<bunker::LootEntry> row20(20);
+    row20[19].itemId = "row_20_real";
+    row20[19].maxCount = 3;
+    world.AddObject(makeContainer("[%row20_loot]", row20));
+
+    std::vector<bunker::LootEntry> mixed(4);
+    mixed[0].itemId = "first_real";
+    mixed[2].itemId = "second_real";
+    world.AddObject(makeContainer("[%mixed_loot]", mixed));
+
+    const auto context = bunker::BuildWorldExecutionContext(world);
+    const auto* emptyInstance = bunker::FindGameObjectInstance(context, "[%empty_loot]");
+    const auto* row10Instance = bunker::FindGameObjectInstance(context, "[%row10_loot]");
+    const auto* row20Instance = bunker::FindGameObjectInstance(context, "[%row20_loot]");
+    const auto* mixedInstance = bunker::FindGameObjectInstance(context, "[%mixed_loot]");
+
+    const auto* emptyInventory = emptyInstance == nullptr ? nullptr : FindComponent(*emptyInstance, bunker::GameComponentKind::Inventory);
+    const auto* row10Inventory = row10Instance == nullptr ? nullptr : FindComponent(*row10Instance, bunker::GameComponentKind::Inventory);
+    const auto* row20Inventory = row20Instance == nullptr ? nullptr : FindComponent(*row20Instance, bunker::GameComponentKind::Inventory);
+    const auto* mixedInventory = mixedInstance == nullptr ? nullptr : FindComponent(*mixedInstance, bunker::GameComponentKind::Inventory);
+
+    return Check(emptyInventory == nullptr, "game execution loot smoke expected all-empty UI rows to produce no inventory") &&
+        Check(row10Inventory != nullptr && row10Inventory->inventoryTemplate.size() == 1 &&
+                row10Inventory->inventoryTemplate[0].itemId == "row_10_real",
+            "game execution loot smoke expected high row 10 loot to be preserved") &&
+        Check(row20Inventory != nullptr && row20Inventory->inventoryTemplate.size() == 1 &&
+                row20Inventory->inventoryTemplate[0].itemId == "row_20_real",
+            "game execution loot smoke expected high row 20 loot to be preserved") &&
+        Check(mixedInventory != nullptr && mixedInventory->inventoryTemplate.size() == 2 &&
+                mixedInventory->inventoryTemplate[0].itemId == "first_real" &&
+                mixedInventory->inventoryTemplate[1].itemId == "second_real",
+            "game execution loot smoke expected empty rows to be ignored");
+}
+
+bool RunGameExecutionScriptBridgeSmoke() {
+    const fs::path tempRoot = fs::current_path() / "game_execution_script_bridge";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "Export_data", ec);
+    if (!Check(!ec, "game execution script bridge smoke failed to create temp Export_data")) {
+        return false;
+    }
+    {
+        std::ofstream terminalPex(tempRoot / "Export_data" / "terminal_sync.pex", std::ios::binary);
+        terminalPex << "fake";
+        std::ofstream sourceOnly(tempRoot / "Export_data" / "source_only.psc", std::ios::binary);
+        sourceOnly << "fake";
+    }
+
+    bunker::World world;
+    auto makeTerminal = [](std::string registryId, std::string scriptTag) {
+        bunker::MapObject terminal;
+        terminal.registryId = std::move(registryId);
+        terminal.displayName = "Bridge Terminal";
+        terminal.interaction = bunker::InteractionType::Terminal;
+        terminal.category = bunker::ObjectCategory::Terminal;
+        terminal.scriptTag = std::move(scriptTag);
+        return terminal;
+    };
+    world.AddObject(makeTerminal("[%terminal_sync]", "terminal_sync"));
+    world.AddObject(makeTerminal("[%source_only]", "source_only"));
+    world.AddObject(makeTerminal("[%missing_script]", "missing_script"));
+    world.AddObject(makeTerminal("[%empty_script]", ""));
+
+    const auto context = bunker::BuildWorldExecutionContext(world, tempRoot);
+    std::string status;
+    const bool compiled = bunker::TryExecuteCompiledScript(world.objects[0], context, status);
+    const bool compiledStatus = status.find("compiled script bridge") != std::string::npos;
+    status.clear();
+    const bool source = bunker::TryExecuteCompiledScript(world.objects[1], context, status);
+    const bool sourceStatus = status.find("source script bridge") != std::string::npos;
+    status.clear();
+    const bool missing = bunker::TryExecuteCompiledScript(world.objects[2], context, status);
+    const bool empty = bunker::TryExecuteCompiledScript(world.objects[3], context, status);
+
+    fs::remove_all(tempRoot, ec);
+
+    return Check(compiled && compiledStatus, "game execution script smoke expected compiled bridge status") &&
+        Check(source && sourceStatus, "game execution script smoke expected source fallback bridge status") &&
+        Check(!missing, "game execution script smoke expected missing script to return false") &&
+        Check(!empty, "game execution script smoke expected empty script tag to return false");
+}
+
+bool RunPlayerSweepCollisionSmoke() {
+    bunker::World blockingWorld;
+    bunker::MapObject blocker;
+    blocker.registryId = "[%blocker]";
+    blocker.displayName = "Blocking Crate";
+    blocker.category = bunker::ObjectCategory::Structure;
+    blocker.x = 1.2f;
+    blocker.y = 0.0f;
+    blocker.width = 1.0f;
+    blocker.depth = 1.0f;
+    blocker.blocksMovement = true;
+    blockingWorld.AddObject(blocker);
+
+    bunker::PlayerState player;
+    player.x = 0.0f;
+    player.y = 0.0f;
+    const bool blockedMove = bunker::SweepMovePlayerAgainstWorld(blockingWorld, player, 1.0f, 0.0f);
+    const float afterBlockedX = player.x;
+    const bool movedAway = bunker::SweepMovePlayerAgainstWorld(blockingWorld, player, -1.0f, 0.0f);
+
+    bunker::World nonBlockingWorld;
+    blocker.blocksMovement = false;
+    nonBlockingWorld.AddObject(blocker);
+    bunker::PlayerState nonBlockedPlayer;
+    const bool nonBlockedMove = bunker::SweepMovePlayerAgainstWorld(nonBlockingWorld, nonBlockedPlayer, 1.0f, 0.0f);
+
+    return Check(!blockedMove && std::abs(afterBlockedX) < 0.0001f,
+            "player sweep collision smoke expected blocking object to stop movement") &&
+        Check(movedAway && player.x < -0.9f,
+            "player sweep collision smoke expected movement away from blocker to work") &&
+        Check(nonBlockedMove && nonBlockedPlayer.x > 0.9f,
+            "player sweep collision smoke expected non-blocking object not to stop movement");
+}
+
 }  // namespace
 
 int main() {
@@ -4920,7 +5135,11 @@ int main() {
         RunWorldReferenceGraphSmoke() &&
         RunSemanticAuthoringCascadeSmoke() &&
         RunStarterSemanticLinkTargetSmoke() &&
-        RunLegacyWorldAliasMigrationSmoke();
+        RunLegacyWorldAliasMigrationSmoke() &&
+        RunGameExecutionResourceLookupSmoke() &&
+        RunGameExecutionLootTemplateSmoke() &&
+        RunGameExecutionScriptBridgeSmoke() &&
+        RunPlayerSweepCollisionSmoke();
 
     fs::remove_all(sandboxRoot, ec);
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;

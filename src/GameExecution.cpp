@@ -8,6 +8,17 @@ namespace bunker {
 
 namespace {
 
+std::string NormalizedExtension(std::string_view extension) {
+    std::string normalized(extension);
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (!normalized.empty() && normalized.front() != '.') {
+        normalized.insert(normalized.begin(), '.');
+    }
+    return normalized;
+}
+
 std::vector<std::string> CandidateKeysForObject(const MapObject& object) {
     std::vector<std::string> keys;
     auto pushKey = [&](std::string_view value) {
@@ -26,15 +37,29 @@ std::vector<std::string> CandidateKeysForObject(const MapObject& object) {
 }
 
 bool IsRenderableAssetExtension(std::string_view extension) {
-    return extension == ".dds" || extension == ".nif" || extension == ".bgsm" || extension == ".bgem";
+    const std::string normalized = NormalizedExtension(extension);
+    return normalized == ".dds" || normalized == ".nif" || normalized == ".bgsm" || normalized == ".bgem";
 }
 
 bool IsPluginExtension(std::string_view extension) {
-    return extension == ".esm" || extension == ".esp" || extension == ".esl";
+    const std::string normalized = NormalizedExtension(extension);
+    return normalized == ".esm" || normalized == ".esp" || normalized == ".esl";
 }
 
 bool IsScriptExtension(std::string_view extension) {
-    return extension == ".pex" || extension == ".psc";
+    const std::string normalized = NormalizedExtension(extension);
+    return normalized == ".pex" || normalized == ".psc";
+}
+
+std::vector<LootEntry> BuildRuntimeLootTemplate(const std::vector<LootEntry>& lootEntries) {
+    std::vector<LootEntry> runtimeLoot;
+    runtimeLoot.reserve(lootEntries.size());
+    for (const auto& entry : lootEntries) {
+        if (!entry.itemId.empty()) {
+            runtimeLoot.push_back(entry);
+        }
+    }
+    return runtimeLoot;
 }
 
 }  // namespace
@@ -74,15 +99,9 @@ std::vector<std::filesystem::path> GlobalResourceManager::FindAll(std::string_vi
 }
 
 std::filesystem::path GlobalResourceManager::FindFirstWithExtension(std::string_view key, std::string_view extension) const {
-    std::string normalizedExtension(extension);
-    std::transform(normalizedExtension.begin(), normalizedExtension.end(), normalizedExtension.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
+    const std::string normalizedExtension = NormalizedExtension(extension);
     for (const auto& candidate : FindAll(key)) {
-        std::string candidateExtension = candidate.extension().string();
-        std::transform(candidateExtension.begin(), candidateExtension.end(), candidateExtension.begin(), [](unsigned char ch) {
-            return static_cast<char>(std::tolower(ch));
-        });
+        const std::string candidateExtension = NormalizedExtension(candidate.extension().string());
         if (candidateExtension == normalizedExtension) {
             return candidate;
         }
@@ -161,10 +180,11 @@ WorldExecutionContext BuildWorldExecutionContext(const World& world, const std::
             instance.components.push_back(std::move(render));
         }
 
-        if (!object.lootEntries.empty()) {
+        std::vector<LootEntry> runtimeLoot = BuildRuntimeLootTemplate(object.lootEntries);
+        if (!runtimeLoot.empty()) {
             GameComponent inventory;
             inventory.kind = GameComponentKind::Inventory;
-            inventory.inventoryTemplate = object.lootEntries;
+            inventory.inventoryTemplate = std::move(runtimeLoot);
             instance.components.push_back(std::move(inventory));
         }
 

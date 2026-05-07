@@ -6,6 +6,7 @@
 #include <string_view>
 #include <GLFW/glfw3.h>
 
+#include "GameExecution.hpp"
 #include "Renderer.hpp"
 #include "Progression.hpp"
 #include "SessionProfiles.hpp"
@@ -206,7 +207,8 @@ void HandleInteraction(const MapObject* nearest,
     PlayerState& player,
     SessionProfile& profile,
     StaticEraser& staticEraser,
-    GameState& gameState);
+    GameState& gameState,
+    const WorldExecutionContext* executionContext = nullptr);
 bool WantsUseKey(const MapObject* nearest);
 bool WantsContextKey(const MapObject* nearest);
 void DrawPipPad(const World& world,

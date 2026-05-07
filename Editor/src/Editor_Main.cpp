@@ -1339,6 +1339,18 @@ int main() {
     std::string validationReportPreview = "No validation report loaded yet.";
     std::string exportAuditPreview = "No export audit loaded yet.";
     std::string shippingBaselinePreview = "No shipping baseline loaded yet.";
+    std::filesystem::path cachedWorkspaceExportHistoryPath;
+    std::vector<bunker::WorldExportHistoryEntry> cachedWorkspaceExportHistoryEntries;
+    bool workspaceExportHistoryDirty = true;
+    std::filesystem::path cachedWorkspaceBaselinePath;
+    std::string cachedWorkspaceBaselineValidationSignature;
+    bunker::ValidationBaselineDelta cachedWorkspaceBaselineDelta;
+    std::string cachedWorkspaceBaselineDiffReport = "No shipping baseline comparison target selected.";
+    std::filesystem::path cachedHistoricalSnapshotPath;
+    std::string cachedHistoricalSnapshotValidationSignature;
+    std::string cachedHistoricalSnapshotPreview = "No historical export checkpoint available for this target yet.";
+    bunker::ValidationBaselineDelta cachedHistoricalDelta;
+    std::string cachedHistoricalDeltaReport = "No historical export checkpoint selected.";
     int selectedHistoricalExportIndex = 0;
     bunker::WorldExportHistoryFilter selectedHistoricalExportFilter =
         bunker::WorldExportHistoryFilter::All;
@@ -2081,6 +2093,9 @@ int main() {
             &exportResult);
         lastExportResult = exportResult;
         refreshExportArtifactPreview(path);
+        workspaceExportHistoryDirty = true;
+        cachedWorkspaceBaselinePath.clear();
+        cachedHistoricalSnapshotPath.clear();
         if (ok) {
             undoStack.MarkSaved();
         }
@@ -2864,6 +2879,20 @@ int main() {
         const std::string validationSummary = bunker::BuildValidationSummary(validationIssues);
         const int validationErrorCount = bunker::CountValidationErrors(validationIssues);
         const int validationWarningCount = bunker::CountValidationWarnings(validationIssues);
+        std::string validationIssueSignature;
+        validationIssueSignature.reserve(validationIssues.size() * 48);
+        for (const auto& issue : validationIssues) {
+            validationIssueSignature += std::to_string(static_cast<int>(issue.severity));
+            validationIssueSignature += '|';
+            validationIssueSignature += issue.code;
+            validationIssueSignature += '|';
+            validationIssueSignature += issue.objectId;
+            validationIssueSignature += '|';
+            validationIssueSignature += issue.scriptTag;
+            validationIssueSignature += '|';
+            validationIssueSignature += issue.relatedValue;
+            validationIssueSignature += '\n';
+        }
         const int autoCreatedSemanticAnchorCount = bunker::CountValidationIssuesByCode(
             validationIssues,
             "auto_created_semantic_anchor");
@@ -6554,14 +6583,31 @@ int main() {
             const auto workspaceBaselinePath = workspaceExportPath.empty()
                 ? std::filesystem::path{}
                 : bunker::ValidationBaselinePathForWorld(workspaceExportPath);
-            const auto workspaceBaselineDelta = workspaceExportPath.empty()
-                ? bunker::ValidationBaselineDelta{}
-                : bunker::CompareValidationToBaseline(validationIssues, workspaceExportPath);
-            const std::string workspaceBaselineDiffReport = bunker::BuildValidationBaselineDeltaReport(workspaceBaselineDelta);
-            std::vector<bunker::WorldExportHistoryEntry> workspaceExportHistoryEntries;
-            if (!workspaceExportPath.empty()) {
-                bunker::LoadWorldExportHistory(workspaceExportPath, workspaceExportHistoryEntries);
+            if (workspaceExportPath.empty()) {
+                cachedWorkspaceBaselinePath.clear();
+                cachedWorkspaceBaselineValidationSignature.clear();
+                cachedWorkspaceBaselineDelta = bunker::ValidationBaselineDelta{};
+                cachedWorkspaceBaselineDiffReport = "No shipping baseline comparison target selected.";
+            } else if (cachedWorkspaceBaselinePath != workspaceExportPath ||
+                       cachedWorkspaceBaselineValidationSignature != validationIssueSignature) {
+                cachedWorkspaceBaselinePath = workspaceExportPath;
+                cachedWorkspaceBaselineValidationSignature = validationIssueSignature;
+                cachedWorkspaceBaselineDelta = bunker::CompareValidationToBaseline(validationIssues, workspaceExportPath);
+                cachedWorkspaceBaselineDiffReport = bunker::BuildValidationBaselineDeltaReport(cachedWorkspaceBaselineDelta);
             }
+            const auto& workspaceBaselineDelta = cachedWorkspaceBaselineDelta;
+            const std::string& workspaceBaselineDiffReport = cachedWorkspaceBaselineDiffReport;
+            if (workspaceExportPath.empty()) {
+                cachedWorkspaceExportHistoryPath.clear();
+                cachedWorkspaceExportHistoryEntries.clear();
+                workspaceExportHistoryDirty = false;
+            } else if (workspaceExportHistoryDirty || cachedWorkspaceExportHistoryPath != workspaceExportPath) {
+                cachedWorkspaceExportHistoryPath = workspaceExportPath;
+                cachedWorkspaceExportHistoryEntries.clear();
+                bunker::LoadWorldExportHistory(workspaceExportPath, cachedWorkspaceExportHistoryEntries);
+                workspaceExportHistoryDirty = false;
+            }
+            const auto& workspaceExportHistoryEntries = cachedWorkspaceExportHistoryEntries;
             bunker::WorldExportHistoryQuery workspaceHistoryFilterQuery;
             workspaceHistoryFilterQuery.filter = selectedHistoricalExportFilter;
             const auto filteredWorkspaceExportHistoryEntries =
@@ -6631,13 +6677,22 @@ int main() {
                 selectedHistoricalEntry =
                     &workspaceExportHistoryEntries[static_cast<std::size_t>(resolvedHistoricalSelection.historyIndex)];
                 if (!selectedHistoricalEntry->validationSnapshotPath.empty()) {
-                    selectedHistoricalSnapshotPreview =
-                        bunker::LoadTextArtifactPreview(selectedHistoricalEntry->validationSnapshotPath, 6000);
-                    selectedHistoricalDelta =
-                        bunker::CompareValidationToSnapshot(validationIssues, selectedHistoricalEntry->validationSnapshotPath);
-                    selectedHistoricalDeltaReport =
-                        bunker::BuildValidationSnapshotDeltaReport(selectedHistoricalDelta, "Historical export checkpoint");
+                    if (cachedHistoricalSnapshotPath != selectedHistoricalEntry->validationSnapshotPath ||
+                        cachedHistoricalSnapshotValidationSignature != validationIssueSignature) {
+                        cachedHistoricalSnapshotPath = selectedHistoricalEntry->validationSnapshotPath;
+                        cachedHistoricalSnapshotValidationSignature = validationIssueSignature;
+                        cachedHistoricalSnapshotPreview =
+                            bunker::LoadTextArtifactPreview(selectedHistoricalEntry->validationSnapshotPath, 6000);
+                        cachedHistoricalDelta =
+                            bunker::CompareValidationToSnapshot(validationIssues, selectedHistoricalEntry->validationSnapshotPath);
+                        cachedHistoricalDeltaReport =
+                            bunker::BuildValidationSnapshotDeltaReport(cachedHistoricalDelta, "Historical export checkpoint");
+                    }
+                    selectedHistoricalSnapshotPreview = cachedHistoricalSnapshotPreview;
+                    selectedHistoricalDelta = cachedHistoricalDelta;
+                    selectedHistoricalDeltaReport = cachedHistoricalDeltaReport;
                 } else {
+                    cachedHistoricalSnapshotPath.clear();
                     selectedHistoricalSnapshotPreview =
                         "Selected historical export entry does not have an archived validation snapshot.";
                     selectedHistoricalDeltaReport =

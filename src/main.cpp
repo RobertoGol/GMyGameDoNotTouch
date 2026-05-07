@@ -17,7 +17,6 @@
 #include "../include/LaunchSession.hpp"
 #include "../include/WorldEvents.hpp"
 #include "../include/WorldSemanticAuthoring.hpp"
-#include "../include/AtomicPersistence.hpp"
 
 
 
@@ -406,7 +405,7 @@ int main() {
     bunker::ApplyStaticEraser(world, staticEraser);
     bunker::SyncStoryFlagsFromWorld(sessionProfile, staticEraser);
     bunker::UpdateWorldMetadata(world, sessionProfile, staticEraser);
-    bunker::WorldExecutionContext executionContext = bunker::BuildWorldExecutionContext(world, std::filesystem::current_path());
+    bunker::WorldExecutionContext executionContext = bunker::BuildWorldExecutionContext(world);
     executionContext.adoptedAnchorCount = std::max(0, adoptedAnchorCount);
     executionContext.adoptionStatus = semanticSealStatus;
 
@@ -639,7 +638,14 @@ int main() {
         gameState.uiPressed = toggleUiNow;
 
         const bool saveNow = glfwGetKey(window, GLFW_KEY_F5) == GLFW_PRESS;
-
+        if (saveNow && !gameState.savePressed) {
+            const auto profileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
+            staticEraser.Save(sessionProfile.selectedWorld);
+            const RuntimeSaveOutcome saveOutcome =
+                BuildRuntimeSaveOutcome(nullptr, &profileSave, sessionProfile.selectedWorld, true);
+            ReportRuntimeSaveOutcome("Runtime F5 save", saveOutcome);
+            gameState.lastEvent = saveOutcome.message;
+        }
         gameState.savePressed = saveNow;
 
         const bool healNow = glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS;
@@ -730,13 +736,19 @@ int main() {
                 player.velocityX *= std::max(0.0f, 1.0f - dt * damping);
                 player.velocityY *= std::max(0.0f, 1.0f - dt * damping);
             }
-            player.x += player.velocityX * dt;
-            player.y += player.velocityY * dt;
+            const float previousX = player.x;
+            const float previousY = player.y;
+            bunker::SweepMovePlayerAgainstWorld(world, player, player.velocityX * dt, player.velocityY * dt);
+            if (std::abs(player.x - previousX) < 0.0001f) {
+                player.velocityX = 0.0f;
+            }
+            if (std::abs(player.y - previousY) < 0.0001f) {
+                player.velocityY = 0.0f;
+            }
         } else {
             player.velocityX = moveX * moveSpeed;
             player.velocityY = moveY * moveSpeed;
-            player.x += player.velocityX * dt;
-            player.y += player.velocityY * dt;
+            bunker::SweepMovePlayerAgainstWorld(world, player, player.velocityX * dt, player.velocityY * dt);
         }
 
         bunker::UpdateHostiles(world, player, sessionProfile, staticEraser, gameState, dt);
@@ -779,13 +791,13 @@ int main() {
         const bunker::MapObject* nearest = world.FindNearestInteractive(player.x, player.y, 2.2f);
         const bool useNow = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
         if (useNow && !gameState.usePressed && bunker::WantsUseKey(nearest)) {
-            bunker::HandleInteraction(nearest, world, player, sessionProfile, staticEraser, gameState);
+            bunker::HandleInteraction(nearest, world, player, sessionProfile, staticEraser, gameState, &executionContext);
         }
         gameState.usePressed = useNow;
 
         const bool contextualNow = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
         if (contextualNow && !gameState.contextualPressed && bunker::WantsContextKey(nearest)) {
-            bunker::HandleInteraction(nearest, world, player, sessionProfile, staticEraser, gameState);
+            bunker::HandleInteraction(nearest, world, player, sessionProfile, staticEraser, gameState, &executionContext);
         }
         gameState.contextualPressed = contextualNow;
 
@@ -860,6 +872,11 @@ int main() {
                 ImGui::Text("Press F to enter or open");
             } else {
                 ImGui::Text("Press E to use or interact");
+            }
+            if (nearest->interaction != bunker::InteractionType::Hostile) {
+                const std::string executionOverlay = bunker::DescribeInteractionOverlay(*nearest, executionContext);
+                ImGui::Separator();
+                ImGui::TextWrapped("%s", executionOverlay.c_str());
             }
             ImGui::Separator();
             ImGui::Text("TAB Pip-Pad | H Medkit | R Reload | F5 Save");

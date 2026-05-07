@@ -97,6 +97,7 @@ configure_bunker_target(BunkerEditor)
 add_executable(BunkerSmokeChecks
     tests/SmokeChecks.cpp
     Editor/src/EditorSupport.cpp
+    src/GameExecution.cpp
     src/GameRuntime.cpp
     src/GameRuntimePipPad.cpp
     src/PrefabLibrary.cpp

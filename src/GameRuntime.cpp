@@ -5348,7 +5348,8 @@ void HandleInteraction(const MapObject* nearest,
     PlayerState& player,
     SessionProfile& profile,
     StaticEraser& staticEraser,
-    GameState& gameState) {
+    GameState& gameState,
+    const WorldExecutionContext* executionContext) {
     if (nearest == nullptr) {
         gameState.lastEvent = "No actionable target nearby.";
         return;
@@ -5756,6 +5757,13 @@ void HandleInteraction(const MapObject* nearest,
             break;
         case InteractionType::Terminal:
             AddCollectedTapeIfMissing(profile, nearest->registryId, nearest->displayName);
+            if (executionContext != nullptr) {
+                std::string bridgeStatus;
+                if (TryExecuteCompiledScript(*nearest, *executionContext, bridgeStatus)) {
+                    gameState.lastEvent = bridgeStatus;
+                    break;
+                }
+            }
             gameState.lastEvent = DescribeTerminalSync(*nearest);
             break;
         case InteractionType::Transition:
@@ -5848,6 +5856,13 @@ void HandleInteraction(const MapObject* nearest,
         case InteractionType::Resource:
         case InteractionType::VehicleAnchor:
         case InteractionType::Static:
+            if (executionContext != nullptr) {
+                std::string bridgeStatus;
+                if (TryExecuteCompiledScript(*nearest, *executionContext, bridgeStatus)) {
+                    gameState.lastEvent = bridgeStatus;
+                    break;
+                }
+            }
             if (!nearest->scriptTag.empty()) {
                 gameState.lastEvent = nearest->displayName + ": " + nearest->scriptTag;
             }
