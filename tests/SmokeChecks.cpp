@@ -25,6 +25,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <initializer_list>
 #include <iostream>
 #include <string>
 
@@ -685,10 +686,10 @@ bool RunFirstPlayableRouteStorySmoke() {
     profile.character.inventory.push_back({"repair_patch", 1, 0.2f});
     profile.character.inventory.push_back({"old_plate", 1, 0.5f});
     const auto restoreRoute = bunker::BuildBt72RestorationRoute(profile);
-    if (!Check(restoreRoute.size() == 9, "first route smoke expected BT-72 restore checklist to have nine entries")) {
+    if (!Check(restoreRoute.size() == 10, "first route smoke expected BT-72 restore checklist to have ten entries")) {
         return false;
     }
-    if (!Check(!restoreRoute[4].completed, "first route smoke expected BT-72 restore step to remain incomplete before restore")) {
+    if (!Check(!restoreRoute[5].completed, "first route smoke expected BT-72 restore step to remain incomplete before restore")) {
         return false;
     }
     if (!Check(bunker::CurrentStoryObjectivePreview(profile).find("Restore BT-72") != std::string::npos,
@@ -747,6 +748,133 @@ bool RunFirstPlayableRouteStorySmoke() {
             "first route smoke expected industrial expansion checkpoint label") &&
         Check(bunker::CurrentStoryObjectivePreview(profile).find("rail depot") != std::string::npos,
             "first route smoke expected industrial follow-up objective preview");
+}
+
+bool RunBt72RestorationObjectiveReadoutSmoke() {
+    const auto hasAny = [](const std::string& text, std::initializer_list<const char*> needles) {
+        return std::any_of(needles.begin(), needles.end(), [&](const char* needle) {
+            return text.find(needle) != std::string::npos;
+        });
+    };
+    const auto setRouteOpen = [](bunker::SessionProfile& profile) {
+        profile.story.awakenedFromCryo = true;
+        profile.story.pipPadRecovered = true;
+        profile.story.archiveRecovered = true;
+        profile.firstPlayableRoute.accessCardRecovered = true;
+    };
+    const auto setKnowledgeComplete = [](bunker::SessionProfile& profile) {
+        profile.firstPlayableRoute.bt72HullInspected = true;
+        profile.firstPlayableRoute.bt72CoreRecovered = true;
+        profile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    };
+    const auto setCradleComplete = [](bunker::SessionProfile& profile) {
+        profile.hangarPowerRestored = true;
+        profile.bt72CraneControlOnline = true;
+        profile.bt72CranePathClear = true;
+        profile.bt72HullAttachedToCrane = false;
+        profile.bt72HullMovedToServiceLift = true;
+        profile.bt72HullLockedInRestorationCradle = true;
+    };
+    const auto addRestorationMaterials = [](bunker::SessionProfile& profile) {
+        bunker::AddInventoryItem(profile, "power_cell", 1, 0.3f);
+        bunker::AddInventoryItem(profile, "repair_patch", 1, 0.2f);
+        bunker::AddInventoryItem(profile, "old_plate", 1, 0.5f);
+    };
+
+    bunker::StaticEraser staticEraser;
+
+    bunker::SessionProfile knowledgeMissing = bunker::MakeDefaultSessionProfile();
+    setRouteOpen(knowledgeMissing);
+    const std::string missingPreview = bunker::CurrentStoryObjectivePreview(knowledgeMissing);
+    if (!Check(missingPreview.find("hull") != std::string::npos &&
+            missingPreview.find("starter core") != std::string::npos &&
+            missingPreview.find("service notes") != std::string::npos,
+            "bt72_objective_requires_knowledge_before_cradle expected hull/core/service notes objective")) {
+        return false;
+    }
+
+    bunker::SessionProfile cradleMissing = bunker::MakeDefaultSessionProfile();
+    setRouteOpen(cradleMissing);
+    setKnowledgeComplete(cradleMissing);
+    addRestorationMaterials(cradleMissing);
+    const std::string cradlePreview = bunker::CurrentStoryObjectivePreview(cradleMissing);
+    const std::string cradleObjective = bunker::CurrentStoryObjective(cradleMissing, staticEraser);
+    if (!Check(hasAny(cradlePreview, {"crane", "service lift", "cradle"}) &&
+            hasAny(cradleObjective, {"crane", "service lift", "cradle"}) &&
+            cradlePreview.find("Survey the BT-72 hull, recover the starter core, and decode the service notes") == std::string::npos &&
+            cradleObjective.find("Survey the BT-72 hull, recover the starter core, and decode the service notes") == std::string::npos &&
+            cradlePreview.find("Restore BT-72 to partial operating condition") == std::string::npos &&
+            cradleObjective.find("Restore BT-72 to partial operating condition") == std::string::npos,
+            "bt72_objective_points_to_cradle_after_knowledge expected crane/cradle objective")) {
+        return false;
+    }
+
+    bunker::SessionProfile materialMissing = bunker::MakeDefaultSessionProfile();
+    setRouteOpen(materialMissing);
+    setKnowledgeComplete(materialMissing);
+    setCradleComplete(materialMissing);
+    bunker::AddInventoryItem(materialMissing, "power_cell", 1, 0.3f);
+    bunker::AddInventoryItem(materialMissing, "old_plate", 1, 0.5f);
+    const std::string materialObjective = bunker::CurrentStoryObjective(materialMissing, staticEraser);
+    if (!Check(materialObjective.find("repair patch") != std::string::npos &&
+            materialObjective.find("Survey the BT-72 hull") == std::string::npos &&
+            !hasAny(materialObjective, {"crane", "cradle"}),
+            "bt72_objective_points_to_materials_after_cradle expected repair patch objective")) {
+        return false;
+    }
+
+    bunker::SessionProfile restoreReady = bunker::MakeDefaultSessionProfile();
+    setRouteOpen(restoreReady);
+    setKnowledgeComplete(restoreReady);
+    setCradleComplete(restoreReady);
+    addRestorationMaterials(restoreReady);
+    const std::string restoreReadyObjective = bunker::CurrentStoryObjectivePreview(restoreReady);
+    if (!Check(restoreReadyObjective.find("Restore BT-72") != std::string::npos &&
+            restoreReadyObjective.find("partial operating condition") != std::string::npos,
+            "bt72_objective_restore_ready_after_cradle_and_materials expected restore-ready objective")) {
+        return false;
+    }
+
+    restoreReady.firstPlayableRoute.bt72Restored = true;
+    const std::string syncObjective = bunker::CurrentStoryObjective(restoreReady, staticEraser);
+    if (!Check(syncObjective.find("cockpit") != std::string::npos &&
+            syncObjective.find("link") != std::string::npos &&
+            syncObjective.find("Restore BT-72") == std::string::npos,
+            "bt72_objective_moves_to_sync_after_restore expected cockpit sync objective")) {
+        return false;
+    }
+
+    const auto cradleMissingRoute = bunker::BuildBt72RestorationRoute(cradleMissing);
+    const auto missingCradleEntry = std::find_if(cradleMissingRoute.begin(), cradleMissingRoute.end(), [](const bunker::StoryRouteEntry& entry) {
+        return entry.text.find("cradle") != std::string::npos || entry.text.find("service lift") != std::string::npos;
+    });
+    bunker::SessionProfile cradleComplete = cradleMissing;
+    setCradleComplete(cradleComplete);
+    const auto cradleCompleteRoute = bunker::BuildBt72RestorationRoute(cradleComplete);
+    const auto completeCradleEntry = std::find_if(cradleCompleteRoute.begin(), cradleCompleteRoute.end(), [](const bunker::StoryRouteEntry& entry) {
+        return entry.text.find("cradle") != std::string::npos || entry.text.find("service lift") != std::string::npos;
+    });
+    if (!Check(missingCradleEntry != cradleMissingRoute.end() &&
+            completeCradleEntry != cradleCompleteRoute.end() &&
+            !missingCradleEntry->completed &&
+            completeCradleEntry->completed,
+            "bt72_readout_tracks_restoration_cradle_step expected cradle checklist state")) {
+        return false;
+    }
+
+    bunker::SessionProfile blueLinkOnly = bunker::MakeDefaultSessionProfile();
+    blueLinkOnly.story.awakenedFromCryo = true;
+    bunker::RecoverPipPad(blueLinkOnly);
+    blueLinkOnly.blueLinkModuleRecovered = true;
+    blueLinkOnly.blueLinkModuleInstalled = true;
+    blueLinkOnly.pipPadExpansionCoverPresent = false;
+    const std::string blueLinkObjective = bunker::CurrentStoryObjectivePreview(blueLinkOnly);
+    return Check(bunker::CanUsePipPadMediaIndex(blueLinkOnly) &&
+            !blueLinkOnly.story.archiveRecovered &&
+            !blueLinkOnly.story.tankLinked &&
+            !blueLinkOnly.firstPlayableRoute.bt72Restored &&
+            blueLinkObjective.find("archive") != std::string::npos,
+            "bt72_objective_bluelink_does_not_skip_route expected normal archive objective");
 }
 
 bool RunRouteBeatPresentationSmoke() {
@@ -6100,6 +6228,7 @@ int main() {
         RunFirstPlayableRouteStorySmoke() &&
         RunRouteBeatPresentationSmoke() &&
         RunFirstPlayableRouteReadoutSmoke() &&
+        RunBt72RestorationObjectiveReadoutSmoke() &&
         RunSurfaceArrivalWorldEventSmoke() &&
         RunFirstCombatWorldEventSmoke() &&
         RunFirstCombatResolutionHandoffSmoke() &&
