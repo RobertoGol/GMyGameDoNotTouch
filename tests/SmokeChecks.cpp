@@ -5266,6 +5266,77 @@ bool RunBlueLinkExpansionModuleContractSmoke() {
     return ok;
 }
 
+bool RunBlueLinkRuntimeInteractionSmoke() {
+    bunker::World world;
+    bunker::MapObject module;
+    module.registryId = "[%bluelink_module_0001]";
+    module.displayName = "BlueLink Media Module";
+    module.interaction = bunker::InteractionType::Container;
+    module.category = bunker::ObjectCategory::Container;
+    world.AddObject(module);
+
+    bunker::MapObject expansionBay;
+    expansionBay.registryId = "[%pippad_expansion_bay_0001]";
+    expansionBay.displayName = "Pip-Pad Expansion Bay";
+    expansionBay.interaction = bunker::InteractionType::Terminal;
+    expansionBay.category = bunker::ObjectCategory::Terminal;
+    world.AddObject(expansionBay);
+
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+
+    const auto* moduleObject = world.FindObjectByRegistryId("[%bluelink_module_0001]");
+    const auto* bayObject = world.FindObjectByRegistryId("[%pippad_expansion_bay_0001]");
+    if (!Check(moduleObject != nullptr && bayObject != nullptr,
+            "bluelink runtime smoke expected synthetic module and expansion bay")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(moduleObject, world, player, profile, staticEraser, gameState);
+    if (!Check(!bunker::HasBlueLinkModule(profile) &&
+            !bunker::CanUsePipPadMediaIndex(profile) &&
+            gameState.lastEvent.find("Recover the Pip-Pad") != std::string::npos,
+            "bluelink_pickup_requires_pippad expected pickup to fail before Pip-Pad")) {
+        return false;
+    }
+
+    bunker::RecoverPipPad(profile);
+    bunker::HandleInteraction(moduleObject, world, player, profile, staticEraser, gameState);
+    if (!Check(profile.blueLinkModuleRecovered &&
+            !profile.blueLinkModuleInstalled &&
+            profile.pipPadExpansionCoverPresent &&
+            !bunker::CanUsePipPadMediaIndex(profile),
+            "bluelink_pickup_recovers_module_only expected recovered module without install")) {
+        return false;
+    }
+
+    bunker::SessionProfile installLockedProfile = bunker::MakeDefaultSessionProfile();
+    bunker::RecoverPipPad(installLockedProfile);
+    bunker::HandleInteraction(bayObject, world, player, installLockedProfile, staticEraser, gameState);
+    if (!Check(!bunker::IsBlueLinkInstalled(installLockedProfile) &&
+            !bunker::CanUsePipPadMediaIndex(installLockedProfile) &&
+            installLockedProfile.pipPadExpansionCoverPresent,
+            "bluelink_install_requires_recovered_module expected install lock before module pickup")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(bayObject, world, player, profile, staticEraser, gameState);
+    if (!Check(profile.blueLinkModuleRecovered &&
+            profile.blueLinkModuleInstalled &&
+            !profile.pipPadExpansionCoverPresent &&
+            bunker::CanUsePipPadMediaIndex(profile),
+            "bluelink_install_unlocks_media_index_runtime expected runtime install to unlock media index")) {
+        return false;
+    }
+
+    return Check(!profile.story.archiveRecovered &&
+            !profile.story.relayRecovered &&
+            !profile.story.returnedToBase,
+            "bluelink_install_does_not_unlock_map_or_story_data expected no synthetic story/map unlocks");
+}
+
 bool RunBt72CraneRestorationContractSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     profile.firstPlayableRoute.bt72HullInspected = true;
@@ -5523,6 +5594,7 @@ int main() {
         RunRuntimeCameraSmoke() &&
         RunPipDeviceCapabilityContractSmoke() &&
         RunBlueLinkExpansionModuleContractSmoke() &&
+        RunBlueLinkRuntimeInteractionSmoke() &&
         RunBt72CraneRestorationContractSmoke() &&
         RunPipPadAccessGatingSmoke();
 

@@ -5605,6 +5605,41 @@ void HandleInteraction(const MapObject* nearest,
         return;
     }
 
+    if (nearest->registryId == "[%bluelink_module_0001]") {
+        if (!HasPipPad(profile)) {
+            gameState.lastEvent = "BlueLink module handshake rejected. Recover the Pip-Pad before collecting field media modules.";
+            return;
+        }
+        if (profile.blueLinkModuleRecovered) {
+            gameState.lastEvent = "BlueLink Media Module already recovered. Install it through the Pip-Pad expansion bay.";
+            return;
+        }
+        profile.blueLinkModuleRecovered = true;
+        gameState.lastEvent = "BlueLink Media Module recovered. Pip-Pad media index remains locked until the expansion bay cover is removed and the module is installed.";
+        return;
+    }
+
+    if (nearest->registryId == "[%pippad_expansion_bay_0001]") {
+        if (!HasPipPad(profile)) {
+            gameState.lastEvent = "Pip-Pad expansion bay unavailable. Recover the Pip-Pad first.";
+            return;
+        }
+        if (!HasBlueLinkModule(profile)) {
+            gameState.lastEvent = "Pip-Pad expansion bay still has its dummy cover. Recover the BlueLink Media Module before installation.";
+            return;
+        }
+        if (IsBlueLinkInstalled(profile)) {
+            gameState.lastEvent = "BlueLink Media Module already installed. Media index is available.";
+            return;
+        }
+        if (InstallBlueLinkModule(profile)) {
+            gameState.lastEvent = "BlueLink Media Module installed. Media index, audio, transcript, and translation channels are now available for recovered media.";
+        } else {
+            gameState.lastEvent = "BlueLink installation failed. Check Pip-Pad recovery and module state.";
+        }
+        return;
+    }
+
     if (nearest->registryId == "[%archive_0001]") {
         if (!profile.firstPlayableRoute.accessCardRecovered) {
             gameState.lastEvent = "Archive wing is still under a dead mechanical interlock. Recover a bunker access card first.";
