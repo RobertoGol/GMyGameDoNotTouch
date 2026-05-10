@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <string_view>
 
@@ -564,6 +565,34 @@ bool ObjectContainsPoint(const MapObject& object, float x, float y, float paddin
         x <= object.x + object.width * 0.5f + padding &&
         y >= object.y - object.depth * 0.5f - padding &&
         y <= object.y + object.depth * 0.5f + padding;
+}
+
+bool ObjectIntersectsPlayerBounds(const MapObject& object, const PlayerState& player, float x, float y, float padding = 0.0f) {
+    const float halfWidth = player.collisionWidth * 0.5f + padding;
+    const float halfDepth = player.collisionDepth * 0.5f + padding;
+    const float objectHalfWidth = object.width * 0.5f + padding;
+    const float objectHalfDepth = object.depth * 0.5f + padding;
+    return std::abs(object.x - x) <= (objectHalfWidth + halfWidth) &&
+        std::abs(object.y - y) <= (objectHalfDepth + halfDepth);
+}
+
+bool BlocksPlayerMotion(const MapObject& object) {
+    if (!object.blocksMovement) {
+        return false;
+    }
+    switch (object.category) {
+        case ObjectCategory::Structure:
+        case ObjectCategory::Vehicle:
+        case ObjectCategory::Landmark:
+        case ObjectCategory::Container:
+        case ObjectCategory::Hangar:
+        case ObjectCategory::Hostile:
+            return true;
+        case ObjectCategory::ResourceNode:
+        case ObjectCategory::Terminal:
+            return object.blocksMovement;
+    }
+    return object.blocksMovement;
 }
 
 bool SegmentSamplesHitObject(const MapObject& object, float x1, float y1, float x2, float y2) {
@@ -2831,6 +2860,20 @@ bool HandleScriptTagInteraction(const MapObject* nearest,
 
 }  // namespace
 
+const char* RuntimeGamePhaseLabel(RuntimeGamePhase phase) {
+    switch (phase) {
+        case RuntimeGamePhase::MAIN_MENU:
+            return "Main Menu";
+        case RuntimeGamePhase::WORLD_LOADING:
+            return "World Loading";
+        case RuntimeGamePhase::ACTIVE_GAME:
+            return "Active Game";
+        case RuntimeGamePhase::UI_INTERACTION:
+            return "UI Interaction";
+    }
+    return "Unknown";
+}
+
 const char* TankIntegrityBand(float integrity) {
     if (integrity >= 85.0f) {
         return "Ready";
@@ -2878,6 +2921,67 @@ void AddInventoryItem(SessionProfile& profile, const std::string& itemId, int co
     }
 
     profile.character.inventory.push_back({itemId, count, weight});
+}
+
+int RollLootCount(const LootEntry& entry) {
+    const int minCount = std::max(1, entry.minCount);
+    const int maxCount = std::max(minCount, entry.maxCount);
+    if (maxCount == minCount) {
+        return minCount;
+    }
+    return minCount + (std::rand() % (maxCount - minCount + 1));
+}
+
+void AddLootEntryToInventory(SessionProfile& profile, const LootEntry& entry, float weight) {
+    if (entry.itemId.empty()) {
+        return;
+    }
+    AddInventoryItem(profile, entry.itemId, RollLootCount(entry), weight);
+}
+
+void GrantContainerLoot(SessionProfile& profile, const MapObject& object, float inventoryWeight) {
+    if (object.lootEntries.empty()) {
+        for (const auto& lootId : object.manualLootIds) {
+            if (!lootId.empty()) {
+                AddInventoryItem(profile, lootId, 1, inventoryWeight);
+            }
+        }
+        return;
+    }
+
+    if (object.lootMode == LootMode::RandomTable) {
+        float totalWeight = 0.0f;
+        const LootEntry* lastValidEntry = nullptr;
+        for (const auto& entry : object.lootEntries) {
+            if (!entry.itemId.empty() && entry.weight > 0.0f) {
+                totalWeight += entry.weight;
+                lastValidEntry = &entry;
+            }
+        }
+        if (totalWeight <= 0.0f) {
+            return;
+        }
+        const float roll = (static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX)) * totalWeight;
+        float cursor = 0.0f;
+        for (const auto& entry : object.lootEntries) {
+            if (entry.itemId.empty() || entry.weight <= 0.0f) {
+                continue;
+            }
+            cursor += entry.weight;
+            if (roll <= cursor) {
+                AddLootEntryToInventory(profile, entry, inventoryWeight);
+                return;
+            }
+        }
+        if (lastValidEntry != nullptr) {
+            AddLootEntryToInventory(profile, *lastValidEntry, inventoryWeight);
+        }
+        return;
+    }
+
+    for (const auto& entry : object.lootEntries) {
+        AddLootEntryToInventory(profile, entry, inventoryWeight);
+    }
 }
 
 bool HasInventoryItem(const SessionProfile& profile, const std::string& itemId) {
@@ -2954,6 +3058,43 @@ void AdvanceViewMode(PlayerState& player) {
             player.viewMode = ViewMode::FirstPerson;
             break;
     }
+}
+
+bool SweepMovePlayerAgainstWorld(const World& world, PlayerState& player, float deltaX, float deltaY) {
+    auto axisMoveAllowed = [&](float targetX, float targetY) {
+        const float searchRadius = std::max(player.collisionWidth, player.collisionDepth) + 1.8f;
+        if (const auto* nearest = world.FindNearestInteractive(targetX, targetY, searchRadius);
+            nearest != nullptr && BlocksPlayerMotion(*nearest) && ObjectIntersectsPlayerBounds(*nearest, player, targetX, targetY, 0.04f)) {
+            return false;
+        }
+
+        for (const auto& object : world.objects) {
+            if (!BlocksPlayerMotion(object) || object.interaction == InteractionType::Hostile) {
+                continue;
+            }
+            if (ObjectIntersectsPlayerBounds(object, player, targetX, targetY, 0.04f)) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    bool moved = false;
+    if (std::abs(deltaX) > 0.0001f) {
+        const float targetX = player.x + deltaX;
+        if (axisMoveAllowed(targetX, player.y)) {
+            player.x = targetX;
+            moved = true;
+        }
+    }
+    if (std::abs(deltaY) > 0.0001f) {
+        const float targetY = player.y + deltaY;
+        if (axisMoveAllowed(player.x, targetY)) {
+            player.y = targetY;
+            moved = true;
+        }
+    }
+    return moved;
 }
 
 void TryToggleBt72CrewSeat(PlayerState& player, SessionProfile& profile, GameState& gameState) {
@@ -5207,7 +5348,8 @@ void HandleInteraction(const MapObject* nearest,
     PlayerState& player,
     SessionProfile& profile,
     StaticEraser& staticEraser,
-    GameState& gameState) {
+    GameState& gameState,
+    const WorldExecutionContext* executionContext) {
     if (nearest == nullptr) {
         gameState.lastEvent = "No actionable target nearby.";
         return;
@@ -5418,9 +5560,7 @@ void HandleInteraction(const MapObject* nearest,
             return;
         }
         if (!profile.firstPlayableRoute.clearanceMaterialsRecovered) {
-            for (const auto& lootId : nearest->manualLootIds) {
-                AddInventoryItem(profile, lootId, 1, 0.4f);
-            }
+            GrantContainerLoot(profile, *nearest, 0.4f);
             profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
             gameState.lastEvent = "Bucket rack broken down into usable clearance parts. Bring BT-72 in for final install.";
             return;
@@ -5491,9 +5631,7 @@ void HandleInteraction(const MapObject* nearest,
             profile.partnerTank.energyReserve = std::max(0.0f, profile.partnerTank.energyReserve - tankEnergyCost);
             profile.partnerTank.damage.bucket = std::max(0.0f, profile.partnerTank.damage.bucket - 1.5f);
             if (mutableObject->health <= 0.0f) {
-                for (const auto& lootId : mutableObject->manualLootIds) {
-                    AddInventoryItem(profile, lootId, 1, 0.5f);
-                }
+                GrantContainerLoot(profile, *mutableObject, 0.5f);
                 staticEraser.Erase(mutableObject->registryId);
                 staticEraser.Save(profile.selectedWorld);
                 world.RemoveObject(mutableObject->registryId);
@@ -5619,6 +5757,13 @@ void HandleInteraction(const MapObject* nearest,
             break;
         case InteractionType::Terminal:
             AddCollectedTapeIfMissing(profile, nearest->registryId, nearest->displayName);
+            if (executionContext != nullptr) {
+                std::string bridgeStatus;
+                if (TryExecuteCompiledScript(*nearest, *executionContext, bridgeStatus)) {
+                    gameState.lastEvent = bridgeStatus;
+                    break;
+                }
+            }
             gameState.lastEvent = DescribeTerminalSync(*nearest);
             break;
         case InteractionType::Transition:
@@ -5702,12 +5847,7 @@ void HandleInteraction(const MapObject* nearest,
             break;
         }
         case InteractionType::Container:
-            for (const auto& lootId : nearest->manualLootIds) {
-                if (lootId.empty()) {
-                    continue;
-                }
-                AddInventoryItem(profile, lootId, 1, 0.4f);
-            }
+            GrantContainerLoot(profile, *nearest, 0.4f);
             staticEraser.Erase(nearest->registryId);
             staticEraser.Save(profile.selectedWorld);
             world.RemoveObject(nearest->registryId);
@@ -5716,6 +5856,13 @@ void HandleInteraction(const MapObject* nearest,
         case InteractionType::Resource:
         case InteractionType::VehicleAnchor:
         case InteractionType::Static:
+            if (executionContext != nullptr) {
+                std::string bridgeStatus;
+                if (TryExecuteCompiledScript(*nearest, *executionContext, bridgeStatus)) {
+                    gameState.lastEvent = bridgeStatus;
+                    break;
+                }
+            }
             if (!nearest->scriptTag.empty()) {
                 gameState.lastEvent = nearest->displayName + ": " + nearest->scriptTag;
             }

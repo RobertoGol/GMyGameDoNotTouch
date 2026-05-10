@@ -43,12 +43,14 @@ function(configure_bunker_target target_name)
 endfunction()
 
 add_executable(BunkerGame
+    src/GameExecution.cpp
     src/GameplayDescriptorRegistry.cpp
     src/GameRuntime.cpp
     src/GameRuntimePipPad.cpp
     src/LanlineServices.cpp
     src/LanlineSession.cpp
     src/LaunchSession.cpp
+    src/PrefabLibrary.cpp
     src/main.cpp
     src/Progression.cpp
     src/SessionProfiles.cpp
@@ -57,6 +59,7 @@ add_executable(BunkerGame
     src/StoryRoute.cpp
     src/WorldEvents.cpp
     src/World.cpp
+    src/WorldExport.cpp
     src/WorldSemanticAuthoring.cpp
     src/WorldValidation.cpp
     ${IMGUI_SRC}
@@ -93,6 +96,8 @@ configure_bunker_target(BunkerEditor)
 
 add_executable(BunkerSmokeChecks
     tests/SmokeChecks.cpp
+    Editor/src/EditorSupport.cpp
+    src/GameExecution.cpp
     src/GameRuntime.cpp
     src/GameRuntimePipPad.cpp
     src/PrefabLibrary.cpp

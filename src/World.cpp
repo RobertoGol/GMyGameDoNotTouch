@@ -9,6 +9,7 @@
 #include <fstream>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 
 namespace bunker {
 
@@ -34,6 +35,13 @@ void WriteString(std::ofstream& file, const std::string& value) {
     file.write(value.data(), static_cast<std::streamsize>(value.size()));
 }
 
+void WriteLootEntry(std::ofstream& file, const LootEntry& entry) {
+    WriteString(file, entry.itemId);
+    file.write(reinterpret_cast<const char*>(&entry.minCount), sizeof(entry.minCount));
+    file.write(reinterpret_cast<const char*>(&entry.maxCount), sizeof(entry.maxCount));
+    file.write(reinterpret_cast<const char*>(&entry.weight), sizeof(entry.weight));
+}
+
 bool ReadString(std::ifstream& file, std::string& value) {
     std::uint32_t length = 0;
     file.read(reinterpret_cast<char*>(&length), sizeof(length));
@@ -43,6 +51,16 @@ bool ReadString(std::ifstream& file, std::string& value) {
 
     value.resize(length);
     file.read(value.data(), static_cast<std::streamsize>(length));
+    return static_cast<bool>(file);
+}
+
+bool ReadLootEntry(std::ifstream& file, LootEntry& entry) {
+    if (!ReadString(file, entry.itemId)) {
+        return false;
+    }
+    file.read(reinterpret_cast<char*>(&entry.minCount), sizeof(entry.minCount));
+    file.read(reinterpret_cast<char*>(&entry.maxCount), sizeof(entry.maxCount));
+    file.read(reinterpret_cast<char*>(&entry.weight), sizeof(entry.weight));
     return static_cast<bool>(file);
 }
 
@@ -116,12 +134,61 @@ void AppendUniqueLayer(std::vector<std::string>& layers, std::string layerName) 
     }
 }
 
+float NormalizeDegrees(float value) {
+    value = std::fmod(value, 360.0f);
+    if (value < 0.0f) {
+        value += 360.0f;
+    }
+    return value;
+}
+
+void NormalizeLootEntry(LootEntry& entry) {
+    if (entry.minCount < 1) {
+        entry.minCount = 1;
+    }
+    if (entry.maxCount < entry.minCount) {
+        entry.maxCount = entry.minCount;
+    }
+    if (!std::isfinite(entry.weight) || entry.weight < 0.0f) {
+        entry.weight = 1.0f;
+    }
+}
+
+void TrimTrailingEmptyLootEntries(std::vector<LootEntry>& entries) {
+    while (!entries.empty() && entries.back().itemId.empty()) {
+        entries.pop_back();
+    }
+}
+
+void MigrateLegacyManualLoot(MapObject& object) {
+    if (!object.lootEntries.empty()) {
+        return;
+    }
+    for (const auto& lootId : object.manualLootIds) {
+        if (!lootId.empty()) {
+            object.lootEntries.push_back({lootId, 1, 1, 1.0f});
+        }
+    }
+}
+
 void NormalizeLoadedObject(MapObject& object) {
     object.scriptTag = std::string(NormalizeGameplayDescriptorTag(object.scriptTag));
     object.editorLayer = NormalizeEditorLayerName(object.editorLayer);
+    object.rotationX = NormalizeDegrees(object.rotationX);
+    object.rotationY = NormalizeDegrees(object.rotationY);
+    object.rotationZ = NormalizeDegrees(object.rotationZ);
     if (object.editorLayer.empty()) {
         object.editorLayer = DefaultEditorLayerName(object);
     }
+    MigrateLegacyManualLoot(object);
+    for (auto& entry : object.lootEntries) {
+        NormalizeLootEntry(entry);
+    }
+    TrimTrailingEmptyLootEntries(object.lootEntries);
+    if (object.lootMode != LootMode::ManualList && object.lootMode != LootMode::RandomTable) {
+        object.lootMode = LootMode::ManualList;
+    }
+    object.manualLoot = object.manualLoot || !object.lootEntries.empty();
 }
 
 bool LooksLikeLegacySemanticAutoAnchor(const MapObject& object) {
@@ -144,7 +211,7 @@ const char* WorldObjectReferenceFieldLabel(WorldObjectReferenceField field) {
 }
 
 const char* CurrentWorldBinaryFormatLabel() {
-    return "BWL5";
+    return "BWL7";
 }
 
 std::string NormalizeEditorLayerName(std::string_view layerName) {
@@ -222,11 +289,14 @@ bool World::Load(const std::string& path) {
     char header[4]{};
     file.read(header, 4);
     const std::string format(header, 4);
-    const bool hasExtendedObjectData = (format == "BWL2" || format == "BWL3" || format == "BWL4" || format == "BWL5");
-    const bool hasSemanticAuthoringState = (format == "BWL3" || format == "BWL4" || format == "BWL5");
-    const bool hasEditorLayerData = (format == "BWL4" || format == "BWL5");
-    const bool hasPrefabSourceData = (format == "BWL5");
-    if (format != "BWLD" && format != "BWL2" && format != "BWL3" && format != "BWL4" && format != "BWL5") {
+    const bool hasExtendedObjectData = (format == "BWL2" || format == "BWL3" || format == "BWL4" || format == "BWL5" || format == "BWL6" || format == "BWL7");
+    const bool hasSemanticAuthoringState = (format == "BWL3" || format == "BWL4" || format == "BWL5" || format == "BWL6" || format == "BWL7");
+    const bool hasEditorLayerData = (format == "BWL4" || format == "BWL5" || format == "BWL6" || format == "BWL7");
+    const bool hasPrefabSourceData = (format == "BWL5" || format == "BWL6" || format == "BWL7");
+    const bool hasObjectZData = (format != "BWLD");
+    const bool hasObjectRotationData = (format == "BWL6" || format == "BWL7");
+    const bool hasScalableLootData = (format == "BWL7");
+    if (format != "BWLD" && format != "BWL2" && format != "BWL3" && format != "BWL4" && format != "BWL5" && format != "BWL6" && format != "BWL7") {
         return false;
     }
 
@@ -271,7 +341,20 @@ bool World::Load(const std::string& path) {
         file.read(reinterpret_cast<char*>(&category), sizeof(category));
         file.read(reinterpret_cast<char*>(&object.x), sizeof(object.x));
         file.read(reinterpret_cast<char*>(&object.y), sizeof(object.y));
-        file.read(reinterpret_cast<char*>(&object.z), sizeof(object.z));
+        if (hasObjectZData) {
+            file.read(reinterpret_cast<char*>(&object.z), sizeof(object.z));
+        } else {
+            object.z = 0.0f;
+        }
+        if (hasObjectRotationData) {
+            file.read(reinterpret_cast<char*>(&object.rotationX), sizeof(object.rotationX));
+            file.read(reinterpret_cast<char*>(&object.rotationY), sizeof(object.rotationY));
+            file.read(reinterpret_cast<char*>(&object.rotationZ), sizeof(object.rotationZ));
+        } else {
+            object.rotationX = 0.0f;
+            object.rotationY = 0.0f;
+            object.rotationZ = 0.0f;
+        }
         file.read(reinterpret_cast<char*>(&object.width), sizeof(object.width));
         file.read(reinterpret_cast<char*>(&object.depth), sizeof(object.depth));
         file.read(reinterpret_cast<char*>(&object.height), sizeof(object.height));
@@ -294,6 +377,25 @@ bool World::Load(const std::string& path) {
         for (auto& lootId : object.manualLootIds) {
             if (!ReadString(file, lootId)) {
                 return false;
+            }
+        }
+        if (hasScalableLootData) {
+            std::uint32_t lootMode = 0;
+            std::uint32_t lootEntryCount = 0;
+            file.read(reinterpret_cast<char*>(&lootMode), sizeof(lootMode));
+            file.read(reinterpret_cast<char*>(&lootEntryCount), sizeof(lootEntryCount));
+            if (!file) {
+                return false;
+            }
+            object.lootMode = static_cast<LootMode>(lootMode);
+            object.lootEntries.clear();
+            object.lootEntries.reserve(lootEntryCount);
+            for (std::uint32_t lootIndex = 0; lootIndex < lootEntryCount; ++lootIndex) {
+                LootEntry entry;
+                if (!ReadLootEntry(file, entry)) {
+                    return false;
+                }
+                object.lootEntries.push_back(std::move(entry));
             }
         }
 
@@ -339,6 +441,9 @@ bool World::Save(const std::string& path) const {
         file.write(reinterpret_cast<const char*>(&object.x), sizeof(object.x));
         file.write(reinterpret_cast<const char*>(&object.y), sizeof(object.y));
         file.write(reinterpret_cast<const char*>(&object.z), sizeof(object.z));
+        file.write(reinterpret_cast<const char*>(&object.rotationX), sizeof(object.rotationX));
+        file.write(reinterpret_cast<const char*>(&object.rotationY), sizeof(object.rotationY));
+        file.write(reinterpret_cast<const char*>(&object.rotationZ), sizeof(object.rotationZ));
         file.write(reinterpret_cast<const char*>(&object.width), sizeof(object.width));
         file.write(reinterpret_cast<const char*>(&object.depth), sizeof(object.depth));
         file.write(reinterpret_cast<const char*>(&object.height), sizeof(object.height));
@@ -349,8 +454,25 @@ bool World::Save(const std::string& path) const {
         file.write(reinterpret_cast<const char*>(&object.semanticAutoCreated), sizeof(object.semanticAutoCreated));
         file.write(reinterpret_cast<const char*>(&object.semanticLayoutPinned), sizeof(object.semanticLayoutPinned));
 
-        for (const auto& lootId : object.manualLootIds) {
+        std::vector<LootEntry> persistedLootEntries = object.lootEntries;
+        TrimTrailingEmptyLootEntries(persistedLootEntries);
+
+        std::array<std::string, 4> legacyLootIds{};
+        for (std::size_t lootIndex = 0;
+             lootIndex < legacyLootIds.size() && lootIndex < persistedLootEntries.size();
+             ++lootIndex) {
+            legacyLootIds[lootIndex] = persistedLootEntries[lootIndex].itemId;
+        }
+        for (const auto& lootId : legacyLootIds) {
             WriteString(file, lootId);
+        }
+        const auto lootMode = static_cast<std::uint32_t>(object.lootMode);
+        file.write(reinterpret_cast<const char*>(&lootMode), sizeof(lootMode));
+        const auto lootEntryCount = static_cast<std::uint32_t>(persistedLootEntries.size());
+        file.write(reinterpret_cast<const char*>(&lootEntryCount), sizeof(lootEntryCount));
+        for (auto entry : persistedLootEntries) {
+            NormalizeLootEntry(entry);
+            WriteLootEntry(file, entry);
         }
     }
 

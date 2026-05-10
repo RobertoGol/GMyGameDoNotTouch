@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace bunker {
 
@@ -26,6 +28,20 @@ enum class ObjectCategory {
     Container,
     Hangar,
     Hostile
+};
+
+enum class LootMode : std::uint32_t {
+    ManualList = 0,
+    RandomTable = 1
+};
+
+struct LootEntry {
+    std::string itemId;
+    int minCount = 1;
+    int maxCount = 1;
+    float weight = 1.0f;
+
+    bool operator==(const LootEntry&) const = default;
 };
 
 struct MapObject {
@@ -53,6 +69,11 @@ struct MapObject {
     bool semanticAutoCreated = false;
     bool semanticLayoutPinned = false;
     std::string editorLayer;
+    float rotationX = 0.0f;
+    float rotationY = 0.0f;
+    float rotationZ = 0.0f;
+    LootMode lootMode = LootMode::ManualList;
+    std::vector<LootEntry> lootEntries;
 };
 
 }  // namespace bunker

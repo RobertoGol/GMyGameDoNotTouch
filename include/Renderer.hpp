@@ -20,6 +20,9 @@ struct PlayerState {
     float x = 0.0f;
     float y = 0.0f;
     float z = 0.0f;
+    float collisionWidth = 0.8f;
+    float collisionDepth = 0.8f;
+    float collisionHeight = 2.0f;
     float facingRadians = 0.0f;
     float speed = 8.0f;
     float velocityX = 0.0f;
