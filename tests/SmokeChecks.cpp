@@ -28,6 +28,7 @@
 #include <initializer_list>
 #include <iostream>
 #include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -5940,6 +5941,80 @@ bool RunBt72ServiceNotesAndPatchRuntimeSmoke() {
             "bt72_service_material_pickups_are_idempotent expected stable duplicate interactions");
 }
 
+const std::vector<std::string>& RequiredFirstRouteRuntimeObjectIds() {
+    static const std::vector<std::string> ids = {
+        "[%cryo_0001]",
+        "[%core_0001]",
+        "[%pip_0001]",
+        "[%archive_0001]",
+        "[%garage_0001]",
+        "[#tr_hull_0001]",
+        "[%bluelink_module_0001]",
+        "[%pippad_expansion_bay_0001]",
+        "[%hangar_power_0001]",
+        "[%bt72_crane_control_0001]",
+        "[%bt72_crane_path_0001]",
+        "[%bt72_crane_hook_0001]",
+        "[%bt72_service_lift_0001]",
+        "[%bt72_service_notes_0001]",
+        "[%bt72_repair_patch_0001]",
+    };
+    return ids;
+}
+
+const std::vector<std::string>& V940StarterRouteRuntimeObjectIds() {
+    static const std::vector<std::string> ids = {
+        "[%bluelink_module_0001]",
+        "[%pippad_expansion_bay_0001]",
+        "[%hangar_power_0001]",
+        "[%bt72_crane_control_0001]",
+        "[%bt72_crane_path_0001]",
+        "[%bt72_crane_hook_0001]",
+        "[%bt72_service_lift_0001]",
+        "[%bt72_service_notes_0001]",
+        "[%bt72_repair_patch_0001]",
+    };
+    return ids;
+}
+
+bool HasRequiredFirstRouteRuntimeObjects(const bunker::World& world) {
+    return std::all_of(RequiredFirstRouteRuntimeObjectIds().begin(),
+        RequiredFirstRouteRuntimeObjectIds().end(),
+        [&](const std::string& registryId) {
+            return world.FindObjectByRegistryId(registryId) != nullptr;
+        });
+}
+
+bool HasV940StarterRouteRuntimeObjects(const bunker::World& world) {
+    return std::all_of(V940StarterRouteRuntimeObjectIds().begin(),
+        V940StarterRouteRuntimeObjectIds().end(),
+        [&](const std::string& registryId) {
+            return world.FindObjectByRegistryId(registryId) != nullptr;
+        });
+}
+
+bool StarterRouteRuntimeObjectTypesMatch(const bunker::World& world) {
+    const auto hasTypedObject = [&](const std::string& registryId,
+                                    bunker::InteractionType interaction,
+                                    bunker::ObjectCategory category) {
+        const auto* object = world.FindObjectByRegistryId(registryId);
+        return object != nullptr &&
+            object->interaction == interaction &&
+            object->category == category;
+    };
+
+    return hasTypedObject("[%bluelink_module_0001]", bunker::InteractionType::Container, bunker::ObjectCategory::Container) &&
+        hasTypedObject("[%pippad_expansion_bay_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%hangar_power_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%bt72_crane_control_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%bt72_crane_path_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%bt72_crane_hook_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%bt72_service_lift_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%bt72_service_notes_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%bt72_repair_patch_0001]", bunker::InteractionType::Container, bunker::ObjectCategory::Container) &&
+        hasTypedObject("[#tr_hull_0001]", bunker::InteractionType::VehicleAnchor, bunker::ObjectCategory::Vehicle);
+}
+
 bool RunStarterWorldFirstRouteObjectAvailabilitySmoke() {
     bunker::World world;
     world.GeneratePrototypeZone();
@@ -6074,6 +6149,168 @@ bool RunStarterWorldFirstPlayableRouteSmoke() {
             player.viewMode == bunker::ViewMode::Cockpit &&
             bunker::CurrentStoryObjectivePreview(profile).find("Restore BT-72") == std::string::npos,
             "starter_world_e2e_bt72_restored_and_linked expected cockpit link and advanced objective");
+}
+
+bool RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() {
+    const fs::path tempRoot = fs::current_path() / "starter_world_route_persistence_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "starter_world_route_objects_persist_after_save_load failed to create temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    if (!Check(world.IsStarterScenarioWorld(),
+            "starter_world_route_objects_persist_after_save_load expected generated starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path worldPath = tempRoot / "starter_route_persistence.bwld";
+    if (!Check(world.Save(worldPath.string()),
+            "starter_world_route_objects_persist_after_save_load failed to save starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(worldPath.string()),
+            "starter_world_route_objects_persist_after_save_load failed to load starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+
+    const bool ok = Check(loadedWorld.IsStarterScenarioWorld() &&
+            HasRequiredFirstRouteRuntimeObjects(loadedWorld),
+            "starter_world_route_objects_persist_after_save_load expected all first route objects") &&
+        Check(StarterRouteRuntimeObjectTypesMatch(loadedWorld),
+            "starter_world_route_object_types_persist_after_save_load expected route object interaction types");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() {
+    bunker::World legacyWorld;
+    legacyWorld.GeneratePrototypeZone();
+    for (const auto& registryId : V940StarterRouteRuntimeObjectIds()) {
+        legacyWorld.RemoveObject(registryId);
+    }
+
+    if (!Check(legacyWorld.IsStarterScenarioWorld() &&
+            !HasV940StarterRouteRuntimeObjects(legacyWorld),
+            "legacy_starter_world_missing_v940_objects_before_upgrade expected removed v9.40 route objects")) {
+        return false;
+    }
+
+    legacyWorld.EnsureStarterInfrastructure();
+    if (!Check(HasV940StarterRouteRuntimeObjects(legacyWorld),
+            "legacy_starter_world_gets_v940_route_infrastructure expected EnsureStarterInfrastructure to restore v9.40 objects")) {
+        return false;
+    }
+
+    const auto objectCountAfterUpgrade = legacyWorld.objects.size();
+    legacyWorld.EnsureStarterInfrastructure();
+    return Check(legacyWorld.objects.size() == objectCountAfterUpgrade,
+            "starter_infrastructure_upgrade_is_idempotent expected second infrastructure pass not to duplicate objects");
+}
+
+bool RunLoadedStarterWorldFirstPlayableRouteSmoke() {
+    const fs::path tempRoot = fs::current_path() / "loaded_starter_world_route_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "loaded_starter_world_route_remains_playable_after_save_load failed to create temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    const fs::path worldPath = tempRoot / "starter_route_playable.bwld";
+    if (!Check(world.Save(worldPath.string()),
+            "loaded_starter_world_route_remains_playable_after_save_load failed to save starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(worldPath.string()),
+            "loaded_starter_world_route_remains_playable_after_save_load failed to load starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+    if (!Check(loadedWorld.IsStarterScenarioWorld() &&
+            HasRequiredFirstRouteRuntimeObjects(loadedWorld),
+            "loaded_starter_world_route_remains_playable_after_save_load expected loaded starter route objects")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    auto objectById = [&](const std::string& registryId) {
+        return loadedWorld.FindObjectByRegistryId(registryId);
+    };
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(objectById("[%cryo_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pip_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bluelink_module_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pippad_expansion_bay_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%archive_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%garage_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    if (!Check(profile.story.archiveRecovered &&
+            profile.firstPlayableRoute.bt72HullInspected &&
+            profile.firstPlayableRoute.bt72CoreRecovered &&
+            profile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            bunker::HasInventoryItem(profile, "power_cell") &&
+            bunker::HasInventoryItem(profile, "old_plate") &&
+            bunker::HasInventoryItem(profile, "repair_patch"),
+            "loaded_starter_world_route_remains_playable_after_save_load expected archive, BT-72 knowledge, and materials before restore")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::HandleInteraction(objectById("[%hangar_power_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_control_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_path_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_hook_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_lift_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+
+    const bool ok = Check(bunker::HasPipPad(profile) &&
+            bunker::IsBlueLinkInstalled(profile) &&
+            bunker::CanUsePipPadMediaIndex(profile),
+            "loaded_starter_world_route_remains_playable_after_save_load expected Pip-Pad and BlueLink after load") &&
+        Check(profile.story.archiveRecovered,
+            "loaded_starter_world_route_remains_playable_after_save_load expected archive after load") &&
+        Check(profile.firstPlayableRoute.bt72HullInspected &&
+                profile.firstPlayableRoute.bt72CoreRecovered &&
+                profile.firstPlayableRoute.bt72ServiceNotesRecovered,
+            "loaded_starter_world_route_remains_playable_after_save_load expected BT-72 knowledge after load") &&
+        Check(profile.bt72HullLockedInRestorationCradle,
+            "loaded_starter_world_route_remains_playable_after_save_load expected cradle after load") &&
+        Check(profile.firstPlayableRoute.bt72Restored,
+            "loaded_starter_world_route_remains_playable_after_save_load expected BT-72 restore after load") &&
+        Check(player.insideTank &&
+                profile.story.tankLinked &&
+                bunker::CurrentStoryObjectivePreview(profile).find("Restore BT-72") == std::string::npos,
+            "loaded_starter_world_route_remains_playable_after_save_load expected cockpit link and advanced objective after load");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
 }
 
 bool RunFirstPlayableRouteEndToEndSmoke() {
@@ -6434,6 +6671,9 @@ int main() {
         RunBt72ServiceNotesAndPatchRuntimeSmoke() &&
         RunStarterWorldFirstRouteObjectAvailabilitySmoke() &&
         RunStarterWorldFirstPlayableRouteSmoke() &&
+        RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() &&
+        RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() &&
+        RunLoadedStarterWorldFirstPlayableRouteSmoke() &&
         RunFirstPlayableRouteEndToEndSmoke() &&
         RunPipPadAccessGatingSmoke();
 
