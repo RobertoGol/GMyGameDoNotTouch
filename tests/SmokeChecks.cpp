@@ -455,6 +455,11 @@ bool RunFirstPlayableRouteStorySmoke() {
     profile.firstPlayableRoute.bt72HullInspected = true;
     profile.firstPlayableRoute.bt72CoreRecovered = true;
     profile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    profile.hangarPowerRestored = true;
+    profile.bt72CraneControlOnline = true;
+    profile.bt72CranePathClear = true;
+    profile.bt72HullMovedToServiceLift = true;
+    profile.bt72HullLockedInRestorationCradle = true;
     profile.character.inventory.push_back({"power_cell", 1, 0.3f});
     profile.character.inventory.push_back({"repair_patch", 1, 0.2f});
     profile.character.inventory.push_back({"old_plate", 1, 0.5f});
@@ -5261,6 +5266,88 @@ bool RunBlueLinkExpansionModuleContractSmoke() {
     return ok;
 }
 
+bool RunBt72CraneRestorationContractSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.firstPlayableRoute.bt72HullInspected = true;
+
+    if (!Check(!bunker::CanAttachBt72HullToCrane(profile) &&
+            !bunker::AttachBt72HullToCrane(profile),
+            "bt72_crane_requires_hangar_power expected crane attach to require hangar power")) {
+        return false;
+    }
+
+    profile.hangarPowerRestored = true;
+    profile.bt72CraneControlOnline = true;
+    if (!Check(!bunker::CanAttachBt72HullToCrane(profile) &&
+            !bunker::AttachBt72HullToCrane(profile),
+            "bt72_hull_requires_crane_path_clear expected blocked crane path to prevent attach")) {
+        return false;
+    }
+
+    profile.bt72CranePathClear = true;
+    if (!Check(bunker::CanAttachBt72HullToCrane(profile) &&
+            bunker::AttachBt72HullToCrane(profile) &&
+            bunker::CanMoveBt72HullToServiceLift(profile) &&
+            bunker::MoveBt72HullToServiceLift(profile) &&
+            profile.bt72HullMovedToServiceLift &&
+            profile.bt72HullLockedInRestorationCradle,
+            "bt72_hull_moved_to_service_lift_before_core_install expected crane transfer to lock cradle")) {
+        return false;
+    }
+
+    bunker::SessionProfile blockedCoreProfile = bunker::MakeDefaultSessionProfile();
+    blockedCoreProfile.firstPlayableRoute.bt72HullInspected = true;
+    blockedCoreProfile.firstPlayableRoute.bt72CoreRecovered = true;
+    blockedCoreProfile.hangarPowerRestored = true;
+    blockedCoreProfile.bt72CraneControlOnline = true;
+    blockedCoreProfile.bt72CranePathClear = true;
+    if (!Check(!bunker::CanInstallBt72Core(blockedCoreProfile),
+            "bt72_core_install_locked_until_restoration_cradle expected core install lock before cradle")) {
+        return false;
+    }
+
+    profile.firstPlayableRoute.bt72CoreRecovered = true;
+    if (!Check(bunker::CanInstallBt72Core(profile) &&
+            !bunker::CanCompleteBt72StagedRestoration(profile),
+            "bt72_staged_restoration_requires_service_notes expected service notes to gate final restoration")) {
+        return false;
+    }
+    profile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    if (!Check(bunker::CanCompleteBt72StagedRestoration(profile),
+            "bt72_staged_restoration_requires_service_notes expected staged restoration after notes")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "bt72_crane_contract_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "bt72 crane smoke failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "bt72 crane smoke failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "bt72 crane smoke failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    const bool ok = Check(loadedProfile.hangarPowerRestored &&
+            loadedProfile.bt72CraneControlOnline &&
+            loadedProfile.bt72CranePathClear &&
+            loadedProfile.bt72HullMovedToServiceLift &&
+            loadedProfile.bt72HullLockedInRestorationCradle &&
+            bunker::CanCompleteBt72StagedRestoration(loadedProfile),
+            "bt72 crane smoke expected crane restoration flags to persist");
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunPipPadAccessGatingSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     bunker::PlayerState player;
@@ -5436,6 +5523,7 @@ int main() {
         RunRuntimeCameraSmoke() &&
         RunPipDeviceCapabilityContractSmoke() &&
         RunBlueLinkExpansionModuleContractSmoke() &&
+        RunBt72CraneRestorationContractSmoke() &&
         RunPipPadAccessGatingSmoke();
 
     fs::remove_all(sandboxRoot, ec);

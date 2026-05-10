@@ -7,7 +7,7 @@ namespace bunker {
 namespace {
 
 constexpr char kSessionProfileFormat[] = "BPF1";
-constexpr int kCurrentSessionProfileVersion = 10;
+constexpr int kCurrentSessionProfileVersion = 11;
 
 bool HasInventoryEntry(const SessionProfile& profile, const std::string& itemId) {
     return std::any_of(
@@ -215,6 +215,14 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     } else {
         profile.pipPadExpansionCoverPresent = true;
     }
+    if (profile.firstPlayableRoute.bt72Restored || profile.story.tankLinked || profile.story.bucketRecovered) {
+        profile.hangarPowerRestored = true;
+        profile.bt72CraneControlOnline = true;
+        profile.bt72CranePathClear = true;
+        profile.bt72HullAttachedToCrane = false;
+        profile.bt72HullMovedToServiceLift = true;
+        profile.bt72HullLockedInRestorationCradle = true;
+    }
     if (const auto* selectedWorldState = FindWorldFieldState(profile, profile.selectedWorld); selectedWorldState != nullptr) {
         if (!selectedWorldState->towerSyncRecovered) {
             profile.lanlineServices.serviceHubKnown = false;
@@ -327,6 +335,12 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
     out << "pippad_expansion_cover_present=" << (profile.pipPadExpansionCoverPresent ? 1 : 0) << '\n';
     out << "bluelink_module_recovered=" << (profile.blueLinkModuleRecovered ? 1 : 0) << '\n';
     out << "bluelink_module_installed=" << (profile.blueLinkModuleInstalled ? 1 : 0) << '\n';
+    out << "hangar_power_restored=" << (profile.hangarPowerRestored ? 1 : 0) << '\n';
+    out << "bt72_crane_control_online=" << (profile.bt72CraneControlOnline ? 1 : 0) << '\n';
+    out << "bt72_crane_path_clear=" << (profile.bt72CranePathClear ? 1 : 0) << '\n';
+    out << "bt72_hull_attached_to_crane=" << (profile.bt72HullAttachedToCrane ? 1 : 0) << '\n';
+    out << "bt72_hull_moved_to_service_lift=" << (profile.bt72HullMovedToServiceLift ? 1 : 0) << '\n';
+    out << "bt72_hull_locked_in_restoration_cradle=" << (profile.bt72HullLockedInRestorationCradle ? 1 : 0) << '\n';
     out << "partner_tank_id=" << profile.partnerTank.partnerTankId << '\n';
     out << "partner_tank_callsign=" << profile.partnerTank.callSign << '\n';
     out << "partner_tank_class=" << static_cast<int>(profile.partnerTank.tankClass) << '\n';
@@ -534,6 +548,12 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         else if (key == "pippad_expansion_cover_present" || key == "pip_pad_expansion_cover_present") outProfile.pipPadExpansionCoverPresent = (std::stoi(value) != 0);
         else if (key == "bluelink_module_recovered") outProfile.blueLinkModuleRecovered = (std::stoi(value) != 0);
         else if (key == "bluelink_module_installed") outProfile.blueLinkModuleInstalled = (std::stoi(value) != 0);
+        else if (key == "hangar_power_restored") outProfile.hangarPowerRestored = (std::stoi(value) != 0);
+        else if (key == "bt72_crane_control_online") outProfile.bt72CraneControlOnline = (std::stoi(value) != 0);
+        else if (key == "bt72_crane_path_clear") outProfile.bt72CranePathClear = (std::stoi(value) != 0);
+        else if (key == "bt72_hull_attached_to_crane") outProfile.bt72HullAttachedToCrane = (std::stoi(value) != 0);
+        else if (key == "bt72_hull_moved_to_service_lift") outProfile.bt72HullMovedToServiceLift = (std::stoi(value) != 0);
+        else if (key == "bt72_hull_locked_in_restoration_cradle") outProfile.bt72HullLockedInRestorationCradle = (std::stoi(value) != 0);
         else if (key == "partner_tank_id") outProfile.partnerTank.partnerTankId = value;
         else if (key == "partner_tank_callsign") outProfile.partnerTank.callSign = value;
         else if (key == "partner_tank_class") outProfile.partnerTank.tankClass = static_cast<TankClass>(std::stoi(value));

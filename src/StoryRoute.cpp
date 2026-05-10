@@ -45,6 +45,10 @@ bool Bt72ServiceNotesRecovered(const SessionProfile& profile) {
         HasCollectedTapeId(profile, "bt72_service_reel_001");
 }
 
+bool Bt72HullLockedInRestorationCradle(const SessionProfile& profile) {
+    return profile.bt72HullLockedInRestorationCradle || profile.story.tankLinked || profile.story.bucketRecovered;
+}
+
 bool Bt72Restored(const SessionProfile& profile) {
     return profile.firstPlayableRoute.bt72Restored || profile.story.tankLinked || profile.story.bucketRecovered;
 }
@@ -102,7 +106,10 @@ bool DebriefSummaryViewed(const SessionProfile& profile) {
 }
 
 bool HasBt72RestorationPrerequisites(const SessionProfile& profile) {
-    return Bt72HullInspected(profile) && Bt72CoreRecovered(profile) && Bt72ServiceNotesRecovered(profile);
+    return Bt72HullInspected(profile) &&
+        Bt72HullLockedInRestorationCradle(profile) &&
+        Bt72CoreRecovered(profile) &&
+        Bt72ServiceNotesRecovered(profile);
 }
 
 bool HasBt72RestorationMaterials(const SessionProfile& profile) {

@@ -415,6 +415,12 @@ struct SessionProfile {
     bool pipPadExpansionCoverPresent = true;
     bool blueLinkModuleRecovered = false;
     bool blueLinkModuleInstalled = false;
+    bool hangarPowerRestored = false;
+    bool bt72CraneControlOnline = false;
+    bool bt72CranePathClear = false;
+    bool bt72HullAttachedToCrane = false;
+    bool bt72HullMovedToServiceLift = false;
+    bool bt72HullLockedInRestorationCradle = false;
     FirstPlayableRouteProgress firstPlayableRoute{};
     StoryProgress story{};
 };

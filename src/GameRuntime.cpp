@@ -1965,7 +1965,8 @@ int CountBt72RestorationMilestones(const SessionProfile& profile) {
 }
 
 bool HasBt72RestorationPrerequisites(const SessionProfile& profile) {
-    return CountBt72RestorationMilestones(profile) == 3;
+    return CountBt72RestorationMilestones(profile) == 3 &&
+        CanCompleteBt72StagedRestoration(profile);
 }
 
 bool HasBt72RestorationMaterials(const SessionProfile& profile) {
@@ -2000,6 +2001,9 @@ std::string DescribeBt72RestorationNeeds(const SessionProfile& profile) {
     }
     if (!profile.firstPlayableRoute.bt72ServiceNotesRecovered) {
         missing.push_back("service notes");
+    }
+    if (!profile.bt72HullLockedInRestorationCradle) {
+        missing.push_back("crane lift cradle");
     }
     if (!missing.empty()) {
         return "BT-72 restoration is missing: " + JoinMissingRouteLabels(missing) + ".";
@@ -3044,6 +3048,54 @@ bool TryConsumeFieldRation(SessionProfile& profile, GameState& gameState) {
     gameState.rationIntelligencePenalty = 1;
     gameState.lastEvent = "Old ration consumed. Toxic boost applied: +2 STR, -1 INT for a while.";
     return true;
+}
+
+bool CanAttachBt72HullToCrane(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.bt72HullInspected &&
+        profile.hangarPowerRestored &&
+        profile.bt72CraneControlOnline &&
+        profile.bt72CranePathClear &&
+        !profile.bt72HullMovedToServiceLift &&
+        !profile.bt72HullLockedInRestorationCradle;
+}
+
+bool AttachBt72HullToCrane(SessionProfile& profile) {
+    if (!CanAttachBt72HullToCrane(profile)) {
+        return false;
+    }
+    profile.bt72HullAttachedToCrane = true;
+    return true;
+}
+
+bool CanMoveBt72HullToServiceLift(const SessionProfile& profile) {
+    return profile.bt72HullAttachedToCrane &&
+        profile.hangarPowerRestored &&
+        profile.bt72CraneControlOnline &&
+        profile.bt72CranePathClear &&
+        !profile.bt72HullMovedToServiceLift &&
+        !profile.bt72HullLockedInRestorationCradle;
+}
+
+bool MoveBt72HullToServiceLift(SessionProfile& profile) {
+    if (!CanMoveBt72HullToServiceLift(profile)) {
+        return false;
+    }
+    profile.bt72HullAttachedToCrane = false;
+    profile.bt72HullMovedToServiceLift = true;
+    profile.bt72HullLockedInRestorationCradle = true;
+    return true;
+}
+
+bool CanInstallBt72Core(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.bt72CoreRecovered &&
+        profile.bt72HullMovedToServiceLift &&
+        profile.bt72HullLockedInRestorationCradle;
+}
+
+bool CanCompleteBt72StagedRestoration(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.bt72HullInspected &&
+        CanInstallBt72Core(profile) &&
+        profile.firstPlayableRoute.bt72ServiceNotesRecovered;
 }
 
 PipDeviceCapabilities GetPipDeviceCapabilities(PipDeviceModel model) {
