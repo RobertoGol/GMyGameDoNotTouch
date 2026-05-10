@@ -2,9 +2,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <utility>
 
 #include "../include/AppPaths.hpp"
 
@@ -96,6 +99,28 @@ std::string NormalizeTargetType(std::string_view value) {
     return {};
 }
 
+float NormalizeDegrees(float value) {
+    value = std::fmod(value, 360.0f);
+    if (value < 0.0f) {
+        value += 360.0f;
+    }
+    return value;
+}
+
+void NormalizeLootEntry(LootEntry& entry) {
+    entry.minCount = std::max(1, entry.minCount);
+    entry.maxCount = std::max(entry.minCount, entry.maxCount);
+    if (!std::isfinite(entry.weight) || entry.weight < 0.0f) {
+        entry.weight = 1.0f;
+    }
+}
+
+void TrimTrailingEmptyLootEntries(std::vector<LootEntry>& entries) {
+    while (!entries.empty() && entries.back().itemId.empty()) {
+        entries.pop_back();
+    }
+}
+
 bool ReadOptionalQuotedString(std::istringstream& lineStream, std::string& value) {
     std::streampos originalPos = lineStream.tellg();
     std::string parsedValue;
@@ -164,9 +189,28 @@ void NormalizePrefabRecord(PrefabRecord& prefab) {
     }
 
     prefab.object.editorLayer = NormalizeEditorLayerName(prefab.object.editorLayer);
+    prefab.object.rotationX = NormalizeDegrees(prefab.object.rotationX);
+    prefab.object.rotationY = NormalizeDegrees(prefab.object.rotationY);
+    prefab.object.rotationZ = NormalizeDegrees(prefab.object.rotationZ);
     if (prefab.object.editorLayer.empty()) {
         prefab.object.editorLayer = DefaultEditorLayerName(prefab.object);
     }
+
+    if (prefab.object.lootMode != LootMode::ManualList && prefab.object.lootMode != LootMode::RandomTable) {
+        prefab.object.lootMode = LootMode::ManualList;
+    }
+    if (prefab.object.lootEntries.empty()) {
+        for (const auto& lootId : prefab.object.manualLootIds) {
+            if (!lootId.empty()) {
+                prefab.object.lootEntries.push_back({lootId, 1, 1, 1.0f});
+            }
+        }
+    }
+    for (auto& entry : prefab.object.lootEntries) {
+        NormalizeLootEntry(entry);
+    }
+    TrimTrailingEmptyLootEntries(prefab.object.lootEntries);
+    prefab.object.manualLoot = prefab.object.manualLoot || !prefab.object.lootEntries.empty();
 }
 
 int FindPrefabRecordIndexById(const std::vector<PrefabRecord>& prefabs, std::string_view prefabId) {
@@ -244,9 +288,26 @@ bool LoadPrefabLibrary(std::vector<PrefabRecord>& prefabs) {
         return false;
     }
 
+    bool prefabLinesHaveZ = true;
+    bool prefabLinesHaveRotation = false;
+    bool prefabLinesHaveScalableLoot = false;
     std::string line;
     while (std::getline(file, line)) {
-        if (line.empty() || line.starts_with('#')) {
+        if (line.empty()) {
+            continue;
+        }
+        if (line.starts_with('#')) {
+            if (line.find("BUNKER_PREFABS_V") != std::string::npos) {
+                prefabLinesHaveZ =
+                    line.find("BUNKER_PREFABS_V4") != std::string::npos ||
+                    line.find("BUNKER_PREFABS_V5") != std::string::npos ||
+                    line.find("BUNKER_PREFABS_V6") != std::string::npos;
+                prefabLinesHaveRotation =
+                    line.find("BUNKER_PREFABS_V5") != std::string::npos ||
+                    line.find("BUNKER_PREFABS_V6") != std::string::npos;
+                prefabLinesHaveScalableLoot =
+                    line.find("BUNKER_PREFABS_V6") != std::string::npos;
+            }
             continue;
         }
 
@@ -274,16 +335,51 @@ bool LoadPrefabLibrary(std::vector<PrefabRecord>& prefabs) {
         if (!(lineStream >> interaction
                 >> category
                 >> prefab.object.x
-                >> prefab.object.y
-                >> prefab.object.z
-                >> prefab.object.width
-                >> prefab.object.depth
-                >> prefab.object.height
-                >> prefab.object.health
-                >> prefab.object.blocksMovement
-                >> prefab.object.discovered
-                >> prefab.object.manualLoot)) {
+                >> prefab.object.y)) {
             return false;
+        }
+        if (prefabLinesHaveRotation) {
+            if (!(lineStream >> prefab.object.z
+                    >> prefab.object.rotationX
+                    >> prefab.object.rotationY
+                    >> prefab.object.rotationZ
+                    >> prefab.object.width
+                    >> prefab.object.depth
+                    >> prefab.object.height
+                    >> prefab.object.health
+                    >> prefab.object.blocksMovement
+                    >> prefab.object.discovered
+                    >> prefab.object.manualLoot)) {
+                return false;
+            }
+        } else if (prefabLinesHaveZ) {
+            if (!(lineStream >> prefab.object.z
+                    >> prefab.object.width
+                    >> prefab.object.depth
+                    >> prefab.object.height
+                    >> prefab.object.health
+                    >> prefab.object.blocksMovement
+                    >> prefab.object.discovered
+                    >> prefab.object.manualLoot)) {
+                return false;
+            }
+            prefab.object.rotationX = 0.0f;
+            prefab.object.rotationY = 0.0f;
+            prefab.object.rotationZ = 0.0f;
+        } else {
+            prefab.object.z = 0.0f;
+            prefab.object.rotationX = 0.0f;
+            prefab.object.rotationY = 0.0f;
+            prefab.object.rotationZ = 0.0f;
+            if (!(lineStream >> prefab.object.width
+                    >> prefab.object.depth
+                    >> prefab.object.height
+                    >> prefab.object.health
+                    >> prefab.object.blocksMovement
+                    >> prefab.object.discovered
+                    >> prefab.object.manualLoot)) {
+                return false;
+            }
         }
 
         prefab.object.interaction = static_cast<InteractionType>(interaction);
@@ -304,6 +400,34 @@ bool LoadPrefabLibrary(std::vector<PrefabRecord>& prefabs) {
         for (auto& lootId : prefab.object.manualLootIds) {
             if (!(lineStream >> std::quoted(lootId))) {
                 return false;
+            }
+        }
+        std::uint32_t lootMode = 0;
+        std::uint32_t lootEntryCount = 0;
+        if (prefabLinesHaveScalableLoot) {
+            if (lineStream >> lootMode >> lootEntryCount) {
+                prefab.object.lootMode = static_cast<LootMode>(lootMode);
+                prefab.object.lootEntries.clear();
+                prefab.object.lootEntries.reserve(lootEntryCount);
+                for (std::uint32_t lootIndex = 0; lootIndex < lootEntryCount; ++lootIndex) {
+                    LootEntry entry;
+                    if (!(lineStream >> std::quoted(entry.itemId)
+                            >> entry.minCount
+                            >> entry.maxCount
+                            >> entry.weight)) {
+                        return false;
+                    }
+                    prefab.object.lootEntries.push_back(std::move(entry));
+                }
+            } else {
+                lineStream.clear();
+            }
+        }
+        if (prefab.object.lootEntries.empty()) {
+            for (const auto& lootId : prefab.object.manualLootIds) {
+                if (!lootId.empty()) {
+                    prefab.object.lootEntries.push_back({lootId, 1, 1, 1.0f});
+                }
             }
         }
 
@@ -334,9 +458,15 @@ bool SavePrefabLibrary(const std::vector<PrefabRecord>& prefabs) {
         return false;
     }
 
-    file << "# BUNKER_PREFABS_V4\n";
+    file << "# BUNKER_PREFABS_V6\n";
     for (auto prefab : prefabs) {
         NormalizePrefabRecord(prefab);
+        prefab.object.manualLootIds = {};
+        for (std::size_t lootIndex = 0;
+             lootIndex < prefab.object.manualLootIds.size() && lootIndex < prefab.object.lootEntries.size();
+             ++lootIndex) {
+            prefab.object.manualLootIds[lootIndex] = prefab.object.lootEntries[lootIndex].itemId;
+        }
         const std::string normalizedLayer = NormalizeEditorLayerName(prefab.object.editorLayer);
         file << std::quoted(prefab.label) << ' '
              << std::quoted(prefab.object.registryId) << ' '
@@ -349,6 +479,9 @@ bool SavePrefabLibrary(const std::vector<PrefabRecord>& prefabs) {
              << prefab.object.x << ' '
              << prefab.object.y << ' '
              << prefab.object.z << ' '
+             << prefab.object.rotationX << ' '
+             << prefab.object.rotationY << ' '
+             << prefab.object.rotationZ << ' '
              << prefab.object.width << ' '
              << prefab.object.depth << ' '
              << prefab.object.height << ' '
@@ -360,6 +493,14 @@ bool SavePrefabLibrary(const std::vector<PrefabRecord>& prefabs) {
              << prefab.object.semanticLayoutPinned;
         for (const auto& lootId : prefab.object.manualLootIds) {
             file << ' ' << std::quoted(lootId);
+        }
+        file << ' ' << static_cast<std::uint32_t>(prefab.object.lootMode)
+             << ' ' << static_cast<std::uint32_t>(prefab.object.lootEntries.size());
+        for (const auto& entry : prefab.object.lootEntries) {
+            file << ' ' << std::quoted(entry.itemId)
+                 << ' ' << entry.minCount
+                 << ' ' << entry.maxCount
+                 << ' ' << entry.weight;
         }
         file << ' ' << std::quoted(prefab.id)
              << ' ' << std::quoted(prefab.targetType)

@@ -6,6 +6,7 @@
 #include <string_view>
 #include <GLFW/glfw3.h>
 
+#include "GameExecution.hpp"
 #include "Renderer.hpp"
 #include "Progression.hpp"
 #include "SessionProfiles.hpp"
@@ -30,7 +31,21 @@ struct MechanicalHostileDamageState {
     float mobilityDamage = 0.0f;
 };
 
+enum class RuntimeGamePhase {
+    MAIN_MENU,
+    WORLD_LOADING,
+    ACTIVE_GAME,
+    UI_INTERACTION
+};
+
+struct OverlayState {
+    bool visible = false;
+    std::string title;
+    std::string body;
+};
+
 struct GameState {
+    RuntimeGamePhase phase = RuntimeGamePhase::MAIN_MENU;
     bool cycleViewPressed = false;
     bool usePressed = false;
     bool contextualPressed = false;
@@ -91,6 +106,7 @@ struct GameState {
     bool tankServiceNearby = false;
     bool medicalSupportNearby = false;
     WeatherAnomaly weather = WeatherAnomaly::Clear;
+    OverlayState overlay{};
     std::vector<HostileAwarenessState> hostileAwareness{};
     std::vector<MechanicalHostileDamageState> mechanicalHostileDamage{};
     std::string lastEvent = "Cryostasis breached. Reorient, secure an access card, recover the Pip-Pad, and trace the BT-72 berth.";
@@ -105,12 +121,15 @@ struct GameState {
     };
 };
 
+const char* RuntimeGamePhaseLabel(RuntimeGamePhase phase);
 void AddInventoryItem(SessionProfile& profile, const std::string& itemId, int count, float weight);
 bool HasInventoryItem(const SessionProfile& profile, const std::string& itemId);
 bool ConsumeInventoryItem(SessionProfile& profile, const std::string& itemId, int count);
 float CurrentInventoryWeight(const SessionProfile& profile);
 int EffectiveStatValue(const SessionProfile& profile, const GameState& gameState, char statCode);
 bool TryConsumeFieldRation(SessionProfile& profile, GameState& gameState);
+bool PlayerHasPipPadAccess(const SessionProfile& profile);
+bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState);
 void AdvanceViewMode(PlayerState& player);
 void TryToggleBt72CrewSeat(PlayerState& player, SessionProfile& profile, GameState& gameState);
 void ApplyStaticEraser(World& world, const StaticEraser& staticEraser);
@@ -190,7 +209,8 @@ void HandleInteraction(const MapObject* nearest,
     PlayerState& player,
     SessionProfile& profile,
     StaticEraser& staticEraser,
-    GameState& gameState);
+    GameState& gameState,
+    const WorldExecutionContext* executionContext = nullptr);
 bool WantsUseKey(const MapObject* nearest);
 bool WantsContextKey(const MapObject* nearest);
 void DrawPipPad(const World& world,
@@ -198,5 +218,6 @@ void DrawPipPad(const World& world,
     SessionProfile& profile,
     StaticEraser& staticEraser,
     GameState& gameState);
+bool SweepMovePlayerAgainstWorld(const World& world, PlayerState& player, float deltaX, float deltaY);
 
 }  // namespace bunker

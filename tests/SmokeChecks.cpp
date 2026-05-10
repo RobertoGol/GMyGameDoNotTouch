@@ -1,6 +1,7 @@
 #include "../include/AppPaths.hpp"
 #include "../include/AtomicPersistence.hpp"
 #include "../include/BuildAnnouncement.hpp"
+#include "../include/GameExecution.hpp"
 #include "../include/GameRuntime.hpp"
 #include "../include/GameplayDescriptorRegistry.hpp"
 #include "../include/HangarSystem.hpp"
@@ -15,6 +16,7 @@
 #include "../include/WorldExport.hpp"
 #include "../include/WorldSemanticAuthoring.hpp"
 #include "../include/WorldValidation.hpp"
+#include "../Editor/src/EditorSupport.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -22,6 +24,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <string>
 
@@ -77,6 +80,53 @@ bool RunWorldRoundtrip() {
         archiveTerminal->editorLayer = "Archive";
         archiveTerminal->prefabSourceId = "prefab_archive_sync";
     }
+    if (auto* recoveryLocker = savedWorld.FindObjectByRegistryId("[%pip_0001]")) {
+        recoveryLocker->lootMode = bunker::LootMode::RandomTable;
+        recoveryLocker->lootEntries.clear();
+        recoveryLocker->lootEntries.reserve(405);
+        for (int index = 0; index < 405; ++index) {
+            recoveryLocker->lootEntries.push_back({
+                "roundtrip_loot_" + std::to_string(index),
+                1,
+                1 + (index % 3),
+                1.0f + static_cast<float>(index % 5)
+            });
+        }
+    }
+    bunker::MapObject sparseContainer;
+    sparseContainer.registryId = "[%sparse_loot_0001]";
+    sparseContainer.displayName = "Sparse Loot Container";
+    sparseContainer.interaction = bunker::InteractionType::Container;
+    sparseContainer.category = bunker::ObjectCategory::Container;
+    sparseContainer.manualLoot = true;
+    sparseContainer.lootMode = bunker::LootMode::RandomTable;
+    sparseContainer.lootEntries = {
+        {"sparse_loot_real", 2, 5, 0.0f},
+        {"", 1, 1, 1.0f},
+        {"", 1, 1, 1.0f},
+    };
+    savedWorld.AddObject(sparseContainer);
+    if (auto* sparse = savedWorld.FindObjectByRegistryId(sparseContainer.registryId)) {
+        sparse->lootEntries.push_back({});
+        sparse->lootEntries.push_back({});
+    }
+    bunker::MapObject highRowContainer = sparseContainer;
+    highRowContainer.registryId = "[%high_row_loot_0001]";
+    highRowContainer.displayName = "High Row Loot Container";
+    highRowContainer.lootEntries.assign(20, {});
+    highRowContainer.lootEntries[19] = {"high_row_loot_real", 1, 1, 1.0f};
+    savedWorld.AddObject(highRowContainer);
+    bunker::MapObject tenthRowContainer = sparseContainer;
+    tenthRowContainer.registryId = "[%tenth_row_loot_0001]";
+    tenthRowContainer.displayName = "Tenth Row Loot Container";
+    tenthRowContainer.lootEntries.assign(20, {});
+    tenthRowContainer.lootEntries[9] = {"tenth_row_loot_real", 1, 2, 1.0f};
+    savedWorld.AddObject(tenthRowContainer);
+    bunker::MapObject emptyRowsOnlyContainer = sparseContainer;
+    emptyRowsOnlyContainer.registryId = "[%empty_rows_only_0001]";
+    emptyRowsOnlyContainer.displayName = "Empty Rows Only Container";
+    emptyRowsOnlyContainer.lootEntries.assign(20, {});
+    savedWorld.AddObject(emptyRowsOnlyContainer);
 
     const auto saveStatus = bunker::SaveWorldAtomically(savedWorld, bunker::DefaultWorldPath());
     if (!Check(saveStatus.ok, "world save failed: " + saveStatus.message)) {
@@ -104,7 +154,105 @@ bool RunWorldRoundtrip() {
         Check(loadedWorld.CountObjectsInEditorLayer("Archive") == 1, "world roundtrip should preserve custom editor layer assignment") &&
         Check(loadedWorld.FindObjectByRegistryId("[%archive_0001]") != nullptr &&
                 loadedWorld.FindObjectByRegistryId("[%archive_0001]")->prefabSourceId == "prefab_archive_sync",
-            "world roundtrip should preserve prefab source linkage");
+            "world roundtrip should preserve prefab source linkage") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%pip_0001]")->lootMode == bunker::LootMode::RandomTable,
+            "world roundtrip should preserve random loot chest mode") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%pip_0001]")->lootEntries.size() == 405,
+            "world roundtrip should preserve 400+ scalable loot entries") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%pip_0001]")->lootEntries[404].itemId == "roundtrip_loot_404",
+            "world roundtrip should preserve high-index loot entry IDs") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%sparse_loot_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%sparse_loot_0001]")->lootEntries.size() == 1,
+            "world roundtrip should not invent persisted UI-only virtual loot rows") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%sparse_loot_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%sparse_loot_0001]")->lootEntries[0].weight == 0.0f,
+            "world roundtrip should preserve zero random loot weight for runtime skip semantics") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%high_row_loot_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%high_row_loot_0001]")->lootEntries.size() == 20,
+            "world roundtrip should preserve interior empty rows before a filled high-index loot row") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%high_row_loot_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%high_row_loot_0001]")->lootEntries[19].itemId == "high_row_loot_real",
+            "world roundtrip should preserve filled high-index virtual-row loot entry") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%tenth_row_loot_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%tenth_row_loot_0001]")->lootEntries.size() == 10,
+            "world roundtrip should trim trailing empty rows after a filled row 10 entry") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%tenth_row_loot_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%tenth_row_loot_0001]")->lootEntries[9].itemId == "tenth_row_loot_real",
+            "world roundtrip should preserve filled row 10 loot entry") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%empty_rows_only_0001]") != nullptr &&
+                loadedWorld.FindObjectByRegistryId("[%empty_rows_only_0001]")->lootEntries.empty(),
+            "world roundtrip should trim all-empty trailing loot rows to zero persisted entries");
+}
+
+bool RunEditorWorldFileHelpersSmoke() {
+    const fs::path tempRoot = fs::temp_directory_path() / "bunker_editor_file_helpers_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "editor file helper smoke failed to create temp root")) {
+        return false;
+    }
+
+    WorkingDirectoryGuard workingDirectoryGuard(tempRoot);
+    bunker::EnsureProjectDirectories();
+
+    bunker::World existingWorld;
+    existingWorld.GeneratePrototypeZone();
+    existingWorld.metadata.name = "Existing Authoring World";
+    const auto existingSave = bunker::SaveWorldAtomically(existingWorld, bunker::DefaultWorldPath());
+    if (!Check(existingSave.ok, "editor file helper smoke failed to seed existing world: " + existingSave.message)) {
+        return false;
+    }
+
+    bunker::World newWorld;
+    std::string statusText;
+    if (!Check(editor_support::CreateNewEditorWorld(newWorld, statusText),
+            "editor file helper smoke expected CreateNewEditorWorld to succeed")) {
+        return false;
+    }
+
+    bunker::World reloadedExistingWorld;
+    if (!Check(reloadedExistingWorld.Load(bunker::DefaultWorldPath().string()),
+            "editor file helper smoke failed to reload seeded world after New World")) {
+        return false;
+    }
+    if (!Check(reloadedExistingWorld.metadata.name == "Existing Authoring World",
+            "editor file helper smoke expected New World helper not to overwrite existing .bwld")) {
+        return false;
+    }
+
+    newWorld.metadata.name = "Helper Save World";
+    std::filesystem::path saveAsPath;
+    if (!Check(editor_support::TrySaveEditorWorldAtPath(newWorld, "helper_save_world", statusText, &saveAsPath),
+            "editor file helper smoke expected Save helper to write .bwld")) {
+        return false;
+    }
+    if (!Check(saveAsPath.extension() == ".bwld",
+            "editor file helper smoke expected Save helper to normalize missing extension to .bwld")) {
+        return false;
+    }
+
+    bunker::World loadedSavedWorld;
+    std::filesystem::path loadedPath;
+    if (!Check(editor_support::TryLoadEditorWorldAtPath(saveAsPath, loadedSavedWorld, statusText, &loadedPath),
+            "editor file helper smoke expected Load helper to reload saved world")) {
+        return false;
+    }
+
+    const auto worldFiles = editor_support::ListNativeWorldFiles();
+    const bool foundSavedWorld = std::any_of(worldFiles.begin(), worldFiles.end(), [&](const fs::path& path) {
+        return path.filename() == saveAsPath.filename();
+    });
+
+    return Check(loadedSavedWorld.metadata.name == "Helper Save World",
+            "editor file helper smoke expected saved world metadata to roundtrip") &&
+        Check(foundSavedWorld, "editor file helper smoke expected saved world to appear in .bwld file list") &&
+        Check(!editor_support::TryLoadEditorWorldAtPath("not_a_world.esp", loadedSavedWorld, statusText, nullptr) &&
+                statusText.find(".bwld") != std::string::npos,
+            "editor file helper smoke expected non-.bwld native world load to be rejected");
 }
 
 bool RunProfileRoundtrip() {
@@ -639,6 +787,146 @@ bool RunWorkshopServiceRouteHandoffSmoke() {
             "workshop handoff smoke expected relay handoff cue") &&
         Check(gameState.lastEvent.find("Route beat: Recovery Sync") != std::string::npos,
             "workshop handoff smoke expected recovery-sync beat cue");
+}
+
+bool RunScalableContainerLootRuntimeSmoke() {
+    auto inventoryCount = [](const bunker::SessionProfile& profile, std::string_view itemId) {
+        const auto it = std::find_if(
+            profile.character.inventory.begin(),
+            profile.character.inventory.end(),
+            [&](const bunker::InventoryEntry& entry) { return entry.itemId == itemId; });
+        return it == profile.character.inventory.end() ? 0 : it->count;
+    };
+
+    bunker::World manualWorld;
+    bunker::MapObject manualChest;
+    manualChest.registryId = "[%manual_loot_chest_smoke]";
+    manualChest.displayName = "Manual Loot Chest Smoke";
+    manualChest.interaction = bunker::InteractionType::Container;
+    manualChest.category = bunker::ObjectCategory::Container;
+    manualChest.lootMode = bunker::LootMode::ManualList;
+    manualChest.manualLoot = true;
+    manualChest.lootEntries = {
+        {"manual_smoke_a", 2, 2, 1.0f},
+        {"manual_smoke_b", 3, 3, 1.0f},
+    };
+    manualWorld.AddObject(manualChest);
+
+    bunker::SessionProfile manualProfile = bunker::MakeDefaultSessionProfile();
+    manualProfile.selectedWorld = "manual_loot_runtime_smoke.bwld";
+    bunker::PlayerState player;
+    bunker::StaticEraser manualEraser;
+    bunker::GameState manualState;
+    const auto* manualNearest = manualWorld.FindObjectByRegistryId(manualChest.registryId);
+    if (!Check(manualNearest != nullptr, "scalable container smoke expected manual chest before interaction")) {
+        return false;
+    }
+    bunker::HandleInteraction(manualNearest, manualWorld, player, manualProfile, manualEraser, manualState);
+    const int manualACountAfterFirstOpen = inventoryCount(manualProfile, "manual_smoke_a");
+    const int manualBCountAfterFirstOpen = inventoryCount(manualProfile, "manual_smoke_b");
+    const auto* manualSecondOpen = manualWorld.FindObjectByRegistryId(manualChest.registryId);
+    if (manualSecondOpen != nullptr) {
+        bunker::HandleInteraction(manualSecondOpen, manualWorld, player, manualProfile, manualEraser, manualState);
+    }
+
+    bunker::World randomWorld;
+    bunker::MapObject randomChest;
+    randomChest.registryId = "[%random_loot_chest_smoke]";
+    randomChest.displayName = "Random Loot Chest Smoke";
+    randomChest.interaction = bunker::InteractionType::Container;
+    randomChest.category = bunker::ObjectCategory::Container;
+    randomChest.lootMode = bunker::LootMode::RandomTable;
+    randomChest.manualLoot = true;
+    randomChest.lootEntries = {
+        {"random_smoke_a", 4, 4, 1.0f},
+        {"random_smoke_b", 8, 8, 0.0f},
+    };
+    randomWorld.AddObject(randomChest);
+
+    bunker::SessionProfile randomProfile = bunker::MakeDefaultSessionProfile();
+    randomProfile.selectedWorld = "random_loot_runtime_smoke.bwld";
+    bunker::StaticEraser randomEraser;
+    bunker::GameState randomState;
+    const auto* randomNearest = randomWorld.FindObjectByRegistryId(randomChest.registryId);
+    if (!Check(randomNearest != nullptr, "scalable container smoke expected random chest before interaction")) {
+        return false;
+    }
+    bunker::HandleInteraction(randomNearest, randomWorld, player, randomProfile, randomEraser, randomState);
+
+    return Check(manualACountAfterFirstOpen == 2, "manual filled chest should grant first scalable loot entry count") &&
+        Check(manualBCountAfterFirstOpen == 3, "manual filled chest should grant second scalable loot entry count") &&
+        Check(manualWorld.FindObjectByRegistryId(manualChest.registryId) == nullptr, "manual filled chest should be removed after looting") &&
+        Check(manualEraser.IsErased(manualChest.registryId), "manual filled chest should be persisted in static eraser after looting") &&
+        Check(inventoryCount(manualProfile, "manual_smoke_a") == manualACountAfterFirstOpen,
+            "manual filled chest should not refill after erased world object is gone") &&
+        Check(inventoryCount(manualProfile, "manual_smoke_b") == manualBCountAfterFirstOpen,
+            "manual filled chest should not duplicate second entry after erased world object is gone") &&
+        Check(inventoryCount(randomProfile, "random_smoke_a") == 4,
+            "random loot chest should grant the single positive weighted entry") &&
+        Check(inventoryCount(randomProfile, "random_smoke_b") == 0,
+            "random loot chest should skip zero-weight random entries") &&
+        Check(randomWorld.FindObjectByRegistryId(randomChest.registryId) == nullptr, "random loot chest should be removed after looting") &&
+        Check(randomEraser.IsErased(randomChest.registryId), "random loot chest should be persisted in static eraser after looting");
+}
+
+bool RunRuntimeProfileSaveDoesNotReplaceAuthoringWorldSmoke() {
+    bunker::World authoredWorld;
+    authoredWorld.metadata.name = "Runtime Profile Save Boundary Smoke";
+    authoredWorld.metadata.objective = "Runtime saves must not replace authoring .bwld records.";
+
+    bunker::MapObject chest;
+    chest.registryId = "[%runtime_save_boundary_chest]";
+    chest.displayName = "Runtime Save Boundary Chest";
+    chest.interaction = bunker::InteractionType::Container;
+    chest.category = bunker::ObjectCategory::Container;
+    chest.manualLoot = true;
+    chest.lootMode = bunker::LootMode::ManualList;
+    chest.lootEntries = {
+        {"runtime_boundary_loot", 1, 1, 1.0f},
+    };
+    authoredWorld.AddObject(chest);
+
+    const auto saveStatus = bunker::SaveWorldAtomically(authoredWorld, bunker::DefaultWorldPath());
+    if (!Check(saveStatus.ok, "runtime profile save boundary smoke failed to save authoring world: " + saveStatus.message)) {
+        return false;
+    }
+
+    bunker::World runtimeWorld;
+    if (!Check(runtimeWorld.Load(bunker::DefaultWorldPath().string()), "runtime profile save boundary smoke failed to load runtime world copy")) {
+        return false;
+    }
+
+    bunker::SessionProfile runtimeProfile = bunker::MakeDefaultSessionProfile();
+    runtimeProfile.selectedWorld = bunker::DefaultWorldPath().filename().generic_string();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    const auto* runtimeChest = runtimeWorld.FindObjectByRegistryId(chest.registryId);
+    if (!Check(runtimeChest != nullptr, "runtime profile save boundary smoke expected runtime chest before interaction")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(runtimeChest, runtimeWorld, player, runtimeProfile, staticEraser, gameState);
+    const auto profileSave = bunker::SaveProfileAtomically(runtimeProfile, bunker::DefaultSessionProfilePath());
+    if (!Check(profileSave.ok, "runtime profile save boundary smoke failed to save runtime profile: " + profileSave.message)) {
+        return false;
+    }
+    staticEraser.Save(runtimeProfile.selectedWorld);
+
+    bunker::World reloadedAuthoringWorld;
+    if (!Check(reloadedAuthoringWorld.Load(bunker::DefaultWorldPath().string()), "runtime profile save boundary smoke failed to reload authoring .bwld")) {
+        return false;
+    }
+
+    const auto* reloadedChest = reloadedAuthoringWorld.FindObjectByRegistryId(chest.registryId);
+    return Check(runtimeWorld.FindObjectByRegistryId(chest.registryId) == nullptr,
+            "runtime profile save boundary smoke expected runtime copy to remove looted chest") &&
+        Check(staticEraser.IsErased(chest.registryId),
+            "runtime profile save boundary smoke expected static eraser to hold runtime removal state") &&
+        Check(reloadedChest != nullptr,
+            "runtime profile save boundary smoke expected authoring .bwld to keep placed chest record") &&
+        Check(reloadedChest->lootEntries.size() == 1 && reloadedChest->lootEntries[0].itemId == "runtime_boundary_loot",
+            "runtime profile save boundary smoke expected authoring .bwld to preserve scalable loot");
 }
 
 bool RunDebriefIndustrialHandoffSmoke() {
@@ -2315,6 +2603,7 @@ bool RunLaunchTicketFlow() {
     issuedTicket.bt72SeatRole = "gunner";
     issuedTicket.bt72SecondSeatPolicy = "trusted_only";
     issuedTicket.bt72TrustedGunnerHandle = "Smoke Scout";
+    issuedTicket.launcherRole = "admin";
 
     if (!Check(bunker::IssueLaunchTicket(issuedTicket), "launch ticket issue failed")) {
         return false;
@@ -2332,6 +2621,7 @@ bool RunLaunchTicketFlow() {
         Check(consumedTicket.bt72SeatRole == "gunner", "launch ticket seat role mismatch") &&
         Check(consumedTicket.bt72SecondSeatPolicy == "trusted_only", "launch ticket seat policy mismatch") &&
         Check(consumedTicket.bt72TrustedGunnerHandle == "Smoke Scout", "launch ticket trusted gunner mismatch") &&
+        Check(consumedTicket.launcherRole == "admin", "launch ticket launcher role mismatch") &&
         Check(!fs::exists(bunker::LaunchTicketPath()), "launch ticket file was not removed after consume");
 }
 
@@ -2808,6 +3098,17 @@ bool RunPrefabLibrarySemanticStateSmoke() {
     authoredPrefab.object.editorLayer = "Service";
     authoredPrefab.object.semanticAutoCreated = false;
     authoredPrefab.object.semanticLayoutPinned = true;
+    authoredPrefab.object.manualLoot = true;
+    authoredPrefab.object.lootMode = bunker::LootMode::RandomTable;
+    authoredPrefab.object.lootEntries = {
+        {"prefab_scalable_loot_0", 1, 2, 3.0f},
+        {"", 1, 1, 0.0f},
+        {"prefab_scalable_loot_2", 4, 6, 0.0f},
+        {"prefab_scalable_loot_3", 2, 2, 5.0f},
+        {"prefab_scalable_loot_4", 1, 3, 1.5f},
+        {"", 1, 1, 1.0f},
+        {"", 1, 1, 1.0f},
+    };
     savedPrefabs.push_back(authoredPrefab);
 
     bunker::PrefabRecord autoPrefab;
@@ -2849,6 +3150,11 @@ bool RunPrefabLibrarySemanticStateSmoke() {
         Check(loadedPrefabs[0].object.editorLayer == authoredPrefab.object.editorLayer, "prefab library should preserve authored prefab layer") &&
         Check(loadedPrefabs[0].object.semanticLayoutPinned, "prefab library should preserve authored pinned semantic state") &&
         Check(!loadedPrefabs[0].object.semanticAutoCreated, "prefab library should preserve authored semantic origin") &&
+        Check(loadedPrefabs[0].object.lootMode == bunker::LootMode::RandomTable, "prefab library should preserve scalable loot mode") &&
+        Check(loadedPrefabs[0].object.lootEntries.size() == 5, "prefab library should preserve scalable loot entries without trailing empty UI rows") &&
+        Check(loadedPrefabs[0].object.lootEntries[4].itemId == "prefab_scalable_loot_4", "prefab library should preserve high-index scalable loot entry") &&
+        Check(loadedPrefabs[0].object.lootEntries[2].weight == 0.0f, "prefab library should preserve zero random loot weight") &&
+        Check(loadedPrefabs[0].object.manualLootIds[0] == "prefab_scalable_loot_0", "prefab library should mirror first scalable loot entry into legacy slot 0") &&
         Check(loadedPrefabs[1].label == autoPrefab.label, "prefab library should preserve auto prefab label") &&
         Check(loadedPrefabs[1].id == autoPrefab.id, "prefab library should preserve auto prefab id") &&
         Check(loadedPrefabs[1].targetType == autoPrefab.targetType, "prefab library should preserve auto prefab target type") &&
@@ -2857,6 +3163,58 @@ bool RunPrefabLibrarySemanticStateSmoke() {
         Check(loadedPrefabs[1].object.editorLayer == autoPrefab.object.editorLayer, "prefab library should preserve custom prefab layer") &&
         Check(loadedPrefabs[1].object.semanticAutoCreated, "prefab library should preserve auto semantic origin") &&
         Check(!loadedPrefabs[1].object.semanticLayoutPinned, "prefab library should preserve unpinned auto semantic state");
+}
+
+bool RunLegacyPrefabManualLootMigrationSmoke() {
+    std::ofstream file(bunker::EditorPrefabLibraryPath());
+    if (!Check(file.is_open(), "legacy prefab loot migration smoke failed to open prefab library for write")) {
+        return false;
+    }
+
+    file << "# BUNKER_PREFABS_V5\n"
+         << std::quoted("Legacy Loot Prefab") << ' '
+         << std::quoted("[%legacy_prefab_loot_0001]") << ' '
+         << std::quoted("Legacy Prefab Loot Chest") << ' '
+         << std::quoted("") << ' '
+         << std::quoted("") << ' '
+         << std::quoted("Loot") << ' '
+         << static_cast<int>(bunker::InteractionType::Container) << ' '
+         << static_cast<int>(bunker::ObjectCategory::Container) << ' '
+         << 1.0f << ' ' << 2.0f << ' ' << 0.0f << ' '
+         << 0.0f << ' ' << 0.0f << ' ' << 0.0f << ' '
+         << 1.4f << ' ' << 1.2f << ' ' << 1.2f << ' '
+         << 70.0f << ' '
+         << false << ' ' << true << ' ' << true << ' '
+         << false << ' ' << false << ' '
+         << std::quoted("legacy_prefab_loot_a") << ' '
+         << std::quoted("") << ' '
+         << std::quoted("legacy_prefab_loot_c") << ' '
+         << std::quoted("") << ' '
+         << std::quoted("prefab_legacy_loot") << ' '
+         << std::quoted("Item") << ' '
+         << std::quoted("Legacy fixture") << ' '
+         << std::quoted("Captured") << '\n';
+    file.close();
+
+    std::vector<bunker::PrefabRecord> loadedPrefabs;
+    if (!Check(bunker::LoadPrefabLibrary(loadedPrefabs), "legacy prefab loot migration smoke failed to load prefab library")) {
+        return false;
+    }
+    if (!Check(loadedPrefabs.size() == 1, "legacy prefab loot migration smoke expected one prefab")) {
+        return false;
+    }
+
+    return Check(loadedPrefabs[0].object.lootMode == bunker::LootMode::ManualList,
+            "legacy prefab loot migration should default to manual loot mode") &&
+        Check(loadedPrefabs[0].object.lootEntries.size() == 2,
+            "legacy prefab loot migration should create scalable entries from non-empty manual slots") &&
+        Check(loadedPrefabs[0].object.lootEntries[0].itemId == "legacy_prefab_loot_a",
+            "legacy prefab loot migration should preserve first legacy item") &&
+        Check(loadedPrefabs[0].object.lootEntries[1].itemId == "legacy_prefab_loot_c",
+            "legacy prefab loot migration should preserve later non-empty legacy item") &&
+        Check(loadedPrefabs[0].object.manualLootIds[0] == "legacy_prefab_loot_a" &&
+                loadedPrefabs[0].object.manualLootIds[2] == "legacy_prefab_loot_c",
+            "legacy prefab loot migration should keep loaded legacy mirror slots");
 }
 
 bool RunPrefabUsageAndExportReportSmoke() {
@@ -2894,12 +3252,23 @@ bool RunPrefabUsageAndExportReportSmoke() {
     relayObject.prefabSourceId = relayPrefab.id;
     relayObject.scriptTag = "relay_substation";
     relayObject.linkTarget = "shelter17_backbone";
+    relayObject.manualLoot = true;
+    relayObject.lootMode = bunker::LootMode::RandomTable;
+    relayObject.lootEntries = {
+        {"export_loot_a", 1, 1, 1.0f},
+        {"", 1, 1, 0.0f},
+        {"export_loot_c", 2, 2, 0.0f},
+    };
     world.AddObject(relayObject);
 
     bunker::MapObject brokenObject = relayObject;
     brokenObject.registryId = "[%relay_usage_0002]";
     brokenObject.displayName = "Broken Prefab Usage";
     brokenObject.prefabSourceId = "prefab_missing_service";
+    brokenObject.manualLoot = false;
+    brokenObject.manualLootIds = {};
+    brokenObject.lootEntries.clear();
+    brokenObject.lootMode = bunker::LootMode::ManualList;
     world.AddObject(brokenObject);
 
     const auto usageIndices = bunker::CollectPrefabUsageObjectIndices(world, relayPrefab.id);
@@ -2922,10 +3291,251 @@ bool RunPrefabUsageAndExportReportSmoke() {
         return false;
     }
 
-    const std::string report = bunker::LoadTextArtifactPreview(exportResult.validationReportPath, 8000);
-    return Check(report.find("Format: BWL5") != std::string::npos, "prefab usage smoke expected export report to mention BWL5 format") &&
+    const std::string report = bunker::LoadTextArtifactPreview(exportResult.validationReportPath, 20000);
+    return Check(report.find("Format: BWL7") != std::string::npos, "prefab usage smoke expected export report to mention BWL7 format") &&
+        Check(report.find("Target extension label: Bunker Protocol world") != std::string::npos,
+            "prefab usage smoke expected export report to identify .bwld as Bunker Protocol world format") &&
+        Check(report.find(".bwld :: Bunker Protocol world/record") != std::string::npos,
+            "prefab usage smoke expected export report to include .bwld in supported format registry") &&
+        Check(report.find("Scalable loot entries: 3") != std::string::npos, "prefab usage smoke expected export report to mention scalable loot entry count") &&
+        Check(report.find("Non-empty scalable loot entries: 2") != std::string::npos, "prefab usage smoke expected export report to count non-empty scalable loot entries") &&
         Check(report.find("Prefab-derived objects: 2") != std::string::npos, "prefab usage smoke expected prefab-derived object count in report") &&
         Check(report.find("Broken prefab references: 1") != std::string::npos, "prefab usage smoke expected broken prefab reference count in report");
+}
+
+bool RunSupportedFileFormatRegistrySmoke() {
+    const auto* worldFormat = bunker::FindSupportedFileFormat(".bwld");
+    const auto* upperWorldFormat = bunker::FindSupportedFileFormat("BWLD");
+    const auto* packageFormat = bunker::FindSupportedFileFormat(".dba");
+    const auto* bsaFormat = bunker::FindSupportedFileFormat(".bsa");
+    const auto* pluginFormat = bunker::FindSupportedFileFormat(".esp");
+    const auto* archiveFormat = bunker::FindSupportedFileFormat(".ba2");
+    const auto* saveFormat = bunker::FindSupportedFileFormat(".fos");
+    const auto* sidecarFormat = bunker::FindSupportedFileFormat(".f4se");
+    const auto* meshFormat = bunker::FindSupportedFileFormat(".nif");
+    const auto* animationFormat = bunker::FindSupportedFileFormat(".kf");
+    const auto* behaviorFormat = bunker::FindSupportedFileFormat(".hkx");
+    const auto* morphFormat = bunker::FindSupportedFileFormat(".tri");
+    const auto* textureFormat = bunker::FindSupportedFileFormat(".dds");
+    const auto* sourceTextureFormat = bunker::FindSupportedFileFormat(".png");
+    const auto* materialFormat = bunker::FindSupportedFileFormat(".bgsm");
+    const auto* shaderFormat = bunker::FindSupportedFileFormat(".fx");
+    const auto* scriptFormat = bunker::FindSupportedFileFormat(".pex");
+    const auto* scriptSourceFormat = bunker::FindSupportedFileFormat(".psc");
+    const auto* audioFormat = bunker::FindSupportedFileFormat(".fuz");
+    const auto* audioSourceFormat = bunker::FindSupportedFileFormat(".ogg");
+    const auto* localizationFormat = bunker::FindSupportedFileFormat(".dlstrings");
+    const auto* interfaceFormat = bunker::FindSupportedFileFormat(".swf");
+    const auto* generatedFormat = bunker::FindSupportedFileFormat(".seq");
+    const auto* lodFormat = bunker::FindSupportedFileFormat(".bto");
+    const auto* textFormat = bunker::FindSupportedFileFormat(".json");
+    const auto* configFormat = bunker::FindSupportedFileFormat(".ini");
+    const auto* packageZipFormat = bunker::FindSupportedFileFormat(".zip");
+    const auto* executableFormat = bunker::FindSupportedFileFormat(".dll");
+    const auto registryReport = bunker::BuildSupportedFileFormatRegistryReport();
+
+    return Check(worldFormat != nullptr, "format registry should include .bwld") &&
+        Check(upperWorldFormat == worldFormat, "format registry lookup should normalize extension case and missing dot") &&
+        Check(worldFormat->canonicalAuthoringWorld && worldFormat->bunkerNative,
+            "format registry should mark .bwld as bunker-native canonical authoring world") &&
+        Check(packageFormat != nullptr && packageFormat->bunkerNative && packageFormat->packageFormat &&
+                !packageFormat->canonicalAuthoringWorld,
+            "format registry should mark .dba as bunker-native package but not canonical authored world") &&
+        Check(pluginFormat != nullptr && pluginFormat->layer == bunker::SupportedFileFormatLayer::RecordPlugin,
+            "format registry should classify .esp as record/plugin reference") &&
+        Check(bsaFormat != nullptr && bsaFormat->layer == bunker::SupportedFileFormatLayer::AssetArchive,
+            "format registry should classify .bsa as asset archive reference") &&
+        Check(archiveFormat != nullptr && archiveFormat->layer == bunker::SupportedFileFormatLayer::AssetArchive,
+            "format registry should classify .ba2 as asset archive reference") &&
+        Check(saveFormat != nullptr && saveFormat->layer == bunker::SupportedFileFormatLayer::RuntimeSave,
+            "format registry should classify .fos as runtime save reference") &&
+        Check(sidecarFormat != nullptr && sidecarFormat->layer == bunker::SupportedFileFormatLayer::RuntimeSave,
+            "format registry should classify .f4se as runtime sidecar reference") &&
+        Check(meshFormat != nullptr && meshFormat->layer == bunker::SupportedFileFormatLayer::MeshModelGeometry,
+            "format registry should classify .nif as mesh/model reference") &&
+        Check(animationFormat != nullptr && animationFormat->layer == bunker::SupportedFileFormatLayer::AnimationPhysics,
+            "format registry should classify .kf as animation reference") &&
+        Check(behaviorFormat != nullptr && behaviorFormat->layer == bunker::SupportedFileFormatLayer::AnimationPhysics,
+            "format registry should classify .hkx as animation/physics reference") &&
+        Check(morphFormat != nullptr && morphFormat->layer == bunker::SupportedFileFormatLayer::MeshModelGeometry,
+            "format registry should classify .tri as face/morph geometry reference") &&
+        Check(textureFormat != nullptr && textureFormat->layer == bunker::SupportedFileFormatLayer::Texture,
+            "format registry should classify .dds as texture reference") &&
+        Check(sourceTextureFormat != nullptr && sourceTextureFormat->layer == bunker::SupportedFileFormatLayer::Texture,
+            "format registry should classify .png as tooling/source texture reference") &&
+        Check(materialFormat != nullptr && materialFormat->layer == bunker::SupportedFileFormatLayer::MaterialShader,
+            "format registry should classify .bgsm as material reference") &&
+        Check(shaderFormat != nullptr && shaderFormat->layer == bunker::SupportedFileFormatLayer::MaterialShader,
+            "format registry should classify .fx as material/shader reference") &&
+        Check(scriptFormat != nullptr && scriptFormat->layer == bunker::SupportedFileFormatLayer::Script,
+            "format registry should classify .pex as script reference") &&
+        Check(scriptSourceFormat != nullptr && scriptSourceFormat->canBeTextPreviewed,
+            "format registry should mark .psc as text-previewable script source") &&
+        Check(audioFormat != nullptr && audioFormat->layer == bunker::SupportedFileFormatLayer::AudioVoiceLip,
+            "format registry should classify .fuz as audio/lip reference") &&
+        Check(audioSourceFormat != nullptr && audioSourceFormat->layer == bunker::SupportedFileFormatLayer::AudioVoiceLip,
+            "format registry should classify .ogg as audio reference") &&
+        Check(localizationFormat != nullptr && localizationFormat->layer == bunker::SupportedFileFormatLayer::Localization,
+            "format registry should classify .dlstrings as localization reference") &&
+        Check(interfaceFormat != nullptr && interfaceFormat->layer == bunker::SupportedFileFormatLayer::InterfaceUI,
+            "format registry should classify .swf as interface reference") &&
+        Check(generatedFormat != nullptr && generatedFormat->layer == bunker::SupportedFileFormatLayer::GeneratedWorldData,
+            "format registry should classify .seq as generated/dialogue sidecar reference") &&
+        Check(lodFormat != nullptr && lodFormat->layer == bunker::SupportedFileFormatLayer::GeneratedWorldData,
+            "format registry should classify .bto as generated world data") &&
+        Check(textFormat != nullptr && textFormat->layer == bunker::SupportedFileFormatLayer::ConfigTextLog,
+            "format registry should classify .json as config/text/log reference") &&
+        Check(configFormat != nullptr && configFormat->layer == bunker::SupportedFileFormatLayer::ConfigTextLog,
+            "format registry should classify .ini as config/text/log reference") &&
+        Check(packageZipFormat != nullptr && packageZipFormat->layer == bunker::SupportedFileFormatLayer::ModPackage,
+            "format registry should classify .zip as mod/package tooling reference") &&
+        Check(executableFormat != nullptr && executableFormat->layer == bunker::SupportedFileFormatLayer::ExecutableNativePlugin &&
+                executableFormat->executableDanger,
+            "format registry should classify .dll as dangerous executable/native plugin reference") &&
+        Check(bunker::FindSupportedFileFormat(".unknown") == nullptr,
+            "format registry should gracefully report unknown extensions") &&
+        Check(registryReport.find(".bwld :: Bunker Protocol world/record") != std::string::npos,
+            "format registry report should list .bwld explicitly") &&
+        Check(registryReport.find(".dba :: Bunker package/archive") != std::string::npos,
+            "format registry report should list .dba explicitly") &&
+        Check(registryReport.find("dangerous executable/native plugin") != std::string::npos,
+            "format registry report should list dangerous executable references");
+}
+
+bool RunExportDataScanSmoke() {
+    const fs::path tempRoot = fs::temp_directory_path() / "bunker_export_data_scan_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "Export_data", ec);
+    if (!Check(!ec, "export_data scan smoke failed to create temporary Export_data folder")) {
+        return false;
+    }
+
+    const std::vector<std::string> fileNames = {
+        "bunker_world.bwld",
+        "bunker_dlc.dba",
+        "Fallout4.esm",
+        "Fallout4.esp",
+        "Fallout4.esl",
+        "Fallout4 - Main.ba2",
+        "Fallout - Meshes.bsa",
+        "weapon.nif",
+        "anim.kf",
+        "controller.kfm",
+        "behavior.hkx",
+        "face.tri",
+        "morph.egm",
+        "tint.egt",
+        "face.ctl",
+        "legacy.rdt",
+        "tree.spt",
+        "object.bto",
+        "terrain.btr",
+        "treelod.btt",
+        "world.lod",
+        "distant.dlod",
+        "nav.navmesh",
+        "texture.dds",
+        "source.tga",
+        "source.png",
+        "source.jpg",
+        "source.bmp",
+        "material.bgsm",
+        "effect.bgem",
+        "generic.mat",
+        "shader.fx",
+        "env.cub",
+        "script.psc",
+        "script.pex",
+        "voice.fuz",
+        "voice.lip",
+        "sound.xwm",
+        "sound.wav",
+        "legacy.ogg",
+        "music.mp3",
+        "lipsync.dat",
+        "Fallout4_en.strings",
+        "Fallout4_en.dlstrings",
+        "Fallout4_en.ilstrings",
+        "quest.seq",
+        "menu.swf",
+        "ui.gfx",
+        "font.fnt",
+        "save.fos",
+        "co_save.f4se",
+        "nvse_sidecar.nvse",
+        "native.dll",
+        "tool.exe",
+        "installer.fomod",
+        "old.omod",
+        "archive.zip",
+        "archive.7z",
+        "archive.rar",
+        "config.ini",
+        "metadata.json",
+        "menu.xml",
+        "readme.txt",
+        "scan.log",
+        "unknown.xyz",
+    };
+    for (const auto& fileName : fileNames) {
+        std::ofstream file(tempRoot / "Export_data" / fileName, std::ios::binary);
+        file << "smoke";
+    }
+
+    const auto summary = bunker::ScanExportDataDirectory(tempRoot);
+    const auto bwld = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
+        return file.extension == ".bwld";
+    });
+    const auto dba = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
+        return file.extension == ".dba";
+    });
+    const auto esp = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
+        return file.extension == ".esp";
+    });
+    const auto psc = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
+        return file.extension == ".psc";
+    });
+    const auto dll = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
+        return file.extension == ".dll";
+    });
+    const auto unknown = std::find_if(summary.files.begin(), summary.files.end(), [](const bunker::ExternalDataFileRecord& file) {
+        return file.extension == ".xyz";
+    });
+
+    fs::remove_all(tempRoot, ec);
+
+    if (!Check(summary.exists, "export_data scan should detect existing Export_data folder")) {
+        return false;
+    }
+    if (!Check(summary.foundFileCount == fileNames.size(), "export_data scan should count all fake files")) {
+        return false;
+    }
+    if (!Check(summary.recognizedFileCount + summary.unknownFileCount == fileNames.size(),
+            "export_data scan should classify every file as recognized or unknown")) {
+        return false;
+    }
+    if (!Check(summary.unknownFileCount == 1, "export_data scan should treat unknown.xyz as the only unknown file")) {
+        return false;
+    }
+    return Check(bwld != summary.files.end() && bwld->bunkerNative && bwld->canonicalAuthoringWorld &&
+                bwld->importMode == bunker::ExternalDataImportMode::NativeWorldSource,
+            "export_data scan should mark .bwld as native canonical world source") &&
+        Check(dba != summary.files.end() && dba->bunkerNative && dba->packageFormat &&
+                dba->importMode == bunker::ExternalDataImportMode::BunkerPackageReference,
+            "export_data scan should mark .dba as bunker-native package reference") &&
+        Check(esp != summary.files.end() && esp->referenceOnly &&
+                esp->importMode == bunker::ExternalDataImportMode::ReferenceOnly,
+            "export_data scan should mark Fallout-like plugin files as reference-only") &&
+        Check(psc != summary.files.end() && psc->textReadable &&
+                psc->importMode == bunker::ExternalDataImportMode::TextScriptSource,
+            "export_data scan should mark .psc as text script source") &&
+        Check(dll != summary.files.end() && dll->recognized && dll->executableDanger &&
+                dll->referenceOnly,
+            "export_data scan should mark .dll as dangerous reference-only executable data") &&
+        Check(unknown != summary.files.end() && !unknown->recognized &&
+                unknown->importMode == bunker::ExternalDataImportMode::UnknownReference,
+            "export_data scan should treat unknown extensions as warning-only references");
 }
 
 bool RunStrictSemanticExportPolicySmoke() {
@@ -3684,6 +4294,75 @@ bool RunLegacySemanticAutoInferenceSmoke() {
         Check(!bunker::IsPinnedSemanticAnchor(*serviceBay), "legacy BWL2 auto anchor should not infer pinned semantic placement");
 }
 
+bool RunLegacyManualLootMigrationSmoke() {
+    std::ofstream file(bunker::DefaultWorldPath(), std::ios::binary);
+    if (!Check(file.is_open(), "legacy manual loot migration smoke failed to open world file for write")) {
+        return false;
+    }
+
+    file.write("BWL2", 4);
+    WriteRawString(file, "Legacy Manual Loot Migration");
+    WriteRawString(file, "Bunker Interior");
+    WriteRawString(file, "Load legacy manualLootIds into scalable lootEntries.");
+    const float spawnX = 0.0f;
+    const float spawnY = 0.0f;
+    file.write(reinterpret_cast<const char*>(&spawnX), sizeof(spawnX));
+    file.write(reinterpret_cast<const char*>(&spawnY), sizeof(spawnY));
+
+    const std::uint32_t count = 1;
+    file.write(reinterpret_cast<const char*>(&count), sizeof(count));
+
+    WriteRawString(file, "[%legacy_loot_0001]");
+    WriteRawString(file, "Legacy Loot Chest");
+    WriteRawString(file, "");
+    WriteRawString(file, "");
+
+    const std::uint32_t interaction = static_cast<std::uint32_t>(bunker::InteractionType::Container);
+    const std::uint32_t category = static_cast<std::uint32_t>(bunker::ObjectCategory::Container);
+    const float x = 2.0f;
+    const float y = 3.0f;
+    const float z = 0.0f;
+    const float width = 1.4f;
+    const float depth = 1.2f;
+    const float height = 1.2f;
+    const float health = 70.0f;
+    const bool blocksMovement = false;
+    const bool discovered = true;
+    const bool manualLoot = true;
+
+    file.write(reinterpret_cast<const char*>(&interaction), sizeof(interaction));
+    file.write(reinterpret_cast<const char*>(&category), sizeof(category));
+    file.write(reinterpret_cast<const char*>(&x), sizeof(x));
+    file.write(reinterpret_cast<const char*>(&y), sizeof(y));
+    file.write(reinterpret_cast<const char*>(&z), sizeof(z));
+    file.write(reinterpret_cast<const char*>(&width), sizeof(width));
+    file.write(reinterpret_cast<const char*>(&depth), sizeof(depth));
+    file.write(reinterpret_cast<const char*>(&height), sizeof(height));
+    file.write(reinterpret_cast<const char*>(&health), sizeof(health));
+    file.write(reinterpret_cast<const char*>(&blocksMovement), sizeof(blocksMovement));
+    file.write(reinterpret_cast<const char*>(&discovered), sizeof(discovered));
+    file.write(reinterpret_cast<const char*>(&manualLoot), sizeof(manualLoot));
+    WriteRawString(file, "legacy_loot_a");
+    WriteRawString(file, "");
+    WriteRawString(file, "legacy_loot_c");
+    WriteRawString(file, "");
+    file.close();
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(bunker::DefaultWorldPath().string()), "legacy manual loot migration world load failed")) {
+        return false;
+    }
+
+    const auto* legacyChest = loadedWorld.FindObjectByRegistryId("[%legacy_loot_0001]");
+    return Check(legacyChest != nullptr, "legacy manual loot migration should load chest") &&
+        Check(legacyChest->lootMode == bunker::LootMode::ManualList, "legacy manual loot migration should default to manual loot mode") &&
+        Check(legacyChest->lootEntries.size() == 2, "legacy manual loot migration should create scalable entries from non-empty legacy slots") &&
+        Check(legacyChest->lootEntries[0].itemId == "legacy_loot_a", "legacy manual loot migration should preserve first legacy item") &&
+        Check(legacyChest->lootEntries[1].itemId == "legacy_loot_c", "legacy manual loot migration should preserve later non-empty legacy item") &&
+        Check(legacyChest->manualLootIds[0] == "legacy_loot_a" && legacyChest->manualLootIds[2] == "legacy_loot_c",
+            "legacy manual loot migration should keep legacy mirror values loaded");
+}
+
 bool RunLegacyWorldEditorLayerInferenceSmoke() {
     std::ofstream file(bunker::DefaultWorldPath(), std::ios::binary);
     if (!Check(file.is_open(), "legacy editor-layer inference smoke failed to open world file for write")) {
@@ -3807,6 +4486,13 @@ bool RunWorldEditorUndoSmoke() {
     undoStack.PushObjectUpdated("Edit service relay", beforeFirstUpdate, world.objects[1], 1);
     const bunker::MapObject beforeSecondUpdate = world.objects[1];
     world.objects[1].x = 14.0f;
+    world.objects[1].manualLoot = true;
+    world.objects[1].manualLootIds = {"undo_loot_a", "undo_loot_b", "", ""};
+    world.objects[1].lootMode = bunker::LootMode::RandomTable;
+    world.objects[1].lootEntries = {
+        {"undo_loot_a", 1, 2, 2.0f},
+        {"undo_loot_b", 3, 3, 0.0f},
+    };
     undoStack.PushObjectUpdated("Edit service relay", beforeSecondUpdate, world.objects[1], 1);
 
     if (!Check(undoStack.UndoCount() == 2, "undo smoke expected update coalescing to keep a single object-edit record")) {
@@ -3817,7 +4503,10 @@ bool RunWorldEditorUndoSmoke() {
         return false;
     }
     if (!Check(world.objects[1].displayName == beforeFirstUpdate.displayName &&
-            world.objects[1].x == beforeFirstUpdate.x,
+            world.objects[1].x == beforeFirstUpdate.x &&
+            world.objects[1].lootEntries == beforeFirstUpdate.lootEntries &&
+            world.objects[1].lootMode == beforeFirstUpdate.lootMode &&
+            world.objects[1].manualLootIds == beforeFirstUpdate.manualLootIds,
             "undo smoke expected coalesced object-edit undo to restore original object")) {
         return false;
     }
@@ -3825,7 +4514,13 @@ bool RunWorldEditorUndoSmoke() {
     if (!Check(updateRedo.changed, "undo smoke expected object-edit redo to apply")) {
         return false;
     }
-    if (!Check(world.objects[1].displayName == "Service Relay Updated" && world.objects[1].x == 14.0f,
+    if (!Check(world.objects[1].displayName == "Service Relay Updated" &&
+            world.objects[1].x == 14.0f &&
+            world.objects[1].lootMode == bunker::LootMode::RandomTable &&
+            world.objects[1].lootEntries.size() == 2 &&
+            world.objects[1].lootEntries[1].itemId == "undo_loot_b" &&
+            world.objects[1].lootEntries[1].weight == 0.0f &&
+            world.objects[1].manualLootIds[0] == "undo_loot_a",
             "undo smoke expected coalesced object-edit redo to restore latest object state")) {
         return false;
     }
@@ -4152,6 +4847,301 @@ bool RunLegacyWorldAliasMigrationSmoke() {
         Check(normalizedObject->scriptTag == "tower_sync", "loaded legacy object tag was not canonicalized");
 }
 
+const bunker::GameComponent* FindComponent(
+    const bunker::GameObjectInstance& instance,
+    bunker::GameComponentKind kind) {
+    const auto it = std::find_if(instance.components.begin(), instance.components.end(), [&](const bunker::GameComponent& component) {
+        return component.kind == kind;
+    });
+    return it == instance.components.end() ? nullptr : &(*it);
+}
+
+bool RunGameExecutionResourceLookupSmoke() {
+    const fs::path tempRoot = fs::current_path() / "game_execution_resource_lookup";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "Export_data", ec);
+    if (!Check(!ec, "game execution resource smoke failed to create temp Export_data")) {
+        return false;
+    }
+
+    const std::vector<std::string> files = {
+        "generator_0001.NIF",
+        "generator_0001.DDS",
+        "terminal_sync.PEX",
+        "terminal_sync.PSC",
+        "Fallout4.ESM",
+        "random_unknown.xyz",
+    };
+    for (const auto& fileName : files) {
+        std::ofstream file(tempRoot / "Export_data" / fileName, std::ios::binary);
+        file << "fake";
+    }
+
+    bunker::World world;
+    bunker::MapObject generator;
+    generator.registryId = "[%generator_0001]";
+    generator.displayName = "Backup Generator";
+    generator.prefabSourceId = "generator_0001";
+    generator.category = bunker::ObjectCategory::Structure;
+    world.AddObject(generator);
+
+    bunker::MapObject terminal;
+    terminal.registryId = "[%terminal_0001]";
+    terminal.displayName = "Sync Terminal";
+    terminal.interaction = bunker::InteractionType::Terminal;
+    terminal.category = bunker::ObjectCategory::Terminal;
+    terminal.scriptTag = "terminal_sync";
+    world.AddObject(terminal);
+
+    bunker::MapObject pluginProxy;
+    pluginProxy.registryId = "[%Fallout4]";
+    pluginProxy.displayName = "Plugin Proxy";
+    world.AddObject(pluginProxy);
+
+    const auto context = bunker::BuildWorldExecutionContext(world, tempRoot);
+    const auto missingContext = bunker::BuildWorldExecutionContext(world, tempRoot / "missing");
+    const auto* generatorInstance = bunker::FindGameObjectInstance(context, generator.registryId);
+    const auto* terminalInstance = bunker::FindGameObjectInstance(context, terminal.registryId);
+    const auto* pluginInstance = bunker::FindGameObjectInstance(context, pluginProxy.registryId);
+
+    fs::remove_all(tempRoot, ec);
+
+    return Check(context.externalData.exists, "game execution resource smoke expected Export_data scan to exist") &&
+        Check(context.externalData.foundFileCount == files.size(), "game execution resource smoke expected every fake file to be scanned") &&
+        Check(context.externalData.unknownFileCount == 1, "game execution resource smoke expected unknown files to stay warning-only") &&
+        Check(missingContext.objects.size() == world.objects.size(),
+            "game execution resource smoke expected missing scan root to build context without crashing") &&
+        Check(generatorInstance != nullptr && !generatorInstance->renderResourcePath.empty() &&
+                (generatorInstance->renderResourcePath.extension().string() == ".NIF" ||
+                 generatorInstance->renderResourcePath.extension().string() == ".DDS"),
+            "game execution resource smoke expected uppercase render asset lookup") &&
+        Check(terminalInstance != nullptr && !terminalInstance->compiledScriptPath.empty() &&
+                !terminalInstance->sourceScriptPath.empty(),
+            "game execution resource smoke expected script paths for terminal_sync") &&
+        Check(pluginInstance != nullptr && !pluginInstance->pluginProxyPath.empty(),
+            "game execution resource smoke expected plugin proxy match by normalized key") &&
+        Check(bunker::NormalizeResourceLookupKey("[%generator_0001]") == "generator0001",
+            "game execution resource smoke expected registry id normalization");
+}
+
+bool RunGameExecutionLootTemplateSmoke() {
+    bunker::World world;
+    auto makeContainer = [](std::string registryId, std::vector<bunker::LootEntry> loot) {
+        bunker::MapObject container;
+        container.registryId = std::move(registryId);
+        container.displayName = "Loot Container";
+        container.interaction = bunker::InteractionType::Container;
+        container.category = bunker::ObjectCategory::Container;
+        container.lootEntries = std::move(loot);
+        return container;
+    };
+
+    world.AddObject(makeContainer("[%empty_loot]", std::vector<bunker::LootEntry>(20)));
+
+    std::vector<bunker::LootEntry> row10(20);
+    row10[9].itemId = "row_10_real";
+    row10[9].minCount = 2;
+    world.AddObject(makeContainer("[%row10_loot]", row10));
+
+    std::vector<bunker::LootEntry> row20(20);
+    row20[19].itemId = "row_20_real";
+    row20[19].maxCount = 3;
+    world.AddObject(makeContainer("[%row20_loot]", row20));
+
+    std::vector<bunker::LootEntry> mixed(4);
+    mixed[0].itemId = "first_real";
+    mixed[2].itemId = "second_real";
+    world.AddObject(makeContainer("[%mixed_loot]", mixed));
+
+    const auto context = bunker::BuildWorldExecutionContext(world);
+    const auto* emptyInstance = bunker::FindGameObjectInstance(context, "[%empty_loot]");
+    const auto* row10Instance = bunker::FindGameObjectInstance(context, "[%row10_loot]");
+    const auto* row20Instance = bunker::FindGameObjectInstance(context, "[%row20_loot]");
+    const auto* mixedInstance = bunker::FindGameObjectInstance(context, "[%mixed_loot]");
+
+    const auto* emptyInventory = emptyInstance == nullptr ? nullptr : FindComponent(*emptyInstance, bunker::GameComponentKind::Inventory);
+    const auto* row10Inventory = row10Instance == nullptr ? nullptr : FindComponent(*row10Instance, bunker::GameComponentKind::Inventory);
+    const auto* row20Inventory = row20Instance == nullptr ? nullptr : FindComponent(*row20Instance, bunker::GameComponentKind::Inventory);
+    const auto* mixedInventory = mixedInstance == nullptr ? nullptr : FindComponent(*mixedInstance, bunker::GameComponentKind::Inventory);
+
+    return Check(emptyInventory == nullptr, "game execution loot smoke expected all-empty UI rows to produce no inventory") &&
+        Check(row10Inventory != nullptr && row10Inventory->inventoryTemplate.size() == 1 &&
+                row10Inventory->inventoryTemplate[0].itemId == "row_10_real",
+            "game execution loot smoke expected high row 10 loot to be preserved") &&
+        Check(row20Inventory != nullptr && row20Inventory->inventoryTemplate.size() == 1 &&
+                row20Inventory->inventoryTemplate[0].itemId == "row_20_real",
+            "game execution loot smoke expected high row 20 loot to be preserved") &&
+        Check(mixedInventory != nullptr && mixedInventory->inventoryTemplate.size() == 2 &&
+                mixedInventory->inventoryTemplate[0].itemId == "first_real" &&
+                mixedInventory->inventoryTemplate[1].itemId == "second_real",
+            "game execution loot smoke expected empty rows to be ignored");
+}
+
+bool RunGameExecutionScriptBridgeSmoke() {
+    const fs::path tempRoot = fs::current_path() / "game_execution_script_bridge";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "Export_data", ec);
+    if (!Check(!ec, "game execution script bridge smoke failed to create temp Export_data")) {
+        return false;
+    }
+    {
+        std::ofstream terminalPex(tempRoot / "Export_data" / "terminal_sync.pex", std::ios::binary);
+        terminalPex << "fake";
+        std::ofstream sourceOnly(tempRoot / "Export_data" / "source_only.psc", std::ios::binary);
+        sourceOnly << "fake";
+    }
+
+    bunker::World world;
+    auto makeTerminal = [](std::string registryId, std::string scriptTag) {
+        bunker::MapObject terminal;
+        terminal.registryId = std::move(registryId);
+        terminal.displayName = "Bridge Terminal";
+        terminal.interaction = bunker::InteractionType::Terminal;
+        terminal.category = bunker::ObjectCategory::Terminal;
+        terminal.scriptTag = std::move(scriptTag);
+        return terminal;
+    };
+    world.AddObject(makeTerminal("[%terminal_sync]", "terminal_sync"));
+    world.AddObject(makeTerminal("[%source_only]", "source_only"));
+    world.AddObject(makeTerminal("[%missing_script]", "missing_script"));
+    world.AddObject(makeTerminal("[%empty_script]", ""));
+
+    const auto context = bunker::BuildWorldExecutionContext(world, tempRoot);
+    std::string status;
+    const bool compiled = bunker::TryExecuteCompiledScript(world.objects[0], context, status);
+    const bool compiledStatus = status.find("compiled script bridge") != std::string::npos;
+    status.clear();
+    const bool source = bunker::TryExecuteCompiledScript(world.objects[1], context, status);
+    const bool sourceStatus = status.find("source script bridge") != std::string::npos;
+    status.clear();
+    const bool missing = bunker::TryExecuteCompiledScript(world.objects[2], context, status);
+    const bool empty = bunker::TryExecuteCompiledScript(world.objects[3], context, status);
+
+    fs::remove_all(tempRoot, ec);
+
+    return Check(compiled && compiledStatus, "game execution script smoke expected compiled bridge status") &&
+        Check(source && sourceStatus, "game execution script smoke expected source fallback bridge status") &&
+        Check(!missing, "game execution script smoke expected missing script to return false") &&
+        Check(!empty, "game execution script smoke expected empty script tag to return false");
+}
+
+bool RunPlayerSweepCollisionSmoke() {
+    bunker::World blockingWorld;
+    bunker::MapObject blocker;
+    blocker.registryId = "[%blocker]";
+    blocker.displayName = "Blocking Crate";
+    blocker.category = bunker::ObjectCategory::Structure;
+    blocker.x = 1.2f;
+    blocker.y = 0.0f;
+    blocker.width = 1.0f;
+    blocker.depth = 1.0f;
+    blocker.blocksMovement = true;
+    blockingWorld.AddObject(blocker);
+
+    bunker::PlayerState player;
+    player.x = 0.0f;
+    player.y = 0.0f;
+    const bool blockedMove = bunker::SweepMovePlayerAgainstWorld(blockingWorld, player, 1.0f, 0.0f);
+    const float afterBlockedX = player.x;
+    const bool movedAway = bunker::SweepMovePlayerAgainstWorld(blockingWorld, player, -1.0f, 0.0f);
+
+    bunker::World nonBlockingWorld;
+    blocker.blocksMovement = false;
+    nonBlockingWorld.AddObject(blocker);
+    bunker::PlayerState nonBlockedPlayer;
+    const bool nonBlockedMove = bunker::SweepMovePlayerAgainstWorld(nonBlockingWorld, nonBlockedPlayer, 1.0f, 0.0f);
+
+    return Check(!blockedMove && std::abs(afterBlockedX) < 0.0001f,
+            "player sweep collision smoke expected blocking object to stop movement") &&
+        Check(movedAway && player.x < -0.9f,
+            "player sweep collision smoke expected movement away from blocker to work") &&
+        Check(nonBlockedMove && nonBlockedPlayer.x > 0.9f,
+            "player sweep collision smoke expected non-blocking object not to stop movement");
+}
+
+bool RunRuntimeCameraSmoke() {
+    bunker::PlayerState player;
+    player.x = 10.0f;
+    player.y = 20.0f;
+    player.facingRadians = 0.0f;
+    player.viewMode = bunker::ViewMode::ThirdPerson;
+    const auto thirdPerson = bunker::BuildRuntimeCamera(player);
+
+    player.viewMode = bunker::ViewMode::FirstPerson;
+    const auto firstPerson = bunker::BuildRuntimeCamera(player);
+
+    player.insideTank = true;
+    player.viewMode = bunker::ViewMode::Cockpit;
+    const auto cockpit = bunker::BuildRuntimeCamera(player);
+
+    return Check(std::string(bunker::ToString(bunker::ViewMode::FirstPerson)) == "First Person",
+            "runtime camera smoke expected FirstPerson label") &&
+        Check(thirdPerson.positionX < player.x && thirdPerson.positionY > firstPerson.positionY,
+            "runtime camera smoke expected third-person camera behind and above player") &&
+        Check(firstPerson.targetX > firstPerson.positionX && std::abs(firstPerson.targetZ - firstPerson.positionZ) < 0.001f,
+            "runtime camera smoke expected first-person camera to look forward") &&
+        Check(cockpit.fovDegrees < firstPerson.fovDegrees && cockpit.positionY > firstPerson.positionY,
+            "runtime camera smoke expected cockpit camera to use tighter raised view");
+}
+
+bool RunPipPadAccessGatingSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::GameState gameState;
+
+    if (!Check(!player.uiVisible, "pip-pad gating smoke expected default UI to start hidden")) {
+        return false;
+    }
+    if (!Check(!bunker::PlayerHasPipPadAccess(profile), "pip-pad gating smoke expected no access before pickup")) {
+        return false;
+    }
+    player.uiVisible = true;
+    if (!Check(!bunker::TryTogglePipPadUi(player, profile, gameState),
+            "pip-pad gating smoke expected TAB helper to reject missing Pip-Pad")) {
+        return false;
+    }
+    if (!Check(!player.uiVisible &&
+            gameState.lastEvent.find("No Pip-Pad linked yet") != std::string::npos,
+            "pip-pad gating smoke expected missing Pip-Pad feedback and hidden UI")) {
+        return false;
+    }
+
+    bunker::World world;
+    bunker::MapObject pipPad;
+    pipPad.registryId = "[%pip_0001]";
+    pipPad.displayName = "Pip-Pad Locker";
+    pipPad.interaction = bunker::InteractionType::Container;
+    pipPad.category = bunker::ObjectCategory::Container;
+    world.AddObject(pipPad);
+
+    profile.firstPlayableRoute.accessCardRecovered = true;
+    profile.firstPlayableRoute.prePipPadClueCount = 2;
+    profile.selectedWorld = "pip_pad_access_gating_smoke.bwld";
+    bunker::StaticEraser staticEraser;
+    const auto* locker = world.FindObjectByRegistryId("[%pip_0001]");
+    bunker::HandleInteraction(locker, world, player, profile, staticEraser, gameState);
+
+    if (!Check(profile.story.pipPadRecovered && bunker::HasInventoryItem(profile, "#%it_pippad"),
+            "pip-pad gating smoke expected pickup to set story flag and inventory access")) {
+        return false;
+    }
+    if (!Check(!player.uiVisible,
+            "pip-pad gating smoke expected pickup to leave UI hidden until TAB")) {
+        return false;
+    }
+    if (!Check(gameState.lastEvent.find("Press TAB") != std::string::npos,
+            "pip-pad gating smoke expected pickup feedback to mention TAB")) {
+        return false;
+    }
+
+    return Check(bunker::TryTogglePipPadUi(player, profile, gameState) && player.uiVisible,
+            "pip-pad gating smoke expected TAB helper to open after pickup") &&
+        Check(bunker::TryTogglePipPadUi(player, profile, gameState) && !player.uiVisible,
+            "pip-pad gating smoke expected TAB helper to close after pickup");
+}
+
 }  // namespace
 
 int main() {
@@ -4168,6 +5158,7 @@ int main() {
     bunker::EnsureProjectDirectories();
 
     const bool ok = RunWorldRoundtrip() &&
+        RunEditorWorldFileHelpersSmoke() &&
         RunProfileRoundtrip() &&
         RunFirstPlayableRouteStorySmoke() &&
         RunRouteBeatPresentationSmoke() &&
@@ -4176,6 +5167,8 @@ int main() {
         RunFirstCombatWorldEventSmoke() &&
         RunFirstCombatResolutionHandoffSmoke() &&
         RunWorkshopServiceRouteHandoffSmoke() &&
+        RunScalableContainerLootRuntimeSmoke() &&
+        RunRuntimeProfileSaveDoesNotReplaceAuthoringWorldSmoke() &&
         RunDebriefIndustrialHandoffSmoke() &&
         RunRecoveryHandoffSummarySmoke() &&
         RunRecoveryBackboneStatusSmoke() &&
@@ -4208,7 +5201,10 @@ int main() {
         RunSemanticAuthoringStateRoundtripSmoke() &&
         RunSemanticAutoAnchorValidationSmoke() &&
         RunPrefabLibrarySemanticStateSmoke() &&
+        RunLegacyPrefabManualLootMigrationSmoke() &&
         RunPrefabUsageAndExportReportSmoke() &&
+        RunSupportedFileFormatRegistrySmoke() &&
+        RunExportDataScanSmoke() &&
         RunStrictSemanticExportPolicySmoke() &&
         RunValidatedWorldExportArtifactSmoke() &&
         RunWorldExportAuditTrailSmoke() &&
@@ -4216,12 +5212,19 @@ int main() {
         RunShippingBaselineObjectAwareDriftSmoke() &&
         RunExportHistoryCheckpointSelectionSmoke() &&
         RunLegacySemanticAutoInferenceSmoke() &&
+        RunLegacyManualLootMigrationSmoke() &&
         RunLegacyWorldEditorLayerInferenceSmoke() &&
         RunWorldEditorUndoSmoke() &&
         RunWorldReferenceGraphSmoke() &&
         RunSemanticAuthoringCascadeSmoke() &&
         RunStarterSemanticLinkTargetSmoke() &&
-        RunLegacyWorldAliasMigrationSmoke();
+        RunLegacyWorldAliasMigrationSmoke() &&
+        RunGameExecutionResourceLookupSmoke() &&
+        RunGameExecutionLootTemplateSmoke() &&
+        RunGameExecutionScriptBridgeSmoke() &&
+        RunPlayerSweepCollisionSmoke() &&
+        RunRuntimeCameraSmoke() &&
+        RunPipPadAccessGatingSmoke();
 
     fs::remove_all(sandboxRoot, ec);
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;

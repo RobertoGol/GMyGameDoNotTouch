@@ -1,0 +1,2 @@
+# BUNKER_PREFABS_V6
+"reference tank side" "[%prefab_seed_reference_tank_side]" "reference tank side" "" "" "Structures" 0 0 0 0 0 0 0 0 1.4 1.2 1.4 100 0 1 0 0 0 "" "" "" "" 0 0 "prefab_reference_tank_side" "Prop" "reference_tank_side.png" "Logical completion"

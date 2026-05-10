@@ -118,6 +118,75 @@ struct WorldExportHistorySelection {
     std::string fallbackMessage;
 };
 
+enum class SupportedFileFormatLayer {
+    BunkerWorld,
+    BunkerPackage,
+    RecordPlugin,
+    AssetArchive,
+    RuntimeSave,
+    MeshModelGeometry,
+    AnimationPhysics,
+    Texture,
+    MaterialShader,
+    Script,
+    AudioVoiceLip,
+    Localization,
+    InterfaceUI,
+    GeneratedWorldData,
+    ConfigTextLog,
+    ModPackage,
+    ExecutableNativePlugin
+};
+
+struct SupportedFileFormat {
+    std::string extension;
+    SupportedFileFormatLayer layer = SupportedFileFormatLayer::ConfigTextLog;
+    std::string label;
+    std::string description;
+    bool canonicalAuthoringWorld = false;
+    bool bunkerNative = false;
+    bool packageFormat = false;
+    bool referenceOnly = false;
+    bool executableDanger = false;
+    bool canBeTextPreviewed = false;
+    bool futureExtractorCandidate = false;
+};
+
+enum class ExternalDataImportMode {
+    UnknownReference,
+    NativeWorldSource,
+    BunkerPackageReference,
+    MetadataTextSource,
+    TextScriptSource,
+    ReferenceOnly
+};
+
+struct ExternalDataFileRecord {
+    std::filesystem::path path{};
+    std::string fileName;
+    std::string extension;
+    std::string layerLabel;
+    std::string formatLabel;
+    ExternalDataImportMode importMode = ExternalDataImportMode::UnknownReference;
+    bool recognized = false;
+    bool bunkerNative = false;
+    bool canonicalAuthoringWorld = false;
+    bool textReadable = false;
+    bool packageFormat = false;
+    bool referenceOnly = false;
+    bool executableDanger = false;
+};
+
+struct ExternalDataScanSummary {
+    std::filesystem::path folderPath{};
+    bool exists = false;
+    std::size_t foundFileCount = 0;
+    std::size_t recognizedFileCount = 0;
+    std::size_t unknownFileCount = 0;
+    bool bwldPresent = false;
+    std::vector<ExternalDataFileRecord> files{};
+};
+
 struct WorldExportResult {
     bool ok = false;
     bool blockedByValidation = false;
@@ -141,6 +210,15 @@ const char* ExportValidationPolicyLabel(ExportValidationPolicy policy);
 const char* WorldExportDecisionLabel(const WorldExportResult& result);
 const char* WorldExportHistoryFilterLabel(WorldExportHistoryFilter filter);
 const char* WorldExportComparePresetLabel(WorldExportComparePreset preset);
+const char* SupportedFileFormatLayerLabel(SupportedFileFormatLayer layer);
+const char* ExternalDataImportModeLabel(ExternalDataImportMode mode);
+const std::vector<SupportedFileFormat>& SupportedFileFormats();
+const SupportedFileFormat* FindSupportedFileFormat(std::string_view extension);
+std::string BuildSupportedFileFormatRegistryReport();
+std::filesystem::path ResolveExportDataDirectory(const std::filesystem::path& startPath = {});
+bool CreateExportDataDirectory(const std::filesystem::path& startPath, std::filesystem::path& createdPath);
+ExternalDataScanSummary ScanExportDataDirectory(const std::filesystem::path& startPath = {});
+std::string BuildExternalDataScanReport(const ExternalDataScanSummary& summary);
 std::filesystem::path ValidationReportPathForWorld(const std::filesystem::path& worldPath);
 std::filesystem::path ExportAuditTrailPathForWorld(const std::filesystem::path& worldPath);
 std::filesystem::path ValidationSnapshotArchivePathForWorld(const std::filesystem::path& worldPath, std::string_view exportToken);

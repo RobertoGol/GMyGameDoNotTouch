@@ -969,6 +969,7 @@ int main() {
                 : "pilot";
             launchTicket.bt72SecondSeatPolicy = launchSession.bt72SecondSeatPolicy;
             launchTicket.bt72TrustedGunnerHandle = launchSession.bt72TrustedGunnerHandle;
+            launchTicket.launcherRole = "player";
             if (!bunker::IssueLaunchTicket(launchTicket)) {
                 launcherState.statusText = "Failed to create launcher ticket.";
             } else {

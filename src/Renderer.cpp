@@ -10,6 +10,36 @@ namespace bunker {
 
 namespace {
 
+struct Vec3 {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+
+Vec3 operator-(const Vec3& lhs, const Vec3& rhs) {
+    return {lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
+}
+
+float Dot(const Vec3& lhs, const Vec3& rhs) {
+    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
+}
+
+Vec3 Cross(const Vec3& lhs, const Vec3& rhs) {
+    return {
+        lhs.y * rhs.z - lhs.z * rhs.y,
+        lhs.z * rhs.x - lhs.x * rhs.z,
+        lhs.x * rhs.y - lhs.y * rhs.x,
+    };
+}
+
+Vec3 Normalize(Vec3 value) {
+    const float length = std::sqrt(Dot(value, value));
+    if (length <= 0.0001f) {
+        return {};
+    }
+    return {value.x / length, value.y / length, value.z / length};
+}
+
 void SetColorForCategory(ObjectCategory category) {
     switch (category) {
         case ObjectCategory::Structure:
@@ -39,16 +69,56 @@ void SetColorForCategory(ObjectCategory category) {
     }
 }
 
-void DrawRect(float x, float y, float halfWidth, float halfHeight) {
+void DrawGroundRect(float x, float z, float halfWidth, float halfDepth) {
     glBegin(GL_QUADS);
-    glVertex2f(x - halfWidth, y - halfHeight);
-    glVertex2f(x + halfWidth, y - halfHeight);
-    glVertex2f(x + halfWidth, y + halfHeight);
-    glVertex2f(x - halfWidth, y + halfHeight);
+    glVertex3f(x - halfWidth, 0.0f, z - halfDepth);
+    glVertex3f(x + halfWidth, 0.0f, z - halfDepth);
+    glVertex3f(x + halfWidth, 0.0f, z + halfDepth);
+    glVertex3f(x - halfWidth, 0.0f, z + halfDepth);
     glEnd();
 }
 
-void DrawRing(float x, float y, float radius, float thickness, int segments) {
+void DrawBox(float x, float z, float width, float depth, float height) {
+    const float minX = x - width * 0.5f;
+    const float maxX = x + width * 0.5f;
+    const float minZ = z - depth * 0.5f;
+    const float maxZ = z + depth * 0.5f;
+    const float maxY = std::max(0.08f, height);
+
+    glBegin(GL_QUADS);
+    glVertex3f(minX, 0.0f, minZ);
+    glVertex3f(maxX, 0.0f, minZ);
+    glVertex3f(maxX, 0.0f, maxZ);
+    glVertex3f(minX, 0.0f, maxZ);
+
+    glVertex3f(minX, maxY, minZ);
+    glVertex3f(minX, maxY, maxZ);
+    glVertex3f(maxX, maxY, maxZ);
+    glVertex3f(maxX, maxY, minZ);
+
+    glVertex3f(minX, 0.0f, minZ);
+    glVertex3f(minX, maxY, minZ);
+    glVertex3f(maxX, maxY, minZ);
+    glVertex3f(maxX, 0.0f, minZ);
+
+    glVertex3f(maxX, 0.0f, minZ);
+    glVertex3f(maxX, maxY, minZ);
+    glVertex3f(maxX, maxY, maxZ);
+    glVertex3f(maxX, 0.0f, maxZ);
+
+    glVertex3f(maxX, 0.0f, maxZ);
+    glVertex3f(maxX, maxY, maxZ);
+    glVertex3f(minX, maxY, maxZ);
+    glVertex3f(minX, 0.0f, maxZ);
+
+    glVertex3f(minX, 0.0f, maxZ);
+    glVertex3f(minX, maxY, maxZ);
+    glVertex3f(minX, maxY, minZ);
+    glVertex3f(minX, 0.0f, minZ);
+    glEnd();
+}
+
+void DrawRing(float x, float z, float radius, float thickness, int segments) {
     if (radius <= 0.0f || thickness <= 0.0f) {
         return;
     }
@@ -59,10 +129,39 @@ void DrawRing(float x, float y, float radius, float thickness, int segments) {
         const float angle = (static_cast<float>(index) / static_cast<float>(segments)) * 6.2831853f;
         const float cosAngle = std::cos(angle);
         const float sinAngle = std::sin(angle);
-        glVertex2f(x + cosAngle * radius, y + sinAngle * radius);
-        glVertex2f(x + cosAngle * innerRadius, y + sinAngle * innerRadius);
+        glVertex3f(x + cosAngle * radius, 0.04f, z + sinAngle * radius);
+        glVertex3f(x + cosAngle * innerRadius, 0.04f, z + sinAngle * innerRadius);
     }
     glEnd();
+}
+
+void ApplyPerspective(float fovDegrees, float aspect, float nearPlane, float farPlane) {
+    const double fovRadians = static_cast<double>(fovDegrees) * 3.14159265358979323846 / 180.0;
+    const double top = std::tan(fovRadians * 0.5) * static_cast<double>(nearPlane);
+    const double right = top * static_cast<double>(aspect);
+    glFrustum(-right, right, -top, top, nearPlane, farPlane);
+}
+
+void ApplyLookAt(const RuntimeCamera& camera) {
+    const Vec3 eye{camera.positionX, camera.positionY, camera.positionZ};
+    const Vec3 target{camera.targetX, camera.targetY, camera.targetZ};
+    Vec3 forward = Normalize(target - eye);
+    if (Dot(forward, forward) <= 0.0001f) {
+        forward = {0.0f, 0.0f, -1.0f};
+    }
+    Vec3 side = Normalize(Cross(forward, {0.0f, 1.0f, 0.0f}));
+    if (Dot(side, side) <= 0.0001f) {
+        side = {1.0f, 0.0f, 0.0f};
+    }
+    const Vec3 up = Cross(side, forward);
+    const float matrix[16] = {
+        side.x, up.x, -forward.x, 0.0f,
+        side.y, up.y, -forward.y, 0.0f,
+        side.z, up.z, -forward.z, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f,
+    };
+    glMultMatrixf(matrix);
+    glTranslatef(-eye.x, -eye.y, -eye.z);
 }
 
 std::string ToLowerCopy(std::string_view value) {
@@ -112,50 +211,68 @@ const char* ToString(WeatherAnomaly weather) {
     return "Unknown";
 }
 
+RuntimeCamera BuildRuntimeCamera(const PlayerState& player) {
+    const float forwardX = std::cos(player.facingRadians);
+    const float forwardZ = std::sin(player.facingRadians);
+    const float recoilCameraOffset = player.insideTank ? player.recoilOffset : 0.0f;
+
+    RuntimeCamera camera;
+    switch (player.viewMode) {
+        case ViewMode::FirstPerson:
+            camera.positionX = player.x - forwardX * recoilCameraOffset;
+            camera.positionY = player.insideTank ? 2.1f : 1.65f;
+            camera.positionZ = player.y - forwardZ * recoilCameraOffset;
+            camera.targetX = player.x + forwardX * 8.0f;
+            camera.targetY = player.insideTank ? 1.9f : 1.55f;
+            camera.targetZ = player.y + forwardZ * 8.0f;
+            camera.fovDegrees = player.insideTank ? 58.0f : 64.0f;
+            break;
+        case ViewMode::ThirdPerson:
+            camera.positionX = player.x - forwardX * 8.5f;
+            camera.positionY = player.insideTank ? 5.6f : 4.2f;
+            camera.positionZ = player.y - forwardZ * 8.5f;
+            camera.targetX = player.x + forwardX * 2.0f;
+            camera.targetY = player.insideTank ? 1.4f : 1.1f;
+            camera.targetZ = player.y + forwardZ * 2.0f;
+            camera.fovDegrees = 62.0f;
+            break;
+        case ViewMode::Cockpit:
+            camera.positionX = player.x - forwardX * (0.8f + recoilCameraOffset);
+            camera.positionY = 2.3f;
+            camera.positionZ = player.y - forwardZ * (0.8f + recoilCameraOffset);
+            camera.targetX = player.x + forwardX * 12.0f;
+            camera.targetY = 1.95f;
+            camera.targetZ = player.y + forwardZ * 12.0f;
+            camera.fovDegrees = 54.0f;
+            break;
+    }
+    return camera;
+}
+
 void RenderWorld(const World& world, const PlayerState& player, WeatherAnomaly weather, float weatherIntensity, int width, int height) {
     glViewport(0, 0, width, height);
     glClearColor(0.08f, 0.09f, 0.12f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    float visibleWidth = 34.0f;
-    float visibleHeight = visibleWidth * (static_cast<float>(height) / static_cast<float>(width));
-    float focusAhead = 0.0f;
-
-    switch (player.viewMode) {
-        case ViewMode::FirstPerson:
-            visibleWidth = 18.0f;
-            focusAhead = 3.5f;
-            break;
-        case ViewMode::ThirdPerson:
-            visibleWidth = 34.0f;
-            focusAhead = 0.0f;
-            break;
-        case ViewMode::Cockpit:
-            visibleWidth = 14.0f;
-            focusAhead = 5.0f;
-            break;
-    }
-
-    visibleHeight = visibleWidth * (static_cast<float>(height) / static_cast<float>(width));
-
-    const float recoilCameraOffset = player.insideTank ? player.recoilOffset : 0.0f;
-    const float cameraX = player.x + std::cos(player.facingRadians) * (focusAhead - recoilCameraOffset);
-    const float cameraY = player.y + std::sin(player.facingRadians) * (focusAhead - recoilCameraOffset);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(cameraX - visibleWidth, cameraX + visibleWidth, cameraY - visibleHeight, cameraY + visibleHeight, -1.0f, 1.0f);
+    const float aspect = static_cast<float>(std::max(1, width)) / static_cast<float>(std::max(1, height));
+    const RuntimeCamera camera = BuildRuntimeCamera(player);
+    ApplyPerspective(camera.fovDegrees, aspect, 0.1f, 260.0f);
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
+    ApplyLookAt(camera);
 
     glColor3f(0.16f, 0.18f, 0.21f);
     glBegin(GL_LINES);
     for (int line = -40; line <= 40; ++line) {
-        glVertex2f(static_cast<float>(line) * 2.0f, -80.0f);
-        glVertex2f(static_cast<float>(line) * 2.0f, 80.0f);
-        glVertex2f(-80.0f, static_cast<float>(line) * 2.0f);
-        glVertex2f(80.0f, static_cast<float>(line) * 2.0f);
+        glVertex3f(static_cast<float>(line) * 2.0f, 0.0f, -80.0f);
+        glVertex3f(static_cast<float>(line) * 2.0f, 0.0f, 80.0f);
+        glVertex3f(-80.0f, 0.0f, static_cast<float>(line) * 2.0f);
+        glVertex3f(80.0f, 0.0f, static_cast<float>(line) * 2.0f);
     }
     glEnd();
 
@@ -171,14 +288,14 @@ void RenderWorld(const World& world, const PlayerState& player, WeatherAnomaly w
 
         if (glassObject) {
             glColor4f(0.56f, 0.82f, 0.96f, 0.34f);
-            DrawRect(renderX, object.y, object.width * 0.5f, object.depth * 0.5f);
+            DrawBox(renderX, object.y, object.width, object.depth, object.height);
 
             glColor4f(0.88f, 0.96f, 1.0f, 0.5f);
             glBegin(GL_LINE_LOOP);
-            glVertex2f(renderX - object.width * 0.5f, object.y - object.depth * 0.5f);
-            glVertex2f(renderX + object.width * 0.5f, object.y - object.depth * 0.5f);
-            glVertex2f(renderX + object.width * 0.5f, object.y + object.depth * 0.5f);
-            glVertex2f(renderX - object.width * 0.5f, object.y + object.depth * 0.5f);
+            glVertex3f(renderX - object.width * 0.5f, object.height + 0.02f, object.y - object.depth * 0.5f);
+            glVertex3f(renderX + object.width * 0.5f, object.height + 0.02f, object.y - object.depth * 0.5f);
+            glVertex3f(renderX + object.width * 0.5f, object.height + 0.02f, object.y + object.depth * 0.5f);
+            glVertex3f(renderX - object.width * 0.5f, object.height + 0.02f, object.y + object.depth * 0.5f);
             glEnd();
             continue;
         }
@@ -186,12 +303,12 @@ void RenderWorld(const World& world, const PlayerState& player, WeatherAnomaly w
         if (foliageObject) {
             const float rainBias = weather == WeatherAnomaly::AcidRain ? std::min(0.22f, weatherIntensity * 0.14f) : 0.0f;
             glColor4f(0.24f, 0.64f + rainBias, 0.30f, 0.82f);
-            DrawRect(renderX, object.y, object.width * 0.5f, object.depth * 0.5f);
+            DrawBox(renderX, object.y, object.width, object.depth, std::max(0.45f, object.height));
             continue;
         }
 
         SetColorForCategory(object.category);
-        DrawRect(renderX, object.y, object.width * 0.5f, object.depth * 0.5f);
+        DrawBox(renderX, object.y, object.width, object.depth, object.height);
     }
     glDisable(GL_BLEND);
 
@@ -203,19 +320,15 @@ void RenderWorld(const World& world, const PlayerState& player, WeatherAnomaly w
     if (player.bucketRaised) {
         glColor3f(0.85f, 0.74f, 0.22f);
         glBegin(GL_QUADS);
-        glVertex2f(player.x + forwardX * 1.3f - rightX * 1.4f, player.y + forwardY * 1.3f - rightY * 1.4f);
-        glVertex2f(player.x + forwardX * 1.3f + rightX * 1.4f, player.y + forwardY * 1.3f + rightY * 1.4f);
-        glVertex2f(player.x + forwardX * 2.4f + rightX * 1.6f, player.y + forwardY * 2.4f + rightY * 1.6f);
-        glVertex2f(player.x + forwardX * 2.4f - rightX * 1.6f, player.y + forwardY * 2.4f - rightY * 1.6f);
+        glVertex3f(player.x + forwardX * 1.3f - rightX * 1.4f, 0.35f, player.y + forwardY * 1.3f - rightY * 1.4f);
+        glVertex3f(player.x + forwardX * 1.3f + rightX * 1.4f, 0.35f, player.y + forwardY * 1.3f + rightY * 1.4f);
+        glVertex3f(player.x + forwardX * 2.4f + rightX * 1.6f, 0.55f, player.y + forwardY * 2.4f + rightY * 1.6f);
+        glVertex3f(player.x + forwardX * 2.4f - rightX * 1.6f, 0.55f, player.y + forwardY * 2.4f - rightY * 1.6f);
         glEnd();
     }
 
     glColor3f(player.insideTank ? 0.88f : 0.42f, player.insideTank ? 0.83f : 0.84f, player.insideTank ? 0.32f : 0.52f);
-    glBegin(GL_TRIANGLES);
-    glVertex2f(player.x + forwardX * 1.2f, player.y + forwardY * 1.2f);
-    glVertex2f(player.x - forwardX * 0.8f + rightX * 0.6f, player.y - forwardY * 0.8f + rightY * 0.6f);
-    glVertex2f(player.x - forwardX * 0.8f - rightX * 0.6f, player.y - forwardY * 0.8f - rightY * 0.6f);
-    glEnd();
+    DrawBox(player.x, player.y, player.insideTank ? 2.4f : 0.8f, player.insideTank ? 3.2f : 0.8f, player.insideTank ? 1.45f : 1.75f);
 
     if (player.muzzleFlashTimer > 0.0f || player.shockWaveTimer > 0.0f) {
         glEnable(GL_BLEND);
@@ -231,16 +344,16 @@ void RenderWorld(const World& world, const PlayerState& player, WeatherAnomaly w
 
         glColor4f(1.0f, 0.78f, 0.24f, flashAlpha);
         glBegin(GL_TRIANGLES);
-        glVertex2f(muzzleX + forwardX * flashReach, muzzleY + forwardY * flashReach);
-        glVertex2f(muzzleX - rightX * flashWidth, muzzleY - rightY * flashWidth);
-        glVertex2f(muzzleX + rightX * flashWidth, muzzleY + rightY * flashWidth);
+        glVertex3f(muzzleX + forwardX * flashReach, 1.1f, muzzleY + forwardY * flashReach);
+        glVertex3f(muzzleX - rightX * flashWidth, 0.75f, muzzleY - rightY * flashWidth);
+        glVertex3f(muzzleX + rightX * flashWidth, 0.75f, muzzleY + rightY * flashWidth);
         glEnd();
 
         glColor4f(1.0f, 0.94f, 0.72f, flashAlpha * 0.7f);
         glBegin(GL_TRIANGLES);
-        glVertex2f(muzzleX + forwardX * (flashReach * 0.7f), muzzleY + forwardY * (flashReach * 0.7f));
-        glVertex2f(muzzleX - rightX * (flashWidth * 0.45f), muzzleY - rightY * (flashWidth * 0.45f));
-        glVertex2f(muzzleX + rightX * (flashWidth * 0.45f), muzzleY + rightY * (flashWidth * 0.45f));
+        glVertex3f(muzzleX + forwardX * (flashReach * 0.7f), 1.15f, muzzleY + forwardY * (flashReach * 0.7f));
+        glVertex3f(muzzleX - rightX * (flashWidth * 0.45f), 0.85f, muzzleY - rightY * (flashWidth * 0.45f));
+        glVertex3f(muzzleX + rightX * (flashWidth * 0.45f), 0.85f, muzzleY + rightY * (flashWidth * 0.45f));
         glEnd();
     }
 
@@ -256,6 +369,8 @@ void RenderWorld(const World& world, const PlayerState& player, WeatherAnomaly w
     if (player.muzzleFlashTimer > 0.0f || player.shockWaveTimer > 0.0f) {
         glDisable(GL_BLEND);
     }
+
+    glDisable(GL_DEPTH_TEST);
 
     if (player.viewMode == ViewMode::Cockpit) {
         glMatrixMode(GL_PROJECTION);

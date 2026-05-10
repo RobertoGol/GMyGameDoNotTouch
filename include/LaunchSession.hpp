@@ -14,6 +14,7 @@ struct LaunchTicketInfo {
     std::string bt72SeatRole = "pilot";
     std::string bt72SecondSeatPolicy = "pilot_only";
     std::string bt72TrustedGunnerHandle;
+    std::string launcherRole = "player";
 };
 
 bool IssueLaunchTicket(const LaunchTicketInfo& ticketInfo);

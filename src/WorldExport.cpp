@@ -1,6 +1,7 @@
 #include "../include/WorldExport.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <ctime>
 #include <fstream>
@@ -79,6 +80,20 @@ bool TryParseInt(const std::string& text, int& value) {
         value = 0;
         return false;
     }
+}
+
+std::string NormalizeFileExtension(std::string_view extension) {
+    std::string normalized(extension);
+    if (normalized.empty()) {
+        return {};
+    }
+    if (normalized.front() != '.') {
+        normalized.insert(normalized.begin(), '.');
+    }
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char value) {
+        return static_cast<char>(std::tolower(value));
+    });
+    return normalized;
 }
 
 bool ParseYesNo(const std::string& text) {
@@ -337,6 +352,372 @@ const char* WorldExportComparePresetLabel(WorldExportComparePreset preset) {
     default:
         return "Manual Selection";
     }
+}
+
+const char* SupportedFileFormatLayerLabel(SupportedFileFormatLayer layer) {
+    switch (layer) {
+    case SupportedFileFormatLayer::BunkerWorld:
+        return "Bunker Protocol world/record";
+    case SupportedFileFormatLayer::BunkerPackage:
+        return "Bunker package/archive";
+    case SupportedFileFormatLayer::RecordPlugin:
+        return "Creation-style record/plugin";
+    case SupportedFileFormatLayer::AssetArchive:
+        return "Asset archive";
+    case SupportedFileFormatLayer::RuntimeSave:
+        return "Runtime save/sidecar";
+    case SupportedFileFormatLayer::MeshModelGeometry:
+        return "Mesh/model/geometry";
+    case SupportedFileFormatLayer::AnimationPhysics:
+        return "Animation/physics/behavior";
+    case SupportedFileFormatLayer::Texture:
+        return "Texture/source image";
+    case SupportedFileFormatLayer::MaterialShader:
+        return "Material/shader";
+    case SupportedFileFormatLayer::Script:
+        return "Script source/compiled";
+    case SupportedFileFormatLayer::AudioVoiceLip:
+        return "Audio/voice/lip";
+    case SupportedFileFormatLayer::Localization:
+        return "Localization strings";
+    case SupportedFileFormatLayer::InterfaceUI:
+        return "Interface/UI";
+    case SupportedFileFormatLayer::GeneratedWorldData:
+        return "Generated world/dialogue support";
+    case SupportedFileFormatLayer::ConfigTextLog:
+        return "Config/text/log/meta";
+    case SupportedFileFormatLayer::ModPackage:
+        return "Mod/package/tooling";
+    case SupportedFileFormatLayer::ExecutableNativePlugin:
+        return "Executable/native plugin";
+    default:
+        return "Config/text/log/meta";
+    }
+}
+
+const std::vector<SupportedFileFormat>& SupportedFileFormats() {
+    static const std::vector<SupportedFileFormat> formats = {
+        {".bwld", SupportedFileFormatLayer::BunkerWorld, "Bunker Protocol world", "Project-native source-of-truth world/record file.", true, true, false, false, false, true, true},
+        {".dba", SupportedFileFormatLayer::BunkerPackage, "Data Bunker Archive", "Bunker-native DLC/mod package reference.", false, true, true, true, false, false, true},
+        {".bmanifest", SupportedFileFormatLayer::BunkerPackage, "Bunker manifest", "Bunker package metadata reference.", false, true, true, true, false, true, true},
+        {".bcluster", SupportedFileFormatLayer::BunkerPackage, "Bunker cluster manifest", "Planned Bunker world-cluster metadata reference.", false, true, false, true, false, true, true},
+        {".esm", SupportedFileFormatLayer::RecordPlugin, "Creation master plugin", "Reference class only; not imported/exported as Fallout data.", false, false, false, true, false, false, true},
+        {".esp", SupportedFileFormatLayer::RecordPlugin, "Creation plugin", "Reference class only; not imported/exported as Fallout data.", false, false, false, true, false, false, true},
+        {".esl", SupportedFileFormatLayer::RecordPlugin, "Creation light plugin", "Reference class only; not imported/exported as Fallout data.", false, false, false, true, false, false, true},
+        {".bsa", SupportedFileFormatLayer::AssetArchive, "Bethesda asset archive", "External asset archive reference only.", false, false, false, true, false, false, true},
+        {".ba2", SupportedFileFormatLayer::AssetArchive, "Creation asset archive", "External asset archive reference only.", false, false, false, true, false, false, true},
+        {".fos", SupportedFileFormatLayer::RuntimeSave, "Fallout save", "Runtime save reference class; not an authoring world file.", false, false, false, true, false, false, false},
+        {".f4se", SupportedFileFormatLayer::RuntimeSave, "Script extender co-save", "Runtime sidecar reference class.", false, false, false, true, false, false, false},
+        {".nvse", SupportedFileFormatLayer::RuntimeSave, "NVSE sidecar", "Runtime sidecar reference class.", false, false, false, true, false, false, false},
+        {".obse", SupportedFileFormatLayer::RuntimeSave, "OBSE sidecar", "Runtime sidecar reference class.", false, false, false, true, false, false, false},
+        {".skse", SupportedFileFormatLayer::RuntimeSave, "SKSE sidecar", "Runtime sidecar reference class.", false, false, false, true, false, false, false},
+        {".nif", SupportedFileFormatLayer::MeshModelGeometry, "NetImmerse/Gamebryo mesh", "Mesh/model asset reference class.", false, false, false, true, false, false, true},
+        {".tri", SupportedFileFormatLayer::MeshModelGeometry, "Morph/face geometry", "Face or morph geometry reference class.", false, false, false, true, false, false, true},
+        {".egm", SupportedFileFormatLayer::MeshModelGeometry, "FaceGen morph", "FaceGen morph reference class.", false, false, false, true, false, false, true},
+        {".egt", SupportedFileFormatLayer::MeshModelGeometry, "FaceGen tint/morph", "FaceGen tint/morph reference class.", false, false, false, true, false, false, true},
+        {".ctl", SupportedFileFormatLayer::MeshModelGeometry, "FaceGen control", "FaceGen control reference class.", false, false, false, true, false, false, true},
+        {".rdt", SupportedFileFormatLayer::MeshModelGeometry, "Legacy resource data", "Legacy geometry/resource reference class.", false, false, false, true, false, false, true},
+        {".spt", SupportedFileFormatLayer::MeshModelGeometry, "SpeedTree asset", "Vegetation/SpeedTree reference class.", false, false, false, true, false, false, true},
+        {".navmesh", SupportedFileFormatLayer::GeneratedWorldData, "Navmesh reference", "Loose navmesh-style reference marker.", false, false, false, true, false, false, true},
+        {".kf", SupportedFileFormatLayer::AnimationPhysics, "Animation clip", "Legacy animation reference class.", false, false, false, true, false, false, true},
+        {".kfm", SupportedFileFormatLayer::AnimationPhysics, "Animation controller", "Animation controller reference class.", false, false, false, true, false, false, true},
+        {".hkx", SupportedFileFormatLayer::AnimationPhysics, "Havok behavior/animation", "Animation/behavior/physics reference class.", false, false, false, true, false, false, true},
+        {".dds", SupportedFileFormatLayer::Texture, "DirectDraw texture", "Runtime texture asset reference class.", false, false, false, true, false, false, true},
+        {".tga", SupportedFileFormatLayer::Texture, "Targa source texture", "Source/legacy texture reference class.", false, false, false, true, false, true, true},
+        {".png", SupportedFileFormatLayer::Texture, "PNG source texture", "Tooling/source texture reference class.", false, false, false, true, false, true, false},
+        {".jpg", SupportedFileFormatLayer::Texture, "JPEG source texture", "Tooling/source texture reference class.", false, false, false, true, false, true, false},
+        {".jpeg", SupportedFileFormatLayer::Texture, "JPEG source texture", "Tooling/source texture reference class.", false, false, false, true, false, true, false},
+        {".bmp", SupportedFileFormatLayer::Texture, "Bitmap source texture", "Tooling/source texture reference class.", false, false, false, true, false, true, false},
+        {".bgsm", SupportedFileFormatLayer::MaterialShader, "Material", "Material asset reference class.", false, false, false, true, false, false, true},
+        {".bgem", SupportedFileFormatLayer::MaterialShader, "Effect material", "Effect material reference class.", false, false, false, true, false, false, true},
+        {".mat", SupportedFileFormatLayer::MaterialShader, "Generic material", "Material reference class.", false, false, false, true, false, true, true},
+        {".fx", SupportedFileFormatLayer::MaterialShader, "Shader/effect", "Shader/effect reference class.", false, false, false, true, false, true, true},
+        {".cub", SupportedFileFormatLayer::MaterialShader, "Cubemap", "Environment cubemap reference class.", false, false, false, true, false, false, true},
+        {".psc", SupportedFileFormatLayer::Script, "Papyrus source", "Script source reference class.", false, false, false, true, false, true, true},
+        {".pex", SupportedFileFormatLayer::Script, "Papyrus compiled script", "Compiled script reference class.", false, false, false, true, false, false, true},
+        {".dll", SupportedFileFormatLayer::ExecutableNativePlugin, "Native plugin", "Dangerous executable/native plugin reference. Never load automatically.", false, false, false, true, true, false, false},
+        {".exe", SupportedFileFormatLayer::ExecutableNativePlugin, "Executable", "Dangerous executable reference. Never launch from scan results.", false, false, false, true, true, false, false},
+        {".fuz", SupportedFileFormatLayer::AudioVoiceLip, "Voice package", "Audio/voice reference class.", false, false, false, true, false, false, true},
+        {".lip", SupportedFileFormatLayer::AudioVoiceLip, "Lip sync", "Lip animation reference class.", false, false, false, true, false, false, true},
+        {".xwm", SupportedFileFormatLayer::AudioVoiceLip, "XWMA audio", "Audio asset reference class.", false, false, false, true, false, false, true},
+        {".wav", SupportedFileFormatLayer::AudioVoiceLip, "Wave audio", "Audio asset reference class.", false, false, false, true, false, false, true},
+        {".ogg", SupportedFileFormatLayer::AudioVoiceLip, "Legacy audio", "Legacy audio/music reference class.", false, false, false, true, false, false, true},
+        {".mp3", SupportedFileFormatLayer::AudioVoiceLip, "Music/audio source", "Audio source reference class.", false, false, false, true, false, false, false},
+        {".dat", SupportedFileFormatLayer::AudioVoiceLip, "Legacy generated audio/lip data", "Generated audio/lip sidecar reference class.", false, false, false, true, false, false, true},
+        {".strings", SupportedFileFormatLayer::Localization, "Localized strings", "Localization reference class.", false, false, false, true, false, false, true},
+        {".dlstrings", SupportedFileFormatLayer::Localization, "Localized dialogue strings", "Localization reference class.", false, false, false, true, false, false, true},
+        {".ilstrings", SupportedFileFormatLayer::Localization, "Localized interface strings", "Localization reference class.", false, false, false, true, false, false, true},
+        {".swf", SupportedFileFormatLayer::InterfaceUI, "Scaleform UI asset", "Interface/UI reference class.", false, false, false, true, false, false, true},
+        {".gfx", SupportedFileFormatLayer::InterfaceUI, "Scaleform GFx asset", "Interface/UI reference class.", false, false, false, true, false, false, true},
+        {".fnt", SupportedFileFormatLayer::InterfaceUI, "Font asset", "Interface/font reference class.", false, false, false, true, false, false, true},
+        {".seq", SupportedFileFormatLayer::GeneratedWorldData, "Quest sequence sidecar", "Generated/dialogue sidecar reference class.", false, false, false, true, false, false, true},
+        {".lod", SupportedFileFormatLayer::GeneratedWorldData, "LOD reference", "Generic LOD/generated world-data reference class.", false, false, false, true, false, false, true},
+        {".dlod", SupportedFileFormatLayer::GeneratedWorldData, "Distant LOD reference", "Distant LOD/generated world-data reference class.", false, false, false, true, false, false, true},
+        {".bto", SupportedFileFormatLayer::GeneratedWorldData, "Object LOD", "Generated object LOD reference class.", false, false, false, true, false, false, true},
+        {".btr", SupportedFileFormatLayer::GeneratedWorldData, "Terrain LOD", "Generated terrain LOD reference class.", false, false, false, true, false, false, true},
+        {".btt", SupportedFileFormatLayer::GeneratedWorldData, "Tree LOD", "Generated tree LOD reference class.", false, false, false, true, false, false, true},
+        {".previs", SupportedFileFormatLayer::GeneratedWorldData, "Previs reference", "Generated previsibility reference class.", false, false, false, true, false, false, true},
+        {".precombined", SupportedFileFormatLayer::GeneratedWorldData, "Precombined reference", "Generated precombined geometry reference class.", false, false, false, true, false, false, true},
+        {".ini", SupportedFileFormatLayer::ConfigTextLog, "Configuration", "Config reference class.", false, false, false, false, false, true, false},
+        {".toml", SupportedFileFormatLayer::ConfigTextLog, "TOML configuration", "Config reference class.", false, false, false, false, false, true, false},
+        {".yaml", SupportedFileFormatLayer::ConfigTextLog, "YAML configuration", "Config reference class.", false, false, false, false, false, true, false},
+        {".yml", SupportedFileFormatLayer::ConfigTextLog, "YAML configuration", "Config reference class.", false, false, false, false, false, true, false},
+        {".json", SupportedFileFormatLayer::ConfigTextLog, "JSON metadata", "Tooling metadata/config reference class.", false, false, false, false, false, true, false},
+        {".xml", SupportedFileFormatLayer::ConfigTextLog, "XML metadata", "Tooling metadata/config reference class.", false, false, false, false, false, true, false},
+        {".txt", SupportedFileFormatLayer::ConfigTextLog, "Text report", "Human-readable report/tooling artifact.", false, false, false, false, false, true, false},
+        {".log", SupportedFileFormatLayer::ConfigTextLog, "Log", "Human-readable runtime/tooling log.", false, false, false, false, false, true, false},
+        {".csv", SupportedFileFormatLayer::ConfigTextLog, "Delimited table", "Table/metadata source reference class.", false, false, false, false, false, true, false},
+        {".tsv", SupportedFileFormatLayer::ConfigTextLog, "Delimited table", "Table/metadata source reference class.", false, false, false, false, false, true, false},
+        {".zip", SupportedFileFormatLayer::ModPackage, "Archive package", "Compressed package reference only.", false, false, true, true, false, false, false},
+        {".7z", SupportedFileFormatLayer::ModPackage, "Archive package", "Compressed package reference only.", false, false, true, true, false, false, false},
+        {".rar", SupportedFileFormatLayer::ModPackage, "Archive package", "Compressed package reference only.", false, false, true, true, false, false, false},
+        {".fomod", SupportedFileFormatLayer::ModPackage, "Mod installer metadata", "Mod installer/package reference class.", false, false, true, true, false, false, false},
+        {".omod", SupportedFileFormatLayer::ModPackage, "Legacy mod package", "Legacy mod package reference class.", false, false, true, true, false, false, false},
+    };
+    return formats;
+}
+
+const SupportedFileFormat* FindSupportedFileFormat(std::string_view extension) {
+    const std::string normalized = NormalizeFileExtension(extension);
+    const auto& formats = SupportedFileFormats();
+    const auto it = std::find_if(formats.begin(), formats.end(), [&](const SupportedFileFormat& format) {
+        return format.extension == normalized;
+    });
+    return it == formats.end() ? nullptr : &*it;
+}
+
+std::string BuildSupportedFileFormatRegistryReport() {
+    std::ostringstream report;
+    report << "Supported file format registry:\n";
+    for (const auto& format : SupportedFileFormats()) {
+        report << "- " << format.extension << " :: " << SupportedFileFormatLayerLabel(format.layer)
+               << " :: " << format.label;
+        if (format.canonicalAuthoringWorld) {
+            report << " :: canonical authoring world";
+        }
+        if (format.bunkerNative) {
+            report << " :: bunker-native";
+        }
+        if (format.packageFormat) {
+            report << " :: package format";
+        }
+        if (format.referenceOnly) {
+            report << " :: reference-only";
+        }
+        if (format.futureExtractorCandidate) {
+            report << " :: future extractor candidate";
+        }
+        if (format.executableDanger) {
+            report << " :: dangerous executable/native plugin";
+        }
+        report << '\n';
+    }
+    return report.str();
+}
+
+const char* ExternalDataImportModeLabel(ExternalDataImportMode mode) {
+    switch (mode) {
+    case ExternalDataImportMode::NativeWorldSource:
+        return "Load Native World";
+    case ExternalDataImportMode::BunkerPackageReference:
+        return "Stage Bunker Package Reference";
+    case ExternalDataImportMode::MetadataTextSource:
+        return "Metadata / text source";
+    case ExternalDataImportMode::TextScriptSource:
+        return "Script source reference";
+    case ExternalDataImportMode::ReferenceOnly:
+        return "Attach As External Reference";
+    case ExternalDataImportMode::UnknownReference:
+    default:
+        return "Unknown external reference";
+    }
+}
+
+namespace {
+
+bool IsTextReadableExtension(std::string_view normalizedExtension) {
+    return normalizedExtension == ".bwld" ||
+        normalizedExtension == ".bmanifest" ||
+        normalizedExtension == ".bcluster" ||
+        normalizedExtension == ".json" ||
+        normalizedExtension == ".xml" ||
+        normalizedExtension == ".ini" ||
+        normalizedExtension == ".toml" ||
+        normalizedExtension == ".yaml" ||
+        normalizedExtension == ".yml" ||
+        normalizedExtension == ".txt" ||
+        normalizedExtension == ".log" ||
+        normalizedExtension == ".csv" ||
+        normalizedExtension == ".tsv" ||
+        normalizedExtension == ".psc";
+}
+
+ExternalDataImportMode ClassifyExternalDataImportMode(std::string_view normalizedExtension) {
+    if (normalizedExtension == ".bwld") {
+        return ExternalDataImportMode::NativeWorldSource;
+    }
+    if (normalizedExtension == ".dba" ||
+        normalizedExtension == ".bmanifest" ||
+        normalizedExtension == ".bcluster") {
+        return ExternalDataImportMode::BunkerPackageReference;
+    }
+    if (normalizedExtension == ".psc") {
+        return ExternalDataImportMode::TextScriptSource;
+    }
+    if (IsTextReadableExtension(normalizedExtension)) {
+        return ExternalDataImportMode::MetadataTextSource;
+    }
+    if (FindSupportedFileFormat(normalizedExtension) != nullptr) {
+        return ExternalDataImportMode::ReferenceOnly;
+    }
+    return ExternalDataImportMode::UnknownReference;
+}
+
+std::vector<std::filesystem::path> ExportDataCandidatesFor(const std::filesystem::path& startPath) {
+    std::vector<std::filesystem::path> candidates;
+    auto pushCandidate = [&](std::filesystem::path candidate) {
+        if (candidate.empty()) {
+            return;
+        }
+        candidate = candidate.lexically_normal();
+        if (std::find(candidates.begin(), candidates.end(), candidate) == candidates.end()) {
+            candidates.push_back(std::move(candidate));
+        }
+    };
+
+    std::filesystem::path anchor = startPath.empty() ? std::filesystem::current_path() : startPath;
+    anchor = anchor.lexically_normal();
+    if (!anchor.empty() && anchor.has_filename() && anchor.filename() == "Export_data") {
+        pushCandidate(anchor);
+    } else {
+        pushCandidate(anchor / "Export_data");
+    }
+
+    std::filesystem::path cursor = anchor;
+    for (int depth = 0; depth < 4 && !cursor.empty(); ++depth) {
+        pushCandidate(cursor / "Export_data");
+        if (cursor.has_parent_path()) {
+            cursor = cursor.parent_path();
+        } else {
+            break;
+        }
+    }
+
+    return candidates;
+}
+
+}  // namespace
+
+std::filesystem::path ResolveExportDataDirectory(const std::filesystem::path& startPath) {
+    const auto candidates = ExportDataCandidatesFor(startPath);
+    for (const auto& candidate : candidates) {
+        std::error_code ec;
+        if (std::filesystem::exists(candidate, ec) && std::filesystem::is_directory(candidate, ec)) {
+            return candidate;
+        }
+    }
+    return candidates.empty() ? std::filesystem::path("Export_data") : candidates.front();
+}
+
+bool CreateExportDataDirectory(const std::filesystem::path& startPath, std::filesystem::path& createdPath) {
+    createdPath = ResolveExportDataDirectory(startPath);
+    std::error_code ec;
+    if (std::filesystem::exists(createdPath, ec)) {
+        return std::filesystem::is_directory(createdPath, ec);
+    }
+    return std::filesystem::create_directories(createdPath, ec);
+}
+
+ExternalDataScanSummary ScanExportDataDirectory(const std::filesystem::path& startPath) {
+    ExternalDataScanSummary summary;
+    summary.folderPath = ResolveExportDataDirectory(startPath);
+
+    std::error_code ec;
+    summary.exists = std::filesystem::exists(summary.folderPath, ec) && std::filesystem::is_directory(summary.folderPath, ec);
+    if (!summary.exists) {
+        return summary;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(summary.folderPath, ec)) {
+        if (ec || !entry.is_regular_file()) {
+            continue;
+        }
+
+        ExternalDataFileRecord record;
+        record.path = entry.path();
+        record.fileName = entry.path().filename().string();
+        record.extension = NormalizeFileExtension(entry.path().extension().string());
+        record.importMode = ClassifyExternalDataImportMode(record.extension);
+        record.textReadable = IsTextReadableExtension(record.extension);
+        record.referenceOnly = record.importMode == ExternalDataImportMode::ReferenceOnly;
+
+        if (const auto* format = FindSupportedFileFormat(record.extension)) {
+            record.recognized = true;
+            record.layerLabel = SupportedFileFormatLayerLabel(format->layer);
+            record.formatLabel = format->label;
+            record.bunkerNative = format->bunkerNative;
+            record.canonicalAuthoringWorld = format->canonicalAuthoringWorld;
+            record.packageFormat = format->packageFormat;
+            record.referenceOnly = format->referenceOnly || record.importMode == ExternalDataImportMode::ReferenceOnly ||
+                record.importMode == ExternalDataImportMode::BunkerPackageReference;
+            record.executableDanger = format->executableDanger;
+            record.textReadable = format->canBeTextPreviewed || record.textReadable;
+            ++summary.recognizedFileCount;
+            if (record.extension == ".bwld") {
+                summary.bwldPresent = true;
+            }
+        } else {
+            record.layerLabel = "Unknown";
+            record.formatLabel = "Unknown external reference";
+            record.referenceOnly = false;
+            ++summary.unknownFileCount;
+        }
+
+        summary.files.push_back(std::move(record));
+    }
+
+    std::sort(summary.files.begin(), summary.files.end(), [](const ExternalDataFileRecord& lhs, const ExternalDataFileRecord& rhs) {
+        return lhs.fileName < rhs.fileName;
+    });
+    summary.foundFileCount = summary.files.size();
+    return summary;
+}
+
+std::string BuildExternalDataScanReport(const ExternalDataScanSummary& summary) {
+    std::ostringstream report;
+    report << "Export_data folder: " << summary.folderPath.string() << '\n';
+    report << "Export_data exists: " << (summary.exists ? "yes" : "no") << '\n';
+    report << "Export_data files: " << summary.foundFileCount << '\n';
+    report << "Export_data recognized: " << summary.recognizedFileCount << '\n';
+    report << "Export_data unknown: " << summary.unknownFileCount << '\n';
+    report << "Export_data .bwld present: " << (summary.bwldPresent ? "yes" : "no") << '\n';
+    if (!summary.files.empty()) {
+        report << "Export_data entries:\n";
+        for (const auto& file : summary.files) {
+            report << "- " << file.fileName
+                   << " :: " << file.extension
+                   << " :: " << file.layerLabel
+                   << " :: " << file.formatLabel
+                   << " :: " << ExternalDataImportModeLabel(file.importMode);
+            if (file.bunkerNative) {
+                report << " :: bunker-native";
+            }
+            if (file.canonicalAuthoringWorld) {
+                report << " :: canonical authoring world";
+            }
+            if (file.packageFormat) {
+                report << " :: package format";
+            }
+            if (file.referenceOnly) {
+                report << " :: reference-only";
+            }
+            if (file.executableDanger) {
+                report << " :: dangerous executable";
+            }
+            report << '\n';
+        }
+    }
+    return report.str();
 }
 
 namespace {
@@ -927,9 +1308,28 @@ std::string BuildWorldValidationReport(
     const auto brokenPrefabReferenceIndices = CollectBrokenPrefabReferenceObjectIndices(world, prefabs);
     const auto layerNames = world.CollectEditorLayerNames();
     int semanticObjectCount = 0;
+    int scalableLootObjectCount = 0;
+    std::size_t scalableLootEntryCount = 0;
+    std::size_t nonEmptyScalableLootEntryCount = 0;
+    int manualLootObjectCount = 0;
+    int randomLootObjectCount = 0;
     for (const auto& object : world.objects) {
         if (!object.scriptTag.empty()) {
             ++semanticObjectCount;
+        }
+        if (!object.lootEntries.empty()) {
+            ++scalableLootObjectCount;
+            if (object.lootMode == LootMode::RandomTable) {
+                ++randomLootObjectCount;
+            } else {
+                ++manualLootObjectCount;
+            }
+            scalableLootEntryCount += object.lootEntries.size();
+            for (const auto& entry : object.lootEntries) {
+                if (!entry.itemId.empty()) {
+                    ++nonEmptyScalableLootEntryCount;
+                }
+            }
         }
     }
 
@@ -949,12 +1349,28 @@ std::string BuildWorldValidationReport(
     report << "Shipping baseline updated: " << (result.baselineUpdated ? "yes" : "no") << '\n';
     report << "Objects: " << world.objects.size() << '\n';
     report << "Semantic objects: " << semanticObjectCount << '\n';
+    report << "Scalable loot objects: " << scalableLootObjectCount << '\n';
+    report << "Scalable loot entries: " << scalableLootEntryCount << '\n';
+    report << "Non-empty scalable loot entries: " << nonEmptyScalableLootEntryCount << '\n';
+    report << "Loot mode manual objects: " << manualLootObjectCount << '\n';
+    report << "Loot mode random objects: " << randomLootObjectCount << '\n';
     report << "Layers: " << layerNames.size() << '\n';
     report << "Prefab-derived objects: " << CountPrefabDerivedObjects(world) << '\n';
     report << "Broken prefab references: " << brokenPrefabReferenceIndices.size() << '\n';
     report << "Prefab library entries: " << (prefabLibraryLoaded ? prefabs.size() : 0) << '\n';
     report << "Prefab library loaded: " << (prefabLibraryLoaded ? "yes" : "no") << '\n';
+    if (const auto* targetFormat = FindSupportedFileFormat(result.worldPath.extension().string())) {
+        report << "Target extension class: " << SupportedFileFormatLayerLabel(targetFormat->layer) << '\n';
+        report << "Target extension label: " << targetFormat->label << '\n';
+        report << "Target extension canonical authoring world: " << (targetFormat->canonicalAuthoringWorld ? "yes" : "no") << '\n';
+    } else {
+        report << "Target extension class: Unknown\n";
+        report << "Target extension label: Unknown extension, report-only artifact handling\n";
+        report << "Target extension canonical authoring world: no\n";
+    }
     report << "Message: " << result.message << '\n';
+    report << BuildSupportedFileFormatRegistryReport();
+    report << BuildExternalDataScanReport(ScanExportDataDirectory());
 
     if (!layerNames.empty()) {
         report << "Layer names:\n";

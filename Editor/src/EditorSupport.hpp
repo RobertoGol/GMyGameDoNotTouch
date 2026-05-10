@@ -33,6 +33,14 @@ struct PreviewInteraction {
     bool clickedObject = false;
     int clickedObjectIndex = -1;
     bool doubleClickedObject = false;
+    bool objectUnderMouse = false;
+    int objectUnderMouseIndex = -1;
+    bool rightClickedObject = false;
+    int rightClickedObjectIndex = -1;
+    bool droppedObjectWindowItem = false;
+    int droppedObjectWindowSourceType = 0;
+    int droppedObjectWindowSourceIndex = -1;
+    bool dropHasWorldPosition = false;
     bool draggingSelectedObject = false;
     bool draggingSelectedWidth = false;
     bool draggingSelectedDepth = false;
@@ -107,6 +115,19 @@ int ToIndex(bunker::InteractionType interaction);
 int ToIndex(bunker::ObjectCategory category);
 bunker::ObjectCategory CategoryFromIndex(int index);
 bool LoadOrCreateEditorWorld(bunker::World& world, std::string& statusText);
+bool CreateNewEditorWorld(bunker::World& world, std::string& statusText);
+bool IsNativeWorldFilePath(const std::filesystem::path& path);
+std::vector<std::filesystem::path> ListNativeWorldFiles();
+bool TryLoadEditorWorldAtPath(
+    const std::filesystem::path& requestedPath,
+    bunker::World& world,
+    std::string& statusText,
+    std::filesystem::path* resolvedPath = nullptr);
+bool TrySaveEditorWorldAtPath(
+    const bunker::World& world,
+    const std::filesystem::path& requestedPath,
+    std::string& statusText,
+    std::filesystem::path* resolvedPath = nullptr);
 bool SetActiveWorldInProfile(const std::string& worldFileName, std::string& statusText);
 void CopyStringToBuffer(const std::string& value, char* buffer, std::size_t size);
 void SyncEditorWorldBindings(const bunker::World& editorWorld,
