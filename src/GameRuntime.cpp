@@ -3107,6 +3107,31 @@ bool RecoverPipPad(SessionProfile& profile) {
     return !alreadyRecovered;
 }
 
+bool HasBlueLinkModule(const SessionProfile& profile) {
+    return profile.blueLinkModuleRecovered || profile.blueLinkModuleInstalled;
+}
+
+bool IsBlueLinkInstalled(const SessionProfile& profile) {
+    return HasPipPad(profile) &&
+        profile.blueLinkModuleInstalled &&
+        !profile.pipPadExpansionCoverPresent;
+}
+
+bool InstallBlueLinkModule(SessionProfile& profile) {
+    if (!HasPipPad(profile) || !HasBlueLinkModule(profile)) {
+        return false;
+    }
+    const bool alreadyInstalled = IsBlueLinkInstalled(profile);
+    profile.blueLinkModuleRecovered = true;
+    profile.blueLinkModuleInstalled = true;
+    profile.pipPadExpansionCoverPresent = false;
+    return !alreadyInstalled;
+}
+
+bool CanUsePipPadMediaIndex(const SessionProfile& profile) {
+    return IsBlueLinkInstalled(profile);
+}
+
 bool PlayerHasPipPadAccess(const SessionProfile& profile) {
     return HasPipPad(profile);
 }

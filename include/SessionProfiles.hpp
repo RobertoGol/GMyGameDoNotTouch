@@ -412,6 +412,9 @@ struct SessionProfile {
     int scavengerRunsCompleted = 0;
     bool continuityAnchorSeeded = false;
     float continuityAnchorVariance = 0.0f;
+    bool pipPadExpansionCoverPresent = true;
+    bool blueLinkModuleRecovered = false;
+    bool blueLinkModuleInstalled = false;
     FirstPlayableRouteProgress firstPlayableRoute{};
     StoryProgress story{};
 };

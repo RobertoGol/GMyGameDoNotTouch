@@ -5191,6 +5191,76 @@ bool RunPipDeviceCapabilityContractSmoke() {
             "no_map_devices_use_physical_navigation expected physical navigation for no-map shells");
 }
 
+bool RunBlueLinkExpansionModuleContractSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+
+    if (!Check(!bunker::InstallBlueLinkModule(profile) &&
+            !bunker::CanUsePipPadMediaIndex(profile),
+            "bluelink_requires_pippad_before_install expected install to fail without Pip-Pad")) {
+        return false;
+    }
+    bunker::RecoverPipPad(profile);
+    if (!Check(!bunker::InstallBlueLinkModule(profile) &&
+            !bunker::CanUsePipPadMediaIndex(profile) &&
+            profile.pipPadExpansionCoverPresent,
+            "bluelink_requires_module_before_install expected install to fail without recovered module")) {
+        return false;
+    }
+
+    if (!Check(profile.pipPadExpansionCoverPresent &&
+            !bunker::HasBlueLinkModule(profile) &&
+            !bunker::IsBlueLinkInstalled(profile),
+            "pippad_has_expansion_cover_before_bluelink expected dummy cover without module")) {
+        return false;
+    }
+    if (!Check(!bunker::CanUsePipPadMediaIndex(profile),
+            "pippad_media_index_locked_without_bluelink expected media index lock")) {
+        return false;
+    }
+
+    profile.blueLinkModuleRecovered = true;
+    if (!Check(bunker::InstallBlueLinkModule(profile) &&
+            bunker::IsBlueLinkInstalled(profile) &&
+            bunker::CanUsePipPadMediaIndex(profile) &&
+            !profile.pipPadExpansionCoverPresent,
+            "bluelink_install_unlocks_media_index expected installed module to unlock media index")) {
+        return false;
+    }
+    if (!Check(!profile.story.archiveRecovered &&
+            !profile.story.relayRecovered &&
+            !profile.story.returnedToBase,
+            "bluelink_does_not_unlock_map_without_map_data expected no synthetic map/story data")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "bluelink_expansion_contract_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "bluelink expansion smoke failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "bluelink expansion smoke failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "bluelink expansion smoke failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    const bool ok = Check(bunker::HasBlueLinkModule(loadedProfile) &&
+            bunker::IsBlueLinkInstalled(loadedProfile) &&
+            bunker::CanUsePipPadMediaIndex(loadedProfile) &&
+            !loadedProfile.pipPadExpansionCoverPresent,
+            "bluelink expansion smoke expected module state to persist after save/load");
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunPipPadAccessGatingSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     bunker::PlayerState player;
@@ -5365,6 +5435,7 @@ int main() {
         RunPlayerSweepCollisionSmoke() &&
         RunRuntimeCameraSmoke() &&
         RunPipDeviceCapabilityContractSmoke() &&
+        RunBlueLinkExpansionModuleContractSmoke() &&
         RunPipPadAccessGatingSmoke();
 
     fs::remove_all(sandboxRoot, ec);

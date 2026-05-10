@@ -7,7 +7,7 @@ namespace bunker {
 namespace {
 
 constexpr char kSessionProfileFormat[] = "BPF1";
-constexpr int kCurrentSessionProfileVersion = 9;
+constexpr int kCurrentSessionProfileVersion = 10;
 
 bool HasInventoryEntry(const SessionProfile& profile, const std::string& itemId) {
     return std::any_of(
@@ -209,6 +209,12 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     profile.lanlineServices.relayCredits = std::max(0, profile.lanlineServices.relayCredits);
     profile.launcherAnnouncements.lastSeenBuildNumber = std::max(0, profile.launcherAnnouncements.lastSeenBuildNumber);
     profile.continuityAnchorVariance = std::clamp(profile.continuityAnchorVariance, 0.0f, 1.0f);
+    if (profile.blueLinkModuleInstalled) {
+        profile.blueLinkModuleRecovered = true;
+        profile.pipPadExpansionCoverPresent = false;
+    } else {
+        profile.pipPadExpansionCoverPresent = true;
+    }
     if (const auto* selectedWorldState = FindWorldFieldState(profile, profile.selectedWorld); selectedWorldState != nullptr) {
         if (!selectedWorldState->towerSyncRecovered) {
             profile.lanlineServices.serviceHubKnown = false;
@@ -318,6 +324,9 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
     out << "scavenger_runs_completed=" << profile.scavengerRunsCompleted << '\n';
     out << "continuity_anchor_seeded=" << (profile.continuityAnchorSeeded ? 1 : 0) << '\n';
     out << "continuity_anchor_variance=" << profile.continuityAnchorVariance << '\n';
+    out << "pippad_expansion_cover_present=" << (profile.pipPadExpansionCoverPresent ? 1 : 0) << '\n';
+    out << "bluelink_module_recovered=" << (profile.blueLinkModuleRecovered ? 1 : 0) << '\n';
+    out << "bluelink_module_installed=" << (profile.blueLinkModuleInstalled ? 1 : 0) << '\n';
     out << "partner_tank_id=" << profile.partnerTank.partnerTankId << '\n';
     out << "partner_tank_callsign=" << profile.partnerTank.callSign << '\n';
     out << "partner_tank_class=" << static_cast<int>(profile.partnerTank.tankClass) << '\n';
@@ -522,6 +531,9 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         else if (key == "scavenger_runs_completed") outProfile.scavengerRunsCompleted = std::stoi(value);
         else if (key == "continuity_anchor_seeded" || key == "soulline_seeded") outProfile.continuityAnchorSeeded = (std::stoi(value) != 0);
         else if (key == "continuity_anchor_variance" || key == "soulline_variance") outProfile.continuityAnchorVariance = std::stof(value);
+        else if (key == "pippad_expansion_cover_present" || key == "pip_pad_expansion_cover_present") outProfile.pipPadExpansionCoverPresent = (std::stoi(value) != 0);
+        else if (key == "bluelink_module_recovered") outProfile.blueLinkModuleRecovered = (std::stoi(value) != 0);
+        else if (key == "bluelink_module_installed") outProfile.blueLinkModuleInstalled = (std::stoi(value) != 0);
         else if (key == "partner_tank_id") outProfile.partnerTank.partnerTankId = value;
         else if (key == "partner_tank_callsign") outProfile.partnerTank.callSign = value;
         else if (key == "partner_tank_class") outProfile.partnerTank.tankClass = static_cast<TankClass>(std::stoi(value));
