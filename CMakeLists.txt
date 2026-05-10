@@ -79,6 +79,22 @@ add_executable(BunkerLauncher
 )
 configure_bunker_target(BunkerLauncher)
 
+add_executable(BunkerAdminLauncher
+    Launcher/src/AdminLauncher_Main.cpp
+    Launcher/src/LauncherSupport.cpp
+    src/GameplayDescriptorRegistry.cpp
+    src/LanlineServices.cpp
+    src/LanlineSession.cpp
+    src/LaunchSession.cpp
+    src/SessionProfiles.cpp
+    src/StoryRoute.cpp
+    src/World.cpp
+    src/WorldSemanticAuthoring.cpp
+    src/WorldValidation.cpp
+    ${IMGUI_SRC}
+)
+configure_bunker_target(BunkerAdminLauncher)
+
 add_executable(BunkerEditor
     Editor/src/Editor_Main.cpp
     Editor/src/EditorSupport.cpp
@@ -121,4 +137,4 @@ add_executable(BunkerSmokeChecks
 configure_bunker_target(BunkerSmokeChecks)
 add_test(NAME BunkerSmokeChecks COMMAND BunkerSmokeChecks)
 
-message(STATUS "Configured targets: BunkerGame, BunkerLauncher, BunkerEditor")
+message(STATUS "Configured targets: BunkerGame, BunkerLauncher, BunkerAdminLauncher, BunkerEditor")

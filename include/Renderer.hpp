@@ -16,6 +16,16 @@ enum class WeatherAnomaly {
     EtherFog
 };
 
+struct RuntimeCamera {
+    float positionX = 0.0f;
+    float positionY = 0.0f;
+    float positionZ = 0.0f;
+    float targetX = 0.0f;
+    float targetY = 0.0f;
+    float targetZ = 0.0f;
+    float fovDegrees = 62.0f;
+};
+
 struct PlayerState {
     float x = 0.0f;
     float y = 0.0f;
@@ -36,12 +46,13 @@ struct PlayerState {
     bool insideTank = false;
     bool bt72GunnerSeat = false;
     bool bucketRaised = false;
-    bool uiVisible = true;
+    bool uiVisible = false;
     ViewMode viewMode = ViewMode::ThirdPerson;
 };
 
 const char* ToString(ViewMode mode);
 const char* ToString(WeatherAnomaly weather);
+RuntimeCamera BuildRuntimeCamera(const PlayerState& player);
 void RenderWorld(const World& world, const PlayerState& player, WeatherAnomaly weather, float weatherIntensity, int width, int height);
 
 }  // namespace bunker

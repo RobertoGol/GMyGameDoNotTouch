@@ -128,6 +128,8 @@ bool ConsumeInventoryItem(SessionProfile& profile, const std::string& itemId, in
 float CurrentInventoryWeight(const SessionProfile& profile);
 int EffectiveStatValue(const SessionProfile& profile, const GameState& gameState, char statCode);
 bool TryConsumeFieldRation(SessionProfile& profile, GameState& gameState);
+bool PlayerHasPipPadAccess(const SessionProfile& profile);
+bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState);
 void AdvanceViewMode(PlayerState& player);
 void TryToggleBt72CrewSeat(PlayerState& player, SessionProfile& profile, GameState& gameState);
 void ApplyStaticEraser(World& world, const StaticEraser& staticEraser);

@@ -2603,6 +2603,7 @@ bool RunLaunchTicketFlow() {
     issuedTicket.bt72SeatRole = "gunner";
     issuedTicket.bt72SecondSeatPolicy = "trusted_only";
     issuedTicket.bt72TrustedGunnerHandle = "Smoke Scout";
+    issuedTicket.launcherRole = "admin";
 
     if (!Check(bunker::IssueLaunchTicket(issuedTicket), "launch ticket issue failed")) {
         return false;
@@ -2620,6 +2621,7 @@ bool RunLaunchTicketFlow() {
         Check(consumedTicket.bt72SeatRole == "gunner", "launch ticket seat role mismatch") &&
         Check(consumedTicket.bt72SecondSeatPolicy == "trusted_only", "launch ticket seat policy mismatch") &&
         Check(consumedTicket.bt72TrustedGunnerHandle == "Smoke Scout", "launch ticket trusted gunner mismatch") &&
+        Check(consumedTicket.launcherRole == "admin", "launch ticket launcher role mismatch") &&
         Check(!fs::exists(bunker::LaunchTicketPath()), "launch ticket file was not removed after consume");
 }
 
@@ -5059,6 +5061,87 @@ bool RunPlayerSweepCollisionSmoke() {
             "player sweep collision smoke expected non-blocking object not to stop movement");
 }
 
+bool RunRuntimeCameraSmoke() {
+    bunker::PlayerState player;
+    player.x = 10.0f;
+    player.y = 20.0f;
+    player.facingRadians = 0.0f;
+    player.viewMode = bunker::ViewMode::ThirdPerson;
+    const auto thirdPerson = bunker::BuildRuntimeCamera(player);
+
+    player.viewMode = bunker::ViewMode::FirstPerson;
+    const auto firstPerson = bunker::BuildRuntimeCamera(player);
+
+    player.insideTank = true;
+    player.viewMode = bunker::ViewMode::Cockpit;
+    const auto cockpit = bunker::BuildRuntimeCamera(player);
+
+    return Check(std::string(bunker::ToString(bunker::ViewMode::FirstPerson)) == "First Person",
+            "runtime camera smoke expected FirstPerson label") &&
+        Check(thirdPerson.positionX < player.x && thirdPerson.positionY > firstPerson.positionY,
+            "runtime camera smoke expected third-person camera behind and above player") &&
+        Check(firstPerson.targetX > firstPerson.positionX && std::abs(firstPerson.targetZ - firstPerson.positionZ) < 0.001f,
+            "runtime camera smoke expected first-person camera to look forward") &&
+        Check(cockpit.fovDegrees < firstPerson.fovDegrees && cockpit.positionY > firstPerson.positionY,
+            "runtime camera smoke expected cockpit camera to use tighter raised view");
+}
+
+bool RunPipPadAccessGatingSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::GameState gameState;
+
+    if (!Check(!player.uiVisible, "pip-pad gating smoke expected default UI to start hidden")) {
+        return false;
+    }
+    if (!Check(!bunker::PlayerHasPipPadAccess(profile), "pip-pad gating smoke expected no access before pickup")) {
+        return false;
+    }
+    player.uiVisible = true;
+    if (!Check(!bunker::TryTogglePipPadUi(player, profile, gameState),
+            "pip-pad gating smoke expected TAB helper to reject missing Pip-Pad")) {
+        return false;
+    }
+    if (!Check(!player.uiVisible &&
+            gameState.lastEvent.find("No Pip-Pad linked yet") != std::string::npos,
+            "pip-pad gating smoke expected missing Pip-Pad feedback and hidden UI")) {
+        return false;
+    }
+
+    bunker::World world;
+    bunker::MapObject pipPad;
+    pipPad.registryId = "[%pip_0001]";
+    pipPad.displayName = "Pip-Pad Locker";
+    pipPad.interaction = bunker::InteractionType::Container;
+    pipPad.category = bunker::ObjectCategory::Container;
+    world.AddObject(pipPad);
+
+    profile.firstPlayableRoute.accessCardRecovered = true;
+    profile.firstPlayableRoute.prePipPadClueCount = 2;
+    profile.selectedWorld = "pip_pad_access_gating_smoke.bwld";
+    bunker::StaticEraser staticEraser;
+    const auto* locker = world.FindObjectByRegistryId("[%pip_0001]");
+    bunker::HandleInteraction(locker, world, player, profile, staticEraser, gameState);
+
+    if (!Check(profile.story.pipPadRecovered && bunker::HasInventoryItem(profile, "#%it_pippad"),
+            "pip-pad gating smoke expected pickup to set story flag and inventory access")) {
+        return false;
+    }
+    if (!Check(!player.uiVisible,
+            "pip-pad gating smoke expected pickup to leave UI hidden until TAB")) {
+        return false;
+    }
+    if (!Check(gameState.lastEvent.find("Press TAB") != std::string::npos,
+            "pip-pad gating smoke expected pickup feedback to mention TAB")) {
+        return false;
+    }
+
+    return Check(bunker::TryTogglePipPadUi(player, profile, gameState) && player.uiVisible,
+            "pip-pad gating smoke expected TAB helper to open after pickup") &&
+        Check(bunker::TryTogglePipPadUi(player, profile, gameState) && !player.uiVisible,
+            "pip-pad gating smoke expected TAB helper to close after pickup");
+}
+
 }  // namespace
 
 int main() {
@@ -5139,7 +5222,9 @@ int main() {
         RunGameExecutionResourceLookupSmoke() &&
         RunGameExecutionLootTemplateSmoke() &&
         RunGameExecutionScriptBridgeSmoke() &&
-        RunPlayerSweepCollisionSmoke();
+        RunPlayerSweepCollisionSmoke() &&
+        RunRuntimeCameraSmoke() &&
+        RunPipPadAccessGatingSmoke();
 
     fs::remove_all(sandboxRoot, ec);
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;

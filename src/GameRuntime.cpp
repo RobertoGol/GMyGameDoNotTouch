@@ -3046,6 +3046,21 @@ bool TryConsumeFieldRation(SessionProfile& profile, GameState& gameState) {
     return true;
 }
 
+bool PlayerHasPipPadAccess(const SessionProfile& profile) {
+    return profile.story.pipPadRecovered || HasInventoryItem(profile, "#%it_pippad");
+}
+
+bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState) {
+    if (!PlayerHasPipPadAccess(profile)) {
+        player.uiVisible = false;
+        gameState.lastEvent = "No Pip-Pad linked yet. Recover the Pip-Pad first.";
+        return false;
+    }
+
+    player.uiVisible = !player.uiVisible;
+    return true;
+}
+
 void AdvanceViewMode(PlayerState& player) {
     switch (player.viewMode) {
         case ViewMode::FirstPerson:
@@ -5443,8 +5458,8 @@ void HandleInteraction(const MapObject* nearest,
         staticEraser.Save(profile.selectedWorld);
         world.RemoveObject(nearest->registryId);
         gameState.lastEvent = profile.firstPlayableRoute.prePipPadClueCount >= 2
-            ? "Pip-Pad recovered. Local UI shell restored and the bunker paper trail now makes sense."
-            : "Pip-Pad recovered. Local UI shell restored, but the bunker paper trail is still incomplete.";
+            ? "Pip-Pad recovered. Press TAB to open the Pip-Pad; the bunker paper trail now makes sense."
+            : "Pip-Pad recovered. Press TAB to open the Pip-Pad; the bunker paper trail is still incomplete.";
         return;
     }
 
@@ -6315,6 +6330,11 @@ void DrawPipPad(const World& world,
     StaticEraser& staticEraser,
     GameState& gameState) {
     static int activeTab = 0;
+
+    if (!PlayerHasPipPadAccess(profile)) {
+        player.uiVisible = false;
+        return;
+    }
 
     if (!player.uiVisible) {
         return;

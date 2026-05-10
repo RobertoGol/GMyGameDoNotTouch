@@ -412,6 +412,7 @@ int main() {
     bunker::PlayerState player;
     player.x = world.metadata.playerSpawnX;
     player.y = world.metadata.playerSpawnY;
+    player.uiVisible = bunker::PlayerHasPipPadAccess(sessionProfile) && player.uiVisible;
     if (bunker::HasActiveFieldCheckpoint(sessionProfile)) {
         player.x = sessionProfile.fieldCheckpointX;
         player.y = sessionProfile.fieldCheckpointY;
@@ -633,7 +634,7 @@ int main() {
 
         const bool toggleUiNow = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
         if (toggleUiNow && !gameState.uiPressed) {
-            player.uiVisible = !player.uiVisible;
+            bunker::TryTogglePipPadUi(player, sessionProfile, gameState);
         }
         gameState.uiPressed = toggleUiNow;
 

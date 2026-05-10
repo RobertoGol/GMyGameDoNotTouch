@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <string>
 
@@ -34,6 +35,7 @@ bool IssueLaunchTicket(const LaunchTicketInfo& ticketInfo) {
     out << "bt72_seat_role=" << ticketInfo.bt72SeatRole << '\n';
     out << "bt72_second_seat_policy=" << ticketInfo.bt72SecondSeatPolicy << '\n';
     out << "bt72_trusted_gunner=" << ticketInfo.bt72TrustedGunnerHandle << '\n';
+    out << "launcher_role=" << ticketInfo.launcherRole << '\n';
     return static_cast<bool>(out);
 }
 
@@ -74,6 +76,8 @@ bool ConsumeLaunchTicket(LaunchTicketInfo& ticketInfo, std::string& failureReaso
             ticketInfo.bt72SecondSeatPolicy = value;
         } else if (key == "bt72_trusted_gunner") {
             ticketInfo.bt72TrustedGunnerHandle = value;
+        } else if (key == "launcher_role") {
+            ticketInfo.launcherRole = value;
         }
     }
     in.close();
