@@ -54,6 +54,30 @@ bool Check(bool condition, const std::string& message) {
     return true;
 }
 
+bool WriteTextFile(const fs::path& path, const std::string& text) {
+    std::ofstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+    file << text;
+    return true;
+}
+
+std::string ReadTextFile(const fs::path& path) {
+    std::ifstream file(path);
+    std::string text;
+    std::string line;
+    while (std::getline(file, line)) {
+        text += line;
+        text += '\n';
+    }
+    return text;
+}
+
+bool ContainsText(const std::string& text, const std::string& needle) {
+    return text.find(needle) != std::string::npos;
+}
+
 void WriteRawString(std::ofstream& file, const std::string& value) {
     const auto length = static_cast<std::uint32_t>(value.size());
     file.write(reinterpret_cast<const char*>(&length), sizeof(length));
@@ -353,6 +377,203 @@ bool RunProfileRoundtrip() {
             "profile roundtrip last route-event type mismatch") &&
         Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->lastRouteEventOutcome == "failed",
             "profile roundtrip last route-event outcome mismatch");
+}
+
+bool RunProfileMigrationContractSmoke() {
+    const fs::path tempRoot = fs::current_path() / "profile_migration_contract_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "profile migration smoke failed to create temp directory")) {
+        return false;
+    }
+
+    const fs::path v9Path = tempRoot / "legacy_v9_profile.txt";
+    if (!Check(WriteTextFile(v9Path,
+            "profile_format=BPF1\n"
+            "profile_version=9\n"
+            "story_awakened=1\n"
+            "story_pippad=1\n"
+            "story_archive=1\n"
+            "route_access_card=1\n"
+            "route_pre_pippad_clues=2\n"
+            "route_bt72_hull=1\n"
+            "route_bt72_core=1\n"
+            "route_bt72_notes=1\n"
+            "route_bt72_restored=0\n"
+            "story_tank=0\n"),
+            "profile migration smoke failed to write v9 profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile v9Profile;
+    if (!Check(bunker::LoadSessionProfile(v9Path, v9Profile),
+            "profile_migration_v9_defaults_bluelink_and_crane_locked expected load success")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(v9Profile.story.pipPadRecovered &&
+            bunker::HasPipPad(v9Profile) &&
+            v9Profile.pipPadExpansionCoverPresent &&
+            !v9Profile.blueLinkModuleRecovered &&
+            !v9Profile.blueLinkModuleInstalled &&
+            !bunker::CanUsePipPadMediaIndex(v9Profile) &&
+            !v9Profile.hangarPowerRestored &&
+            !v9Profile.bt72CraneControlOnline &&
+            !v9Profile.bt72CranePathClear &&
+            !v9Profile.bt72HullMovedToServiceLift &&
+            !v9Profile.bt72HullLockedInRestorationCradle &&
+            !v9Profile.firstPlayableRoute.bt72Restored &&
+            !v9Profile.story.tankLinked,
+            "profile_migration_v9_defaults_bluelink_and_crane_locked expected locked defaults")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path v10Path = tempRoot / "legacy_v10_bluelink_profile.txt";
+    if (!Check(WriteTextFile(v10Path,
+            "profile_format=BPF1\n"
+            "profile_version=10\n"
+            "story_awakened=1\n"
+            "story_pippad=1\n"
+            "pippad_expansion_cover_present=0\n"
+            "bluelink_module_recovered=1\n"
+            "bluelink_module_installed=1\n"
+            "story_archive=1\n"
+            "route_bt72_hull=1\n"
+            "route_bt72_core=1\n"
+            "route_bt72_notes=1\n"
+            "route_bt72_restored=0\n"
+            "story_tank=0\n"),
+            "profile migration smoke failed to write v10 profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile v10Profile;
+    if (!Check(bunker::LoadSessionProfile(v10Path, v10Profile),
+            "profile_migration_v10_preserves_bluelink_but_requires_cradle expected load success")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(bunker::IsBlueLinkInstalled(v10Profile) &&
+            bunker::CanUsePipPadMediaIndex(v10Profile) &&
+            !v10Profile.pipPadExpansionCoverPresent &&
+            !v10Profile.hangarPowerRestored &&
+            !v10Profile.bt72CraneControlOnline &&
+            !v10Profile.bt72CranePathClear &&
+            !v10Profile.bt72HullMovedToServiceLift &&
+            !v10Profile.bt72HullLockedInRestorationCradle &&
+            !bunker::CanCompleteBt72StagedRestoration(v10Profile) &&
+            !v10Profile.firstPlayableRoute.bt72Restored &&
+            !v10Profile.story.tankLinked,
+            "profile_migration_v10_preserves_bluelink_but_requires_cradle expected media only and crane locked")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path restoredPath = tempRoot / "legacy_restored_bt72_profile.txt";
+    if (!Check(WriteTextFile(restoredPath,
+            "profile_format=BPF1\n"
+            "profile_version=9\n"
+            "story_pippad=1\n"
+            "story_archive=1\n"
+            "route_bt72_hull=1\n"
+            "route_bt72_core=1\n"
+            "route_bt72_notes=1\n"
+            "route_bt72_restored=1\n"
+            "story_tank=1\n"),
+            "profile migration smoke failed to write legacy restored BT-72 profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile restoredProfile;
+    if (!Check(bunker::LoadSessionProfile(restoredPath, restoredProfile),
+            "profile_migration_legacy_restored_bt72_implies_crane_path expected load success")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(restoredProfile.firstPlayableRoute.bt72Restored &&
+            restoredProfile.story.tankLinked &&
+            restoredProfile.hangarPowerRestored &&
+            restoredProfile.bt72CraneControlOnline &&
+            restoredProfile.bt72CranePathClear &&
+            restoredProfile.bt72HullMovedToServiceLift &&
+            restoredProfile.bt72HullLockedInRestorationCradle &&
+            !restoredProfile.bt72HullAttachedToCrane &&
+            bunker::CanCompleteBt72StagedRestoration(restoredProfile),
+            "profile_migration_legacy_restored_bt72_implies_crane_path expected crane compatibility flags")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile currentProfile = bunker::MakeDefaultSessionProfile();
+    currentProfile.story.awakenedFromCryo = true;
+    currentProfile.continuityAnchorSeeded = true;
+    currentProfile.story.pipPadRecovered = true;
+    bunker::AddInventoryItem(currentProfile, "#%it_pippad", 1, 0.8f);
+    currentProfile.blueLinkModuleRecovered = true;
+    currentProfile.blueLinkModuleInstalled = true;
+    currentProfile.pipPadExpansionCoverPresent = false;
+    currentProfile.story.archiveRecovered = true;
+    currentProfile.firstPlayableRoute.accessCardRecovered = true;
+    currentProfile.firstPlayableRoute.prePipPadClueCount = 2;
+    currentProfile.firstPlayableRoute.bt72HullInspected = true;
+    currentProfile.firstPlayableRoute.bt72CoreRecovered = true;
+    currentProfile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    currentProfile.firstPlayableRoute.bt72Restored = true;
+    currentProfile.hangarPowerRestored = true;
+    currentProfile.bt72CraneControlOnline = true;
+    currentProfile.bt72CranePathClear = true;
+    currentProfile.bt72HullAttachedToCrane = false;
+    currentProfile.bt72HullMovedToServiceLift = true;
+    currentProfile.bt72HullLockedInRestorationCradle = true;
+    currentProfile.story.tankLinked = true;
+
+    const fs::path currentPath = tempRoot / "current_profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(currentProfile, currentPath);
+    if (!Check(saveStatus.ok, "profile_migration_current_roundtrip_preserves_v936_route_state failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile loadedCurrentProfile;
+    if (!Check(bunker::LoadSessionProfile(currentPath, loadedCurrentProfile),
+            "profile_migration_current_roundtrip_preserves_v936_route_state failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(loadedCurrentProfile.story.pipPadRecovered &&
+            bunker::IsBlueLinkInstalled(loadedCurrentProfile) &&
+            bunker::CanUsePipPadMediaIndex(loadedCurrentProfile) &&
+            loadedCurrentProfile.firstPlayableRoute.bt72Restored &&
+            loadedCurrentProfile.story.tankLinked &&
+            loadedCurrentProfile.bt72HullLockedInRestorationCradle &&
+            loadedCurrentProfile.continuityAnchorSeeded &&
+            bunker::CurrentStoryObjectivePreview(loadedCurrentProfile).find("Restore BT-72") == std::string::npos,
+            "profile_migration_current_roundtrip_preserves_v936_route_state expected current final state")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const std::string savedText = ReadTextFile(currentPath);
+    const bool ok = Check(ContainsText(savedText, "profile_format=BPF1\n") &&
+            ContainsText(savedText, "profile_version=11\n") &&
+            ContainsText(savedText, "pippad_expansion_cover_present=") &&
+            ContainsText(savedText, "bluelink_module_recovered=") &&
+            ContainsText(savedText, "bluelink_module_installed=") &&
+            ContainsText(savedText, "hangar_power_restored=") &&
+            ContainsText(savedText, "bt72_crane_control_online=") &&
+            ContainsText(savedText, "bt72_crane_path_clear=") &&
+            ContainsText(savedText, "bt72_hull_attached_to_crane=") &&
+            ContainsText(savedText, "bt72_hull_moved_to_service_lift=") &&
+            ContainsText(savedText, "bt72_hull_locked_in_restoration_cradle="),
+            "profile_migration_current_save_writes_bluelink_and_crane_keys expected current keys");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
 }
 
 bool RunContinuityAnchorContractSmoke() {
@@ -5810,6 +6031,7 @@ int main() {
     const bool ok = RunWorldRoundtrip() &&
         RunEditorWorldFileHelpersSmoke() &&
         RunProfileRoundtrip() &&
+        RunProfileMigrationContractSmoke() &&
         RunContinuityAnchorContractSmoke() &&
         RunFirstPlayableRouteStorySmoke() &&
         RunRouteBeatPresentationSmoke() &&
