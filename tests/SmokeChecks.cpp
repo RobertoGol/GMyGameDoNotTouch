@@ -5747,6 +5747,71 @@ bool RunBt72CraneRuntimeInteractionSmoke() {
             "bt72_restore_allowed_after_cradle_core_notes_materials expected runtime restore after crane chain");
 }
 
+bool RunBt72ServiceNotesAndPatchRuntimeSmoke() {
+    bunker::World world;
+    auto addObject = [&](const std::string& registryId,
+                         const std::string& displayName,
+                         bunker::InteractionType interaction,
+                         bunker::ObjectCategory category) {
+        bunker::MapObject object;
+        object.registryId = registryId;
+        object.displayName = displayName;
+        object.interaction = interaction;
+        object.category = category;
+        world.AddObject(object);
+    };
+
+    addObject("[%bt72_service_notes_0001]", "BT-72 Service Notes", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%bt72_repair_patch_0001]", "BT-72 Repair Patch Locker", bunker::InteractionType::Container, bunker::ObjectCategory::Container);
+
+    auto objectById = [&](const std::string& registryId) {
+        return world.FindObjectByRegistryId(registryId);
+    };
+
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::SessionProfile lockedProfile = bunker::MakeDefaultSessionProfile();
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), world, player, lockedProfile, staticEraser, gameState);
+    if (!Check(!lockedProfile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            !bunker::HasCollectedTapeId(lockedProfile, "bt72_service_reel_001"),
+            "bt72_service_notes_require_pippad expected service notes to stay locked before Pip-Pad")) {
+        return false;
+    }
+
+    bunker::SessionProfile notesProfile = bunker::MakeDefaultSessionProfile();
+    bunker::RecoverPipPad(notesProfile);
+    notesProfile.story.archiveRecovered = true;
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), world, player, notesProfile, staticEraser, gameState);
+    if (!Check(notesProfile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            bunker::HasCollectedTapeId(notesProfile, "bt72_service_reel_001") &&
+            !notesProfile.story.tankLinked &&
+            !notesProfile.firstPlayableRoute.bt72Restored,
+            "bt72_service_notes_runtime_recovered expected runtime service notes without tank unlock")) {
+        return false;
+    }
+
+    bunker::SessionProfile patchProfile = bunker::MakeDefaultSessionProfile();
+    bunker::RecoverPipPad(patchProfile);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), world, player, patchProfile, staticEraser, gameState);
+    if (!Check(bunker::HasInventoryItem(patchProfile, "repair_patch") &&
+            !patchProfile.firstPlayableRoute.bt72Restored &&
+            !patchProfile.story.tankLinked,
+            "bt72_repair_patch_runtime_recovered expected runtime repair patch without tank unlock")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), world, player, notesProfile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), world, player, patchProfile, staticEraser, gameState);
+    return Check(notesProfile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            bunker::HasCollectedTapeId(notesProfile, "bt72_service_reel_001") &&
+            bunker::HasInventoryItem(patchProfile, "repair_patch") &&
+            !notesProfile.firstPlayableRoute.bt72Restored &&
+            !patchProfile.firstPlayableRoute.bt72Restored,
+            "bt72_service_material_pickups_are_idempotent expected stable duplicate interactions");
+}
+
 bool RunFirstPlayableRouteEndToEndSmoke() {
     bunker::World world;
     auto addObject = [&](const std::string& registryId,
@@ -5773,6 +5838,8 @@ bool RunFirstPlayableRouteEndToEndSmoke() {
     addObject("[%bt72_crane_path_0001]", "BT-72 Crane Path", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
     addObject("[%bt72_crane_hook_0001]", "BT-72 Crane Hook", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
     addObject("[%bt72_service_lift_0001]", "BT-72 Service Lift", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%bt72_service_notes_0001]", "BT-72 Service Notes", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%bt72_repair_patch_0001]", "BT-72 Repair Patch Locker", bunker::InteractionType::Container, bunker::ObjectCategory::Container);
     addObject("[#tr_hull_0001]", "BT-72 Hull", bunker::InteractionType::VehicleAnchor, bunker::ObjectCategory::Vehicle);
 
     auto objectById = [&](const std::string& registryId) {
@@ -5841,11 +5908,8 @@ bool RunFirstPlayableRouteEndToEndSmoke() {
 
     bunker::HandleInteraction(objectById("[%garage_0001]"), world, player, profile, staticEraser, gameState);
     bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
-    // Service-note runtime pickup is covered by the maintenance echo path; this e2e smoke seeds the route flag.
-    profile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
-    if (!bunker::HasInventoryItem(profile, "repair_patch")) {
-        bunker::AddInventoryItem(profile, "repair_patch", 1, 0.2f);
-    }
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), world, player, profile, staticEraser, gameState);
     if (!Check(profile.firstPlayableRoute.bt72HullInspected &&
             bunker::HasInventoryItem(profile, "old_plate") &&
             profile.firstPlayableRoute.bt72CoreRecovered &&
@@ -6102,6 +6166,7 @@ int main() {
         RunBlueLinkRuntimeInteractionSmoke() &&
         RunBt72CraneRestorationContractSmoke() &&
         RunBt72CraneRuntimeInteractionSmoke() &&
+        RunBt72ServiceNotesAndPatchRuntimeSmoke() &&
         RunFirstPlayableRouteEndToEndSmoke() &&
         RunPipPadAccessGatingSmoke();
 

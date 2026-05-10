@@ -5747,6 +5747,39 @@ void HandleInteraction(const MapObject* nearest,
         return;
     }
 
+    if (nearest->registryId == "[%bt72_service_notes_0001]") {
+        if (!HasPipPad(profile)) {
+            gameState.lastEvent = "BT-72 service notes require Pip-Pad recovery before holo-records can be mirrored.";
+            return;
+        }
+        if (!profile.story.archiveRecovered) {
+            gameState.lastEvent = "BT-72 service notes remain encrypted until archive personnel records are mirrored.";
+            return;
+        }
+        if (profile.firstPlayableRoute.bt72ServiceNotesRecovered) {
+            gameState.lastEvent = "BT-72 service notes already mirrored to Pip-Pad.";
+            return;
+        }
+        profile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+        AddCollectedTapeIfMissing(profile, "bt72_service_reel_001", "BT-72 Service Reel");
+        gameState.lastEvent = "BT-72 service notes and holo-records mirrored to Pip-Pad.";
+        return;
+    }
+
+    if (nearest->registryId == "[%bt72_repair_patch_0001]") {
+        if (!HasPipPad(profile)) {
+            gameState.lastEvent = "Repair patch locker requires Pip-Pad recovery before the restoration manifest can be checked.";
+            return;
+        }
+        if (HasInventoryItem(profile, "repair_patch")) {
+            gameState.lastEvent = "BT-72 repair patch already recovered for restoration.";
+            return;
+        }
+        AddInventoryItem(profile, "repair_patch", 1, 0.2f);
+        gameState.lastEvent = "Repair patch recovered for BT-72 restoration.";
+        return;
+    }
+
     if (nearest->registryId == "[#tr_hull_0001]") {
         if (!profile.story.pipPadRecovered) {
             gameState.lastEvent = "The tank berth is locked behind dead diagnostics. Recover the Pip-Pad first.";
