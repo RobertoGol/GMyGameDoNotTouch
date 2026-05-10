@@ -128,6 +128,37 @@ bool ConsumeInventoryItem(SessionProfile& profile, const std::string& itemId, in
 float CurrentInventoryWeight(const SessionProfile& profile);
 int EffectiveStatValue(const SessionProfile& profile, const GameState& gameState, char statCode);
 bool TryConsumeFieldRation(SessionProfile& profile, GameState& gameState);
+enum class PipDeviceModel {
+    PipBoy01,
+    PipBoy10,
+    PipBoy2000Classic,
+    PipBoy2000MarkVI,
+    PipBoy3000MarkIV,
+    PipBoy3000 = PipBoy3000MarkIV,
+    PipBoy3000MarkV,
+    PipPad3500
+};
+
+struct PipDeviceCapabilities {
+    const char* displayName = "";
+    bool selectable = false;
+    bool propOnly = false;
+    bool hasDigitalMap = false;
+    bool physicalNavigationOnly = false;
+    bool supportsMediaIndex = false;
+    bool supportsFullPipPadWorkspace = false;
+    bool ruggedMilitaryPipBoyDerived = false;
+    bool userPreferredComfortShell = false;
+};
+
+PipDeviceCapabilities GetPipDeviceCapabilities(PipDeviceModel model);
+const char* DeviceDisplayName(PipDeviceModel model);
+bool IsSelectablePipDevice(PipDeviceModel model);
+bool IsPropOnlyPipDevice(PipDeviceModel model);
+bool HasDigitalMap(PipDeviceModel model);
+bool UsesPhysicalNavigation(PipDeviceModel model);
+bool SupportsMediaIndex(PipDeviceModel model);
+bool SupportsFullPipPadWorkspace(PipDeviceModel model);
 bool HasPipPad(const SessionProfile& profile);
 bool RecoverPipPad(SessionProfile& profile);
 bool PlayerHasPipPadAccess(const SessionProfile& profile);

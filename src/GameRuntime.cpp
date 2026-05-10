@@ -3046,6 +3046,54 @@ bool TryConsumeFieldRation(SessionProfile& profile, GameState& gameState) {
     return true;
 }
 
+PipDeviceCapabilities GetPipDeviceCapabilities(PipDeviceModel model) {
+    switch (model) {
+        case PipDeviceModel::PipBoy01:
+            return {"Pip-Boy 0.1", true, false, false, true, false, false, false, false};
+        case PipDeviceModel::PipBoy10:
+            return {"Pip-Boy 1.0", true, false, false, true, false, false, false, false};
+        case PipDeviceModel::PipBoy2000Classic:
+            return {"Pip-Boy 2000 Classic", true, false, true, false, false, false, false, false};
+        case PipDeviceModel::PipBoy2000MarkVI:
+            return {"Pip-Boy 2000 Mark VI / FO76-style", true, false, false, true, true, false, false, true};
+        case PipDeviceModel::PipBoy3000MarkIV:
+            return {"Pip-Boy 3000 / Mark IV", true, false, true, false, true, false, false, false};
+        case PipDeviceModel::PipBoy3000MarkV:
+            return {"Pip-Boy 3000 Mark V", false, true, false, false, false, false, false, false};
+        case PipDeviceModel::PipPad3500:
+            return {"Pip-Pad 3500", true, false, true, false, true, true, true, false};
+    }
+    return {};
+}
+
+const char* DeviceDisplayName(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).displayName;
+}
+
+bool IsSelectablePipDevice(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).selectable;
+}
+
+bool IsPropOnlyPipDevice(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).propOnly;
+}
+
+bool HasDigitalMap(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).hasDigitalMap;
+}
+
+bool UsesPhysicalNavigation(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).physicalNavigationOnly;
+}
+
+bool SupportsMediaIndex(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).supportsMediaIndex;
+}
+
+bool SupportsFullPipPadWorkspace(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).supportsFullPipPadWorkspace;
+}
+
 bool HasPipPad(const SessionProfile& profile) {
     return profile.story.pipPadRecovered || HasInventoryItem(profile, "#%it_pippad");
 }

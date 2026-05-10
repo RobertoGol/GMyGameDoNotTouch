@@ -5166,6 +5166,31 @@ bool RunRuntimeCameraSmoke() {
             "runtime camera smoke expected cockpit camera to use tighter raised view");
 }
 
+bool RunPipDeviceCapabilityContractSmoke() {
+    return Check(bunker::DeviceDisplayName(bunker::PipDeviceModel::PipBoy3000) ==
+                std::string("Pip-Boy 3000 / Mark IV"),
+            "pipboy_3000_equals_mark_iv_capability expected canonical display name") &&
+        Check(bunker::HasDigitalMap(bunker::PipDeviceModel::PipBoy3000) &&
+                bunker::HasDigitalMap(bunker::PipDeviceModel::PipBoy3000MarkIV),
+            "pipboy_3000_equals_mark_iv_capability expected digital map support") &&
+        Check(!bunker::IsSelectablePipDevice(bunker::PipDeviceModel::PipBoy3000MarkV) &&
+                bunker::IsPropOnlyPipDevice(bunker::PipDeviceModel::PipBoy3000MarkV) &&
+                !bunker::HasDigitalMap(bunker::PipDeviceModel::PipBoy3000MarkV),
+            "pipboy_3000_mark_v_not_selectable expected rejected prop-only model") &&
+        Check(bunker::IsSelectablePipDevice(bunker::PipDeviceModel::PipBoy2000MarkVI) &&
+                bunker::UsesPhysicalNavigation(bunker::PipDeviceModel::PipBoy2000MarkVI) &&
+                bunker::SupportsMediaIndex(bunker::PipDeviceModel::PipBoy2000MarkVI),
+            "fo76_pipboy_shell_is_viable_user_preferred_option expected viable physical-navigation shell") &&
+        Check(bunker::IsSelectablePipDevice(bunker::PipDeviceModel::PipPad3500) &&
+                bunker::SupportsFullPipPadWorkspace(bunker::PipDeviceModel::PipPad3500) &&
+                bunker::GetPipDeviceCapabilities(bunker::PipDeviceModel::PipPad3500).ruggedMilitaryPipBoyDerived,
+            "pippad_is_not_consumer_tablet expected rugged Pip-Boy-derived field tablet") &&
+        Check(bunker::UsesPhysicalNavigation(bunker::PipDeviceModel::PipBoy01) &&
+                bunker::UsesPhysicalNavigation(bunker::PipDeviceModel::PipBoy10) &&
+                bunker::UsesPhysicalNavigation(bunker::PipDeviceModel::PipBoy2000MarkVI),
+            "no_map_devices_use_physical_navigation expected physical navigation for no-map shells");
+}
+
 bool RunPipPadAccessGatingSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     bunker::PlayerState player;
@@ -5339,6 +5364,7 @@ int main() {
         RunGameExecutionScriptBridgeSmoke() &&
         RunPlayerSweepCollisionSmoke() &&
         RunRuntimeCameraSmoke() &&
+        RunPipDeviceCapabilityContractSmoke() &&
         RunPipPadAccessGatingSmoke();
 
     fs::remove_all(sandboxRoot, ec);
