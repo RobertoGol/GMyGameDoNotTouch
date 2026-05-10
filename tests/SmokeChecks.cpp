@@ -5419,6 +5419,113 @@ bool RunBt72CraneRestorationContractSmoke() {
     return ok;
 }
 
+bool RunBt72CraneRuntimeInteractionSmoke() {
+    bunker::World world;
+    auto addTerminal = [&](const std::string& registryId, const std::string& displayName) {
+        bunker::MapObject object;
+        object.registryId = registryId;
+        object.displayName = displayName;
+        object.interaction = bunker::InteractionType::Terminal;
+        object.category = bunker::ObjectCategory::Terminal;
+        world.AddObject(object);
+    };
+    addTerminal("[%hangar_power_0001]", "Hangar Power Bus");
+    addTerminal("[%bt72_crane_control_0001]", "BT-72 Crane Control");
+    addTerminal("[%bt72_crane_path_0001]", "BT-72 Crane Path");
+    addTerminal("[%bt72_crane_hook_0001]", "BT-72 Crane Hook");
+    addTerminal("[%bt72_service_lift_0001]", "BT-72 Service Lift");
+
+    bunker::MapObject hull;
+    hull.registryId = "[#tr_hull_0001]";
+    hull.displayName = "BT-72 Hull";
+    hull.interaction = bunker::InteractionType::VehicleAnchor;
+    hull.category = bunker::ObjectCategory::Vehicle;
+    world.AddObject(hull);
+
+    const auto* power = world.FindObjectByRegistryId("[%hangar_power_0001]");
+    const auto* control = world.FindObjectByRegistryId("[%bt72_crane_control_0001]");
+    const auto* path = world.FindObjectByRegistryId("[%bt72_crane_path_0001]");
+    const auto* hook = world.FindObjectByRegistryId("[%bt72_crane_hook_0001]");
+    const auto* lift = world.FindObjectByRegistryId("[%bt72_service_lift_0001]");
+    const auto* hullObject = world.FindObjectByRegistryId("[#tr_hull_0001]");
+    if (!Check(power != nullptr && control != nullptr && path != nullptr && hook != nullptr && lift != nullptr && hullObject != nullptr,
+            "bt72 crane runtime smoke expected all synthetic crane objects")) {
+        return false;
+    }
+
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::HandleInteraction(control, world, player, profile, staticEraser, gameState);
+    if (!Check(!profile.bt72CraneControlOnline,
+            "bt72_crane_control_requires_power expected crane control to stay offline without power")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(power, world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(control, world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(path, world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(hook, world, player, profile, staticEraser, gameState);
+    if (!Check(!profile.bt72HullAttachedToCrane,
+            "bt72_crane_hook_requires_hull_survey expected hook to reject unsurveyed hull")) {
+        return false;
+    }
+
+    bunker::SessionProfile blockedPathProfile = bunker::MakeDefaultSessionProfile();
+    blockedPathProfile.firstPlayableRoute.bt72HullInspected = true;
+    bunker::HandleInteraction(power, world, player, blockedPathProfile, staticEraser, gameState);
+    bunker::HandleInteraction(control, world, player, blockedPathProfile, staticEraser, gameState);
+    bunker::HandleInteraction(hook, world, player, blockedPathProfile, staticEraser, gameState);
+    if (!Check(!blockedPathProfile.bt72HullAttachedToCrane,
+            "bt72_crane_hook_requires_clear_path expected hook to reject blocked path")) {
+        return false;
+    }
+
+    bunker::SessionProfile liftBlockedProfile = blockedPathProfile;
+    liftBlockedProfile.bt72CranePathClear = true;
+    bunker::HandleInteraction(lift, world, player, liftBlockedProfile, staticEraser, gameState);
+    if (!Check(!liftBlockedProfile.bt72HullMovedToServiceLift &&
+            !liftBlockedProfile.bt72HullLockedInRestorationCradle,
+            "bt72_service_lift_requires_attached_hull expected lift to reject unattached hull")) {
+        return false;
+    }
+
+    bunker::SessionProfile restoreBlockedProfile = bunker::MakeDefaultSessionProfile();
+    bunker::RecoverPipPad(restoreBlockedProfile);
+    restoreBlockedProfile.firstPlayableRoute.bt72HullInspected = true;
+    restoreBlockedProfile.firstPlayableRoute.bt72CoreRecovered = true;
+    restoreBlockedProfile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    restoreBlockedProfile.character.inventory.push_back({"power_cell", 1, 0.3f});
+    restoreBlockedProfile.character.inventory.push_back({"repair_patch", 1, 0.2f});
+    restoreBlockedProfile.character.inventory.push_back({"old_plate", 1, 0.5f});
+    bunker::HandleInteraction(hullObject, world, player, restoreBlockedProfile, staticEraser, gameState);
+    if (!Check(!restoreBlockedProfile.firstPlayableRoute.bt72Restored,
+            "bt72_restore_rejected_before_cradle expected restore to reject pre-cradle hull")) {
+        return false;
+    }
+
+    bunker::SessionProfile restoreProfile = bunker::MakeDefaultSessionProfile();
+    bunker::RecoverPipPad(restoreProfile);
+    restoreProfile.firstPlayableRoute.bt72HullInspected = true;
+    restoreProfile.firstPlayableRoute.bt72CoreRecovered = true;
+    restoreProfile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    restoreProfile.character.inventory.push_back({"power_cell", 1, 0.3f});
+    restoreProfile.character.inventory.push_back({"repair_patch", 1, 0.2f});
+    restoreProfile.character.inventory.push_back({"old_plate", 1, 0.5f});
+    bunker::HandleInteraction(power, world, player, restoreProfile, staticEraser, gameState);
+    bunker::HandleInteraction(control, world, player, restoreProfile, staticEraser, gameState);
+    bunker::HandleInteraction(path, world, player, restoreProfile, staticEraser, gameState);
+    bunker::HandleInteraction(hook, world, player, restoreProfile, staticEraser, gameState);
+    bunker::HandleInteraction(lift, world, player, restoreProfile, staticEraser, gameState);
+    bunker::HandleInteraction(hullObject, world, player, restoreProfile, staticEraser, gameState);
+    return Check(restoreProfile.bt72HullLockedInRestorationCradle &&
+            restoreProfile.firstPlayableRoute.bt72Restored &&
+            restoreProfile.partnerTank.secondSeatUnlocked,
+            "bt72_restore_allowed_after_cradle_core_notes_materials expected runtime restore after crane chain");
+}
+
 bool RunPipPadAccessGatingSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     bunker::PlayerState player;
@@ -5596,6 +5703,7 @@ int main() {
         RunBlueLinkExpansionModuleContractSmoke() &&
         RunBlueLinkRuntimeInteractionSmoke() &&
         RunBt72CraneRestorationContractSmoke() &&
+        RunBt72CraneRuntimeInteractionSmoke() &&
         RunPipPadAccessGatingSmoke();
 
     fs::remove_all(sandboxRoot, ec);

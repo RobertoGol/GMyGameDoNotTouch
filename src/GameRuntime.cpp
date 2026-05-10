@@ -5584,6 +5584,84 @@ void HandleInteraction(const MapObject* nearest,
         return;
     }
 
+    if (nearest->registryId == "[%hangar_power_0001]") {
+        if (profile.hangarPowerRestored) {
+            gameState.lastEvent = "Hangar power bus already restored. Crane controls still require a separate online cycle.";
+            return;
+        }
+        profile.hangarPowerRestored = true;
+        gameState.lastEvent = "Hangar power bus restored. Crane control can now be brought online.";
+        return;
+    }
+
+    if (nearest->registryId == "[%bt72_crane_control_0001]") {
+        if (!profile.hangarPowerRestored) {
+            gameState.lastEvent = "BT-72 crane control is dark. Restore hangar power first.";
+            return;
+        }
+        if (profile.bt72CraneControlOnline) {
+            gameState.lastEvent = "BT-72 crane control is already online.";
+            return;
+        }
+        profile.bt72CraneControlOnline = true;
+        gameState.lastEvent = "BT-72 crane control online. Clear the crane path before attaching the hull.";
+        return;
+    }
+
+    if (nearest->registryId == "[%bt72_crane_path_0001]") {
+        if (!profile.hangarPowerRestored || !profile.bt72CraneControlOnline) {
+            gameState.lastEvent = "BT-72 crane path cannot be cleared until hangar power and crane control are online.";
+            return;
+        }
+        if (profile.bt72CranePathClear) {
+            gameState.lastEvent = "BT-72 crane path is already clear.";
+            return;
+        }
+        profile.bt72CranePathClear = true;
+        gameState.lastEvent = "BT-72 crane path cleared. Hook can now attach the surveyed hull.";
+        return;
+    }
+
+    if (nearest->registryId == "[%bt72_crane_hook_0001]") {
+        if (!profile.firstPlayableRoute.bt72HullInspected) {
+            gameState.lastEvent = "BT-72 crane hook has no verified lift points. Inspect the hull berth first.";
+            return;
+        }
+        if (!profile.hangarPowerRestored) {
+            gameState.lastEvent = "BT-72 crane hook is unpowered. Restore hangar power first.";
+            return;
+        }
+        if (!profile.bt72CraneControlOnline) {
+            gameState.lastEvent = "BT-72 crane hook is locked out. Bring crane control online first.";
+            return;
+        }
+        if (!profile.bt72CranePathClear) {
+            gameState.lastEvent = "BT-72 crane hook path is blocked. Clear the crane path first.";
+            return;
+        }
+        if (!AttachBt72HullToCrane(profile)) {
+            gameState.lastEvent = profile.bt72HullLockedInRestorationCradle
+                ? "BT-72 hull is already locked in the restoration cradle."
+                : "BT-72 crane hook failed to attach the hull.";
+            return;
+        }
+        gameState.lastEvent = "BT-72 hull attached to the hangar crane hook. Move it to the service lift cradle.";
+        return;
+    }
+
+    if (nearest->registryId == "[%bt72_service_lift_0001]") {
+        if (!profile.bt72HullAttachedToCrane) {
+            gameState.lastEvent = "BT-72 service lift is waiting for a crane-attached hull.";
+            return;
+        }
+        if (!MoveBt72HullToServiceLift(profile)) {
+            gameState.lastEvent = "BT-72 service lift could not receive the hull. Check crane power, control, and path state.";
+            return;
+        }
+        gameState.lastEvent = "BT-72 hull moved to the service lift and locked in the restoration cradle.";
+        return;
+    }
+
     if (nearest->registryId == "[%pip_0001]") {
         if (profile.story.pipPadRecovered) {
             gameState.lastEvent = "Pip-Pad locker already cleared.";
