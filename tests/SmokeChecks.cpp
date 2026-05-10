@@ -5940,6 +5940,142 @@ bool RunBt72ServiceNotesAndPatchRuntimeSmoke() {
             "bt72_service_material_pickups_are_idempotent expected stable duplicate interactions");
 }
 
+bool RunStarterWorldFirstRouteObjectAvailabilitySmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+
+    const auto hasObject = [&](const std::string& registryId) {
+        return world.FindObjectByRegistryId(registryId) != nullptr;
+    };
+
+    if (!Check(world.IsStarterScenarioWorld(),
+            "starter_world_contains_pippad_and_bt72_route_objects expected starter scenario world")) {
+        return false;
+    }
+    if (!Check(hasObject("[%cryo_0001]") &&
+            hasObject("[%core_0001]") &&
+            hasObject("[%pip_0001]") &&
+            hasObject("[%archive_0001]") &&
+            hasObject("[%garage_0001]") &&
+            hasObject("[#tr_hull_0001]"),
+            "starter_world_contains_pippad_and_bt72_route_objects expected core route objects")) {
+        return false;
+    }
+    if (!Check(hasObject("[%bluelink_module_0001]") &&
+            hasObject("[%pippad_expansion_bay_0001]"),
+            "starter_world_contains_bluelink_runtime_objects expected BlueLink runtime objects")) {
+        return false;
+    }
+    if (!Check(hasObject("[%hangar_power_0001]") &&
+            hasObject("[%bt72_crane_control_0001]") &&
+            hasObject("[%bt72_crane_path_0001]") &&
+            hasObject("[%bt72_crane_hook_0001]") &&
+            hasObject("[%bt72_service_lift_0001]"),
+            "starter_world_contains_bt72_crane_runtime_objects expected crane runtime objects")) {
+        return false;
+    }
+    return Check(hasObject("[%bt72_service_notes_0001]") &&
+            hasObject("[%bt72_repair_patch_0001]"),
+            "starter_world_contains_bt72_service_material_objects expected service/material runtime objects");
+}
+
+bool RunStarterWorldFirstPlayableRouteSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+
+    auto objectById = [&](const std::string& registryId) {
+        return world.FindObjectByRegistryId(registryId);
+    };
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(objectById("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.story.awakenedFromCryo &&
+            profile.continuityAnchorSeeded &&
+            profile.firstPlayableRoute.accessCardRecovered &&
+            bunker::HasInventoryItem(profile, "bunker_access_card") &&
+            bunker::HasPipPad(profile) &&
+            bunker::HasInventoryItem(profile, "#%it_pippad"),
+            "starter_world_e2e_cryo_to_pippad expected cryo, access card, and Pip-Pad recovery")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%bluelink_module_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.blueLinkModuleRecovered &&
+            !bunker::CanUsePipPadMediaIndex(profile) &&
+            !profile.story.archiveRecovered &&
+            !profile.story.relayRecovered &&
+            !profile.story.returnedToBase,
+            "starter_world_e2e_bluelink_installed expected BlueLink pickup without story unlock")) {
+        return false;
+    }
+    bunker::HandleInteraction(objectById("[%pippad_expansion_bay_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(bunker::IsBlueLinkInstalled(profile) &&
+            bunker::CanUsePipPadMediaIndex(profile) &&
+            !profile.pipPadExpansionCoverPresent &&
+            !profile.story.archiveRecovered &&
+            !profile.story.relayRecovered &&
+            !profile.story.returnedToBase,
+            "starter_world_e2e_bluelink_installed expected installed media module only")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%archive_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%garage_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.story.archiveRecovered &&
+            bunker::HasCollectedTapeId(profile, "archive_missing_personnel") &&
+            profile.firstPlayableRoute.bt72HullInspected &&
+            profile.firstPlayableRoute.bt72CoreRecovered &&
+            profile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            bunker::HasCollectedTapeId(profile, "bt72_service_reel_001") &&
+            bunker::HasInventoryItem(profile, "old_plate") &&
+            bunker::HasInventoryItem(profile, "power_cell") &&
+            bunker::HasInventoryItem(profile, "repair_patch"),
+            "starter_world_e2e_archive_and_bt72_knowledge expected archive and BT-72 route knowledge/materials")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%hangar_power_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_control_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_path_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_hook_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_lift_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.hangarPowerRestored &&
+            profile.bt72CraneControlOnline &&
+            profile.bt72CranePathClear &&
+            !profile.bt72HullAttachedToCrane &&
+            profile.bt72HullMovedToServiceLift &&
+            profile.bt72HullLockedInRestorationCradle,
+            "starter_world_e2e_crane_cradle_locked expected authored crane chain to lock cradle")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.firstPlayableRoute.bt72Restored &&
+            profile.partnerTank.secondSeatUnlocked &&
+            !profile.story.tankLinked,
+            "starter_world_e2e_bt72_restored_and_linked expected restore before cockpit link")) {
+        return false;
+    }
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), world, player, profile, staticEraser, gameState);
+    return Check(player.insideTank &&
+            profile.story.tankLinked &&
+            profile.partnerTank.deployed &&
+            player.viewMode == bunker::ViewMode::Cockpit &&
+            bunker::CurrentStoryObjectivePreview(profile).find("Restore BT-72") == std::string::npos,
+            "starter_world_e2e_bt72_restored_and_linked expected cockpit link and advanced objective");
+}
+
 bool RunFirstPlayableRouteEndToEndSmoke() {
     bunker::World world;
     auto addObject = [&](const std::string& registryId,
@@ -6296,6 +6432,8 @@ int main() {
         RunBt72CraneRestorationContractSmoke() &&
         RunBt72CraneRuntimeInteractionSmoke() &&
         RunBt72ServiceNotesAndPatchRuntimeSmoke() &&
+        RunStarterWorldFirstRouteObjectAvailabilitySmoke() &&
+        RunStarterWorldFirstPlayableRouteSmoke() &&
         RunFirstPlayableRouteEndToEndSmoke() &&
         RunPipPadAccessGatingSmoke();
 

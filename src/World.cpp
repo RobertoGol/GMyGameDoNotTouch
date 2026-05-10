@@ -596,6 +596,168 @@ void World::GeneratePrototypeZone() {
     });
 
     AddObject({
+        "[%bluelink_module_0001]",
+        "BlueLink Media Module",
+        InteractionType::Container,
+        ObjectCategory::Container,
+        -8.0f,
+        -5.0f,
+        0.0f,
+        1.0f,
+        1.0f,
+        1.0f,
+        100.0f,
+        false,
+        true,
+        false,
+        {}
+    });
+
+    AddObject({
+        "[%pippad_expansion_bay_0001]",
+        "Pip-Pad Expansion Bay",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        -8.2f,
+        -6.7f,
+        0.0f,
+        1.0f,
+        1.0f,
+        1.2f,
+        100.0f,
+        false,
+        true,
+        false,
+        {}
+    });
+
+    AddObject({
+        "[%hangar_power_0001]",
+        "Hangar Power Bus",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        1.0f,
+        4.0f,
+        0.0f,
+        1.4f,
+        1.0f,
+        1.8f,
+        100.0f,
+        false,
+        true,
+        false,
+        {}
+    });
+
+    AddObject({
+        "[%bt72_crane_control_0001]",
+        "BT-72 Crane Control",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        2.8f,
+        4.0f,
+        0.0f,
+        1.4f,
+        1.0f,
+        1.8f,
+        100.0f,
+        false,
+        true,
+        false,
+        {}
+    });
+
+    AddObject({
+        "[%bt72_crane_path_0001]",
+        "BT-72 Crane Path",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        4.2f,
+        3.0f,
+        0.0f,
+        1.6f,
+        1.0f,
+        1.2f,
+        100.0f,
+        false,
+        true,
+        false,
+        {}
+    });
+
+    AddObject({
+        "[%bt72_crane_hook_0001]",
+        "BT-72 Crane Hook",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        4.4f,
+        0.2f,
+        0.0f,
+        1.2f,
+        1.0f,
+        1.6f,
+        100.0f,
+        false,
+        true,
+        false,
+        {}
+    });
+
+    AddObject({
+        "[%bt72_service_lift_0001]",
+        "BT-72 Service Lift",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        5.5f,
+        -1.0f,
+        0.0f,
+        2.0f,
+        1.4f,
+        1.2f,
+        100.0f,
+        false,
+        true,
+        false,
+        {}
+    });
+
+    AddObject({
+        "[%bt72_service_notes_0001]",
+        "BT-72 Service Notes",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        3.2f,
+        2.0f,
+        0.0f,
+        1.0f,
+        1.0f,
+        1.2f,
+        100.0f,
+        false,
+        true,
+        false,
+        {}
+    });
+
+    AddObject({
+        "[%bt72_repair_patch_0001]",
+        "BT-72 Repair Patch Locker",
+        InteractionType::Container,
+        ObjectCategory::Container,
+        6.2f,
+        0.8f,
+        0.0f,
+        1.2f,
+        1.0f,
+        1.2f,
+        100.0f,
+        false,
+        true,
+        false,
+        {}
+    });
+
+    AddObject({
         "[#tr_hull_0001]",
         "First Tank Hull",
         InteractionType::VehicleAnchor,
