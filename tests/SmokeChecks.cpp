@@ -265,6 +265,8 @@ bool RunProfileRoundtrip() {
     savedProfile.launcherAnnouncements.lastSeenBuildNumber = bunker::kCurrentBuildNumber;
     savedProfile.launcherAnnouncements.lastSeenAnnouncementId = bunker::CurrentBuildAnnouncement().announcementId;
     savedProfile.launcherAnnouncements.lastSeenVersionLabel = std::string(bunker::kCurrentVersionLabel);
+    savedProfile.continuityAnchorSeeded = true;
+    savedProfile.continuityAnchorVariance = 0.23f;
     savedProfile.story.awakenedFromCryo = true;
     savedProfile.story.pipPadRecovered = true;
     savedProfile.story.archiveRecovered = true;
@@ -320,6 +322,9 @@ bool RunProfileRoundtrip() {
             "profile launcher last-seen build mismatch") &&
         Check(loadedProfile.launcherAnnouncements.lastSeenAnnouncementId == savedProfile.launcherAnnouncements.lastSeenAnnouncementId,
             "profile launcher last-seen announcement mismatch") &&
+        Check(loadedProfile.continuityAnchorSeeded, "profile continuity anchor seeded mismatch") &&
+        Check(std::abs(loadedProfile.continuityAnchorVariance - 0.23f) < 0.01f,
+            "profile continuity anchor variance mismatch") &&
         Check(loadedProfile.firstPlayableRoute.accessCardRecovered, "profile first route access card mismatch") &&
         Check(loadedProfile.firstPlayableRoute.prePipPadClueCount == 2, "profile first route clue count mismatch") &&
         Check(loadedProfile.firstPlayableRoute.bt72Restored, "profile first route restore flag mismatch") &&
@@ -348,6 +353,81 @@ bool RunProfileRoundtrip() {
             "profile roundtrip last route-event type mismatch") &&
         Check(bunker::FindWorldFieldState(loadedProfile, loadedProfile.selectedWorld)->lastRouteEventOutcome == "failed",
             "profile roundtrip last route-event outcome mismatch");
+}
+
+bool RunContinuityAnchorContractSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::World world;
+    bunker::MapObject cryo;
+    cryo.registryId = "[%cryo_0001]";
+    cryo.displayName = "Cryo Capsule";
+    world.AddObject(cryo);
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.continuityAnchorSeeded,
+            "continuity_anchor_seeded_after_bunker_anomaly expected Continuity Anchor to seed")) {
+        return false;
+    }
+    if (!Check(profile.continuityAnchorVariance > 0.0f &&
+            gameState.lastEvent.find("Continuity Anchor variance detected.") != std::string::npos &&
+            gameState.lastEvent.find("Identity continuity profile recovered.") != std::string::npos,
+            "continuity_anchor_seeded_after_bunker_anomaly expected diagnostic copy")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "continuity_anchor_contract_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "continuity anchor smoke failed to create temp directory")) {
+        return false;
+    }
+
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "continuity_anchor_persists_after_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "continuity_anchor_persists_after_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(loadedProfile.continuityAnchorSeeded &&
+            std::abs(loadedProfile.continuityAnchorVariance - profile.continuityAnchorVariance) < 0.01f,
+            "continuity_anchor_persists_after_save_load expected anchor state to roundtrip")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path legacyPath = tempRoot / "legacy_soulline_profile.txt";
+    {
+        std::ofstream legacyProfile(legacyPath);
+        legacyProfile << "profile_format=BPF1\n";
+        legacyProfile << "profile_version=8\n";
+        legacyProfile << "soulline_seeded=1\n";
+        legacyProfile << "soulline_variance=0.42\n";
+    }
+
+    bunker::SessionProfile legacyLoaded;
+    if (!Check(bunker::LoadSessionProfile(legacyPath, legacyLoaded),
+            "continuity_anchor_aliases_soulline_legacy_field failed to load legacy profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    const bool ok = Check(legacyLoaded.continuityAnchorSeeded && bunker::SoulLineSeeded(legacyLoaded),
+            "continuity_anchor_aliases_soulline_legacy_field expected seeded alias") &&
+        Check(std::abs(legacyLoaded.continuityAnchorVariance - 0.42f) < 0.01f &&
+                std::abs(bunker::SoulLineVariance(legacyLoaded) - 0.42f) < 0.01f,
+            "continuity_anchor_aliases_soulline_legacy_field expected variance alias");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
 }
 
 bool RunFirstPlayableRouteStorySmoke() {
@@ -5160,6 +5240,7 @@ int main() {
     const bool ok = RunWorldRoundtrip() &&
         RunEditorWorldFileHelpersSmoke() &&
         RunProfileRoundtrip() &&
+        RunContinuityAnchorContractSmoke() &&
         RunFirstPlayableRouteStorySmoke() &&
         RunRouteBeatPresentationSmoke() &&
         RunFirstPlayableRouteReadoutSmoke() &&

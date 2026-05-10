@@ -410,9 +410,20 @@ struct SessionProfile {
     std::string fieldCheckpointWorld{};
     std::string fieldCheckpointLabel{};
     int scavengerRunsCompleted = 0;
+    bool continuityAnchorSeeded = false;
+    float continuityAnchorVariance = 0.0f;
     FirstPlayableRouteProgress firstPlayableRoute{};
     StoryProgress story{};
 };
+
+// Legacy/internal alias: SoulLine / Линейка Сознания.
+inline bool SoulLineSeeded(const SessionProfile& profile) {
+    return profile.continuityAnchorSeeded;
+}
+
+inline float SoulLineVariance(const SessionProfile& profile) {
+    return profile.continuityAnchorVariance;
+}
 
 inline bool HasActiveFieldCheckpoint(const SessionProfile& profile) {
     return profile.fieldCheckpointKnown && !profile.fieldCheckpointWorld.empty() &&
@@ -763,6 +774,8 @@ inline std::string CurrentTankSyncMode(const PartnerTankProfile& tank) {
 SessionProfile MakeDefaultSessionProfile();
 void NormalizeWorldFieldState(WorldFieldState& state);
 void NormalizeSessionProfile(SessionProfile& profile);
+bool SeedContinuityAnchorAfterBunkerAnomaly(SessionProfile& profile, std::string* diagnosticText = nullptr);
+std::string ContinuityAnchorDiagnostic(const SessionProfile& profile);
 bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath);
 bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile);
 

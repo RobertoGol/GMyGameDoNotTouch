@@ -5389,12 +5389,17 @@ void HandleInteraction(const MapObject* nearest,
         profile.firstPlayableRoute.introSeen = true;
         profile.story.awakenedFromCryo = true;
         profile.firstPlayableRoute.prePipPadClueCount = std::max(profile.firstPlayableRoute.prePipPadClueCount, 1);
+        std::string continuityDiagnostic;
+        SeedContinuityAnchorAfterBunkerAnomaly(profile, &continuityDiagnostic);
         if (!HasEmergencyMeleeTool(profile)) {
             AddInventoryItem(profile, "#%it_emergency_baton", 1, 1.2f);
             profile.firstPlayableRoute.emergencyMeleeRecovered = true;
             gameState.lastEvent = "Cryostasis terminated. Adjacent pods are split open, several berths stand empty, and an emergency baton plus stained service sketch were recovered from the capsule tray.";
         } else {
             gameState.lastEvent = "Cryostasis terminated across the shared cryo tier. Memory loss remains, but movement is stable.";
+        }
+        if (!continuityDiagnostic.empty()) {
+            gameState.lastEvent += " " + continuityDiagnostic;
         }
         return;
     }
