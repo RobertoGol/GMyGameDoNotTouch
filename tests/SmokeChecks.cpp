@@ -5174,17 +5174,20 @@ bool RunPipPadAccessGatingSmoke() {
     if (!Check(!player.uiVisible, "pip-pad gating smoke expected default UI to start hidden")) {
         return false;
     }
-    if (!Check(!bunker::PlayerHasPipPadAccess(profile), "pip-pad gating smoke expected no access before pickup")) {
+    if (!Check(!profile.story.pipPadRecovered &&
+            !bunker::HasPipPad(profile) &&
+            !bunker::PlayerHasPipPadAccess(profile),
+            "pip_pad_not_available_at_cryo_wake expected no Pip-Pad access before pickup")) {
         return false;
     }
     player.uiVisible = true;
     if (!Check(!bunker::TryTogglePipPadUi(player, profile, gameState),
-            "pip-pad gating smoke expected TAB helper to reject missing Pip-Pad")) {
+            "pip_pad_not_available_at_cryo_wake expected TAB helper to reject missing Pip-Pad")) {
         return false;
     }
     if (!Check(!player.uiVisible &&
             gameState.lastEvent.find("No Pip-Pad linked yet") != std::string::npos,
-            "pip-pad gating smoke expected missing Pip-Pad feedback and hidden UI")) {
+            "pip_pad_not_available_at_cryo_wake expected missing Pip-Pad feedback and hidden UI")) {
         return false;
     }
 
@@ -5203,8 +5206,11 @@ bool RunPipPadAccessGatingSmoke() {
     const auto* locker = world.FindObjectByRegistryId("[%pip_0001]");
     bunker::HandleInteraction(locker, world, player, profile, staticEraser, gameState);
 
-    if (!Check(profile.story.pipPadRecovered && bunker::HasInventoryItem(profile, "#%it_pippad"),
-            "pip-pad gating smoke expected pickup to set story flag and inventory access")) {
+    if (!Check(profile.story.pipPadRecovered &&
+            bunker::HasPipPad(profile) &&
+            bunker::PlayerHasPipPadAccess(profile) &&
+            bunker::HasInventoryItem(profile, "#%it_pippad"),
+            "pip_pad_recovered_after_route_pickup expected pickup to set story flag and inventory access")) {
         return false;
     }
     if (!Check(!player.uiVisible,
@@ -5215,6 +5221,34 @@ bool RunPipPadAccessGatingSmoke() {
             "pip-pad gating smoke expected pickup feedback to mention TAB")) {
         return false;
     }
+
+    const fs::path tempRoot = fs::current_path() / "pip_pad_access_gating_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "pip_pad_recovery_persists_after_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "pip_pad_recovery_persists_after_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "pip_pad_recovery_persists_after_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(loadedProfile.story.pipPadRecovered &&
+            bunker::HasPipPad(loadedProfile) &&
+            bunker::PlayerHasPipPadAccess(loadedProfile),
+            "pip_pad_recovery_persists_after_save_load expected recovered Pip-Pad access")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    fs::remove_all(tempRoot, ec);
 
     return Check(bunker::TryTogglePipPadUi(player, profile, gameState) && player.uiVisible,
             "pip-pad gating smoke expected TAB helper to open after pickup") &&

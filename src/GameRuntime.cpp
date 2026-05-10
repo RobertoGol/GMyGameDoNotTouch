@@ -3046,12 +3046,25 @@ bool TryConsumeFieldRation(SessionProfile& profile, GameState& gameState) {
     return true;
 }
 
-bool PlayerHasPipPadAccess(const SessionProfile& profile) {
+bool HasPipPad(const SessionProfile& profile) {
     return profile.story.pipPadRecovered || HasInventoryItem(profile, "#%it_pippad");
 }
 
+bool RecoverPipPad(SessionProfile& profile) {
+    const bool alreadyRecovered = HasPipPad(profile);
+    if (!HasInventoryItem(profile, "#%it_pippad")) {
+        AddInventoryItem(profile, "#%it_pippad", 1, 0.8f);
+    }
+    profile.story.pipPadRecovered = true;
+    return !alreadyRecovered;
+}
+
+bool PlayerHasPipPadAccess(const SessionProfile& profile) {
+    return HasPipPad(profile);
+}
+
 bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState) {
-    if (!PlayerHasPipPadAccess(profile)) {
+    if (!HasPipPad(profile)) {
         player.uiVisible = false;
         gameState.lastEvent = "No Pip-Pad linked yet. Recover the Pip-Pad first.";
         return false;
@@ -5456,9 +5469,8 @@ void HandleInteraction(const MapObject* nearest,
             return;
         }
 
-        AddInventoryItem(profile, "#%it_pippad", 1, 0.8f);
+        RecoverPipPad(profile);
         AddInventoryItem(profile, "cryo_medkit", 1, 0.5f);
-        profile.story.pipPadRecovered = true;
         staticEraser.Erase(nearest->registryId);
         staticEraser.Save(profile.selectedWorld);
         world.RemoveObject(nearest->registryId);
