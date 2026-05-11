@@ -6863,6 +6863,95 @@ bool RunPipDeviceSelectionStationRetiresAfterBunkerExitSmoke() {
     return ok;
 }
 
+bool RunActivePipDeviceUsableAfterStationRetirementSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::SessionProfile pippadProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pippadProfile, "#%it_pippad");
+    pippadProfile.story.exitedBunker = true;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(pippadProfile) &&
+            bunker::PlayerHasPipPadAccess(pippadProfile) &&
+            bunker::HasActivePipDevice(pippadProfile),
+            "active_pip_device_after_station_retirement expected retired station with active Pip-Pad access")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, pippadProfile, staticEraser, gameState);
+    if (!Check(world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            pippadProfile.activePipDeviceId == "#%it_pippad" &&
+            !pippadProfile.pipDeviceReselectPending &&
+            gameState.lastEvent.find("display-only") != std::string::npos,
+            "active_pip_device_after_station_retirement expected station to stay display-only before UI toggle")) {
+        return false;
+    }
+
+    if (!Check(bunker::TryTogglePipPadUi(player, pippadProfile, gameState) &&
+            player.uiVisible &&
+            gameState.lastEvent.find("Pip-Pad 3500") != std::string::npos &&
+            gameState.lastEvent.find("Full field workspace") != std::string::npos,
+            "active_pip_device_after_station_retirement expected Pip-Pad UI to open with full workspace messaging")) {
+        return false;
+    }
+    if (!Check(bunker::TryTogglePipPadUi(player, pippadProfile, gameState) &&
+            !player.uiVisible &&
+            gameState.lastEvent.find("Pip-Pad 3500 closed") != std::string::npos,
+            "active_pip_device_after_station_retirement expected Pip-Pad UI to close after retirement")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy10Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy10Profile, "#%it_pipboy_1_0");
+    pipBoy10Profile.story.exitedBunker = true;
+    if (!Check(bunker::TryTogglePipPadUi(player, pipBoy10Profile, gameState) &&
+            player.uiVisible &&
+            gameState.lastEvent.find("Pip-Boy 1.0") != std::string::npos &&
+            gameState.lastEvent.find("Physical-navigation") != std::string::npos &&
+            gameState.lastEvent.find("Full field workspace") == std::string::npos,
+            "active_pip_device_after_station_retirement expected Pip-Boy 1.0 UI to avoid full workspace/media promise")) {
+        return false;
+    }
+    bunker::TryTogglePipPadUi(player, pipBoy10Profile, gameState);
+
+    bunker::SessionProfile pipBoy3000Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy3000Profile, "#%it_pipboy_3000");
+    pipBoy3000Profile.story.exitedBunker = true;
+    if (!Check(bunker::TryTogglePipPadUi(player, pipBoy3000Profile, gameState) &&
+            player.uiVisible &&
+            gameState.lastEvent.find("Pip-Boy 3000 / Mark IV") != std::string::npos &&
+            gameState.lastEvent.find("Map and media-capable") != std::string::npos &&
+            gameState.lastEvent.find("Full field workspace") == std::string::npos,
+            "active_pip_device_after_station_retirement expected Pip-Boy 3000 UI to reflect map/media without full workspace")) {
+        return false;
+    }
+    bunker::TryTogglePipPadUi(player, pipBoy3000Profile, gameState);
+
+    bunker::SessionProfile noDeviceProfile = bunker::MakeDefaultSessionProfile();
+    noDeviceProfile.story.exitedBunker = true;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(noDeviceProfile),
+            "active_pip_device_after_station_retirement expected no-device exited profile to retire station")) {
+        return false;
+    }
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, noDeviceProfile, staticEraser, gameState);
+    if (!Check(world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            noDeviceProfile.activePipDeviceId.empty() &&
+            !noDeviceProfile.story.pipPadRecovered &&
+            !noDeviceProfile.pipDeviceReselectPending &&
+            gameState.lastEvent.find("display-only") != std::string::npos,
+            "active_pip_device_after_station_retirement expected retired station not to recover device for no-device profile")) {
+        return false;
+    }
+    player.uiVisible = true;
+    return Check(!bunker::TryTogglePipPadUi(player, noDeviceProfile, gameState) &&
+            !player.uiVisible &&
+            gameState.lastEvent.find("No active Pip device") != std::string::npos,
+            "active_pip_device_after_station_retirement expected no-device UI toggle to fail safely");
+}
+
 bool RunPipDeviceSelectionHelperContractSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     if (!Check(!bunker::HasActivePipDevice(profile) &&
@@ -7853,6 +7942,7 @@ int main() {
         RunPipDeviceSelectionStationRoundtripSmoke() &&
         RunPipDeviceReselectFlowSmoke() &&
         RunPipDeviceSelectionStationRetiresAfterBunkerExitSmoke() &&
+        RunActivePipDeviceUsableAfterStationRetirementSmoke() &&
         RunPipDeviceSelectionHelperContractSmoke() &&
         RunPipDeviceItemRegistryAndStationOptionsSmoke() &&
         RunPipDeviceProfileNormalizationRegistrySmoke() &&

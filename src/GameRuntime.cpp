@@ -3348,14 +3348,38 @@ bool PlayerHasPipPadAccess(const SessionProfile& profile) {
     return HasPipPad(profile);
 }
 
+std::string ActivePipDeviceUiCapabilitySummary(const SessionProfile& profile) {
+    if (ActivePipDeviceSupportsFullWorkspace(profile)) {
+        return "Full field workspace online.";
+    }
+    if (ActivePipDeviceSupportsMediaIndex(profile) && ActivePipDeviceHasDigitalMap(profile)) {
+        return "Map and media-capable field interface online.";
+    }
+    if (ActivePipDeviceSupportsMediaIndex(profile)) {
+        return "Media-capable physical-navigation interface online.";
+    }
+    if (ActivePipDeviceHasDigitalMap(profile)) {
+        return "Digital map interface online.";
+    }
+    if (ActivePipDeviceUsesPhysicalNavigation(profile)) {
+        return "Physical-navigation interface online.";
+    }
+    return "Field interface online.";
+}
+
 bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState) {
     if (!HasPipPad(profile)) {
         player.uiVisible = false;
-        gameState.lastEvent = "No Pip-Pad linked yet. Recover the Pip-Pad first.";
+        gameState.lastEvent = "No Pip-Pad linked yet. No active Pip device assigned; recover a Pip-Boy or Pip-Pad first.";
         return false;
     }
 
     player.uiVisible = !player.uiVisible;
+    if (player.uiVisible) {
+        gameState.lastEvent = ActivePipDeviceDisplayName(profile) + " opened. " + ActivePipDeviceUiCapabilitySummary(profile);
+    } else {
+        gameState.lastEvent = ActivePipDeviceDisplayName(profile) + " closed.";
+    }
     return true;
 }
 
