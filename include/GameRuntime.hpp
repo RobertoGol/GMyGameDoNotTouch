@@ -223,6 +223,7 @@ bool CanMoveBt72HullToServiceLift(const SessionProfile& profile);
 bool MoveBt72HullToServiceLift(SessionProfile& profile);
 bool CanInstallBt72Core(const SessionProfile& profile);
 bool CanCompleteBt72StagedRestoration(const SessionProfile& profile);
+bool PlayerHasActivePipDeviceAccess(const SessionProfile& profile);
 bool PlayerHasPipPadAccess(const SessionProfile& profile);
 bool TryToggleActivePipDeviceUi(PlayerState& player, const SessionProfile& profile, GameState& gameState);
 bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState);

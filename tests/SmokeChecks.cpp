@@ -7020,6 +7020,55 @@ bool RunActivePipDeviceUiCompatibilityWrapperSmoke() {
             "active_pip_device_ui_wrapper_no_device expected matching safe rejection");
 }
 
+bool RunActivePipDeviceAccessCompatibilityWrapperSmoke() {
+    bunker::SessionProfile freshProfile = bunker::MakeDefaultSessionProfile();
+    if (!Check(!bunker::PlayerHasActivePipDeviceAccess(freshProfile) &&
+            !bunker::PlayerHasPipPadAccess(freshProfile),
+            "active_pip_device_access_wrapper_fresh_profile expected no active device access")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipPadProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipPadProfile, "#%it_pippad");
+    if (!Check(bunker::PlayerHasActivePipDeviceAccess(pipPadProfile) &&
+            bunker::PlayerHasPipPadAccess(pipPadProfile),
+            "active_pip_device_access_wrapper_pippad expected active Pip-Pad access")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy10Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy10Profile, "#%it_pipboy_1_0");
+    if (!Check(bunker::PlayerHasActivePipDeviceAccess(pipBoy10Profile) &&
+            bunker::PlayerHasPipPadAccess(pipBoy10Profile),
+            "active_pip_device_access_wrapper_pipboy_1_0 expected legacy wrapper to include Pip-Boy 1.0")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy3000Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy3000Profile, "#%it_pipboy_3000");
+    if (!Check(bunker::PlayerHasActivePipDeviceAccess(pipBoy3000Profile) &&
+            bunker::PlayerHasPipPadAccess(pipBoy3000Profile),
+            "active_pip_device_access_wrapper_pipboy_3000 expected legacy wrapper to include Pip-Boy 3000")) {
+        return false;
+    }
+
+    pipBoy3000Profile.story.exitedBunker = true;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(pipBoy3000Profile) &&
+            bunker::PlayerHasActivePipDeviceAccess(pipBoy3000Profile) &&
+            bunker::PlayerHasPipPadAccess(pipBoy3000Profile),
+            "active_pip_device_access_wrapper_retired_station expected station retirement not to block active device access")) {
+        return false;
+    }
+
+    bunker::SessionProfile invalidProfile = bunker::MakeDefaultSessionProfile();
+    invalidProfile.activePipDeviceId = "#%it_consumer_tablet";
+    bunker::NormalizeSessionProfile(invalidProfile);
+    return Check(invalidProfile.activePipDeviceId.empty() &&
+            !bunker::PlayerHasActivePipDeviceAccess(invalidProfile) &&
+            !bunker::PlayerHasPipPadAccess(invalidProfile),
+            "active_pip_device_access_wrapper_invalid_id expected normalized invalid device to deny access");
+}
+
 bool RunActivePipDeviceCustomizationStateSmoke() {
     bunker::SessionProfile defaultProfile = bunker::MakeDefaultSessionProfile();
     bunker::NormalizeSessionProfile(defaultProfile);
@@ -8401,6 +8450,7 @@ int main() {
         RunPipDeviceSelectionStationRetiresAfterBunkerExitSmoke() &&
         RunActivePipDeviceUsableAfterStationRetirementSmoke() &&
         RunActivePipDeviceUiCompatibilityWrapperSmoke() &&
+        RunActivePipDeviceAccessCompatibilityWrapperSmoke() &&
         RunActivePipDeviceCustomizationStateSmoke() &&
         RunActivePipDeviceCustomizationCommandSmoke() &&
         RunActivePipDeviceCustomizationCapabilityRulesSmoke() &&

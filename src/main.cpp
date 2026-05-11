@@ -412,7 +412,7 @@ int main() {
     bunker::PlayerState player;
     player.x = world.metadata.playerSpawnX;
     player.y = world.metadata.playerSpawnY;
-    player.uiVisible = bunker::PlayerHasPipPadAccess(sessionProfile) && player.uiVisible;
+    player.uiVisible = bunker::PlayerHasActivePipDeviceAccess(sessionProfile) && player.uiVisible;
     if (bunker::HasActiveFieldCheckpoint(sessionProfile)) {
         player.x = sessionProfile.fieldCheckpointX;
         player.y = sessionProfile.fieldCheckpointY;

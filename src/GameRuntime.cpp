@@ -3581,8 +3581,12 @@ bool CanUsePipPadMediaIndex(const SessionProfile& profile) {
         ActivePipDeviceSupportsMediaIndex(profile);
 }
 
-bool PlayerHasPipPadAccess(const SessionProfile& profile) {
+bool PlayerHasActivePipDeviceAccess(const SessionProfile& profile) {
     return HasPipPad(profile);
+}
+
+bool PlayerHasPipPadAccess(const SessionProfile& profile) {
+    return PlayerHasActivePipDeviceAccess(profile);
 }
 
 std::string ActivePipDeviceUiCapabilitySummary(const SessionProfile& profile) {
@@ -7051,7 +7055,7 @@ void DrawPipPad(const World& world,
     GameState& gameState) {
     static int activeTab = 0;
 
-    if (!PlayerHasPipPadAccess(profile)) {
+    if (!PlayerHasActivePipDeviceAccess(profile)) {
         player.uiVisible = false;
         return;
     }
