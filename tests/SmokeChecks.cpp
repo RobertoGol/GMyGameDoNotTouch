@@ -6851,6 +6851,184 @@ bool RunPipDeviceSelectionHelperContractSmoke() {
     return ok;
 }
 
+bool RunPipDeviceItemRegistryAndStationOptionsSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    const auto options = bunker::BuildPipDeviceSelectionOptions(profile);
+    auto findOption = [&](const std::string& itemId) -> const bunker::PipDeviceSelectionOption* {
+        const auto found = std::find_if(options.begin(), options.end(), [&](const auto& option) {
+            return option.itemId == itemId;
+        });
+        return found == options.end() ? nullptr : &(*found);
+    };
+    auto mapsTo = [](std::string_view itemId, bunker::PipDeviceModel expectedModel) {
+        bunker::PipDeviceModel model = bunker::PipDeviceModel::PipPad3500;
+        return bunker::TryGetPipDeviceModelForId(itemId, model) && model == expectedModel;
+    };
+
+    if (!Check(options.size() == 6 &&
+            findOption("#%it_pipboy_0_1") != nullptr &&
+            findOption("#%it_pipboy_1_0") != nullptr &&
+            findOption("#%it_pipboy_2000_classic") != nullptr &&
+            findOption("#%it_pipboy_2000_mark_vi") != nullptr &&
+            findOption("#%it_pipboy_3000") != nullptr &&
+            findOption("#%it_pippad") != nullptr &&
+            std::none_of(options.begin(), options.end(), [](const auto& option) {
+                return option.model == bunker::PipDeviceModel::PipBoy3000MarkV;
+            }),
+            "pip_device_registry_options_include_all_selectable_models expected six selectable station options without prop-only Mark V")) {
+        return false;
+    }
+
+    if (!Check(bunker::IsKnownPipDeviceId("#%it_pipboy_0_1") &&
+            bunker::IsKnownPipDeviceId("#%it_pipboy_1_0") &&
+            bunker::IsKnownPipDeviceId("#%it_pipboy_2000_classic") &&
+            bunker::IsKnownPipDeviceId("#%it_pipboy_2000_mark_vi") &&
+            bunker::IsKnownPipDeviceId("#%it_pipboy_3000") &&
+            bunker::IsKnownPipDeviceId("#%it_pippad") &&
+            !bunker::IsKnownPipDeviceId("#%it_pipboy_3000_mark_v") &&
+            !bunker::IsKnownPipDeviceId("#%it_consumer_tablet"),
+            "pip_device_registry_known_ids expected only canonical selectable device ids")) {
+        return false;
+    }
+
+    if (!Check(mapsTo("#%it_pipboy_0_1", bunker::PipDeviceModel::PipBoy01) &&
+            mapsTo("#%it_pipboy_1_0", bunker::PipDeviceModel::PipBoy10) &&
+            mapsTo("#%it_pipboy_2000_classic", bunker::PipDeviceModel::PipBoy2000Classic) &&
+            mapsTo("#%it_pipboy_2000_mark_vi", bunker::PipDeviceModel::PipBoy2000MarkVI) &&
+            mapsTo("#%it_pipboy_3000", bunker::PipDeviceModel::PipBoy3000MarkIV) &&
+            mapsTo("#%it_pippad", bunker::PipDeviceModel::PipPad3500),
+            "pip_device_registry_model_mapping expected every canonical id to map to its model")) {
+        return false;
+    }
+
+    if (!Check(bunker::SelectPipDevice(profile, "#%it_pipboy_2000_classic") &&
+            profile.activePipDeviceId == "#%it_pipboy_2000_classic" &&
+            CountInventoryItem(profile, "#%it_pipboy_2000_classic") == 1 &&
+            bunker::ActivePipDeviceDisplayName(profile) == "Pip-Boy 2000 Classic",
+            "pip_device_registry_selects_pipboy_2000_classic expected registry-backed selection")) {
+        return false;
+    }
+    if (!Check(bunker::SelectPipDevice(profile, "#%it_pipboy_2000_mark_vi") &&
+            profile.activePipDeviceId == "#%it_pipboy_2000_mark_vi" &&
+            CountInventoryItem(profile, "#%it_pipboy_2000_mark_vi") == 1 &&
+            bunker::ActivePipDeviceDisplayName(profile).find("Mark VI") != std::string::npos,
+            "pip_device_registry_selects_pipboy_2000_mark_vi expected registry-backed selection")) {
+        return false;
+    }
+
+    bunker::SessionProfile capabilitiesProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(capabilitiesProfile, "#%it_pipboy_0_1");
+    if (!Check(bunker::ActivePipDeviceUsesPhysicalNavigation(capabilitiesProfile) &&
+            !bunker::ActivePipDeviceHasDigitalMap(capabilitiesProfile) &&
+            !bunker::ActivePipDeviceSupportsMediaIndex(capabilitiesProfile),
+            "pip_device_registry_capabilities_pipboy_0_1 expected physical navigation only")) {
+        return false;
+    }
+    bunker::SelectPipDevice(capabilitiesProfile, "#%it_pipboy_1_0");
+    if (!Check(bunker::ActivePipDeviceUsesPhysicalNavigation(capabilitiesProfile) &&
+            !bunker::ActivePipDeviceHasDigitalMap(capabilitiesProfile) &&
+            !bunker::ActivePipDeviceSupportsMediaIndex(capabilitiesProfile),
+            "pip_device_registry_capabilities_pipboy_1_0 expected physical navigation only")) {
+        return false;
+    }
+    bunker::SelectPipDevice(capabilitiesProfile, "#%it_pipboy_2000_classic");
+    if (!Check(bunker::ActivePipDeviceHasDigitalMap(capabilitiesProfile) &&
+            !bunker::ActivePipDeviceSupportsFullWorkspace(capabilitiesProfile),
+            "pip_device_registry_capabilities_pipboy_2000_classic expected digital map without full workspace")) {
+        return false;
+    }
+    bunker::SelectPipDevice(capabilitiesProfile, "#%it_pipboy_2000_mark_vi");
+    if (!Check(bunker::ActivePipDeviceUsesPhysicalNavigation(capabilitiesProfile) &&
+            bunker::ActivePipDeviceSupportsMediaIndex(capabilitiesProfile),
+            "pip_device_registry_capabilities_pipboy_2000_mark_vi expected physical navigation and media support")) {
+        return false;
+    }
+    bunker::SelectPipDevice(capabilitiesProfile, "#%it_pipboy_3000");
+    if (!Check(bunker::ActivePipDeviceHasDigitalMap(capabilitiesProfile) &&
+            bunker::ActivePipDeviceSupportsMediaIndex(capabilitiesProfile) &&
+            !bunker::ActivePipDeviceSupportsFullWorkspace(capabilitiesProfile),
+            "pip_device_registry_capabilities_pipboy_3000 expected digital map and media without full workspace")) {
+        return false;
+    }
+    bunker::SelectPipDevice(capabilitiesProfile, "#%it_pippad");
+    if (!Check(bunker::ActivePipDeviceHasDigitalMap(capabilitiesProfile) &&
+            bunker::ActivePipDeviceSupportsMediaIndex(capabilitiesProfile) &&
+            bunker::ActivePipDeviceSupportsFullWorkspace(capabilitiesProfile),
+            "pip_device_registry_capabilities_pippad expected full workspace device")) {
+        return false;
+    }
+
+    bunker::SessionProfile reselectProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(reselectProfile, "#%it_pippad");
+    if (!Check(!bunker::CompletePipDeviceReselect(reselectProfile, "#%it_pipboy_2000_mark_vi") &&
+            reselectProfile.activePipDeviceId == "#%it_pippad",
+            "pip_device_reselect_requires_pending expected active device switch to require reselect flow")) {
+        return false;
+    }
+    if (!Check(bunker::BeginPipDeviceReselect(reselectProfile) &&
+            bunker::CompletePipDeviceReselect(reselectProfile, "#%it_pipboy_2000_mark_vi") &&
+            reselectProfile.activePipDeviceId == "#%it_pipboy_2000_mark_vi" &&
+            !reselectProfile.pipDeviceReselectPending &&
+            CountInventoryItem(reselectProfile, "#%it_pipboy_2000_mark_vi") == 1,
+            "pip_device_reselect_completes_to_mark_vi expected pending reselect to switch active device")) {
+        return false;
+    }
+    bunker::BeginPipDeviceReselect(reselectProfile);
+    const std::string activeBeforeInvalid = reselectProfile.activePipDeviceId;
+    const int markViCountBeforeInvalid = CountInventoryItem(reselectProfile, "#%it_pipboy_2000_mark_vi");
+    if (!Check(!bunker::CompletePipDeviceReselect(reselectProfile, "#%it_pipboy_3000_mark_v") &&
+            reselectProfile.activePipDeviceId == activeBeforeInvalid &&
+            reselectProfile.pipDeviceReselectPending &&
+            CountInventoryItem(reselectProfile, "#%it_pipboy_2000_mark_vi") == markViCountBeforeInvalid,
+            "pip_device_reselect_rejects_invalid expected invalid reselect to preserve active device and inventory")) {
+        return false;
+    }
+    if (!Check(bunker::CompletePipDeviceReselect(reselectProfile, "#%it_pipboy_2000_mark_vi") &&
+            CountInventoryItem(reselectProfile, "#%it_pipboy_2000_mark_vi") == markViCountBeforeInvalid,
+            "pip_device_reselect_same_device_no_duplicate expected same-device reselect not to duplicate inventory")) {
+        return false;
+    }
+
+    bunker::SessionProfile classicProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(classicProfile, "#%it_pipboy_2000_classic");
+    bunker::SessionProfile markViProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(markViProfile, "#%it_pipboy_2000_mark_vi");
+
+    const fs::path tempRoot = fs::current_path() / "pip_device_item_registry_station_options_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "pip_device_registry_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path classicPath = tempRoot / "classic_profile.txt";
+    const fs::path markViPath = tempRoot / "mark_vi_profile.txt";
+    auto classicSaveStatus = bunker::SaveProfileAtomically(classicProfile, classicPath);
+    auto markViSaveStatus = bunker::SaveProfileAtomically(markViProfile, markViPath);
+    if (!Check(classicSaveStatus.ok && markViSaveStatus.ok,
+            "pip_device_registry_save_load failed to save registry profiles")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedClassicProfile;
+    bunker::SessionProfile loadedMarkViProfile;
+    if (!Check(bunker::LoadSessionProfile(classicPath, loadedClassicProfile) &&
+            bunker::LoadSessionProfile(markViPath, loadedMarkViProfile),
+            "pip_device_registry_save_load failed to load registry profiles")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(loadedClassicProfile.activePipDeviceId == "#%it_pipboy_2000_classic" &&
+            bunker::ActivePipDeviceDisplayName(loadedClassicProfile) == "Pip-Boy 2000 Classic" &&
+            loadedMarkViProfile.activePipDeviceId == "#%it_pipboy_2000_mark_vi" &&
+            bunker::ActivePipDeviceSupportsMediaIndex(loadedMarkViProfile),
+            "pip_device_registry_save_load_preserves_2000_models expected profile normalization to keep Pip-Boy 2000 choices");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunActivePipDeviceCapabilityRulesSmoke() {
     bunker::SessionProfile defaultProfile = bunker::MakeDefaultSessionProfile();
     bunker::SelectPipDevice(defaultProfile, "#%it_pippad");
@@ -7504,6 +7682,7 @@ int main() {
         RunPipDeviceSelectionStationRoundtripSmoke() &&
         RunPipDeviceReselectFlowSmoke() &&
         RunPipDeviceSelectionHelperContractSmoke() &&
+        RunPipDeviceItemRegistryAndStationOptionsSmoke() &&
         RunActivePipDeviceCapabilityRulesSmoke() &&
         RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() &&
         RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() &&

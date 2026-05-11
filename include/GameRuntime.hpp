@@ -151,6 +151,18 @@ struct PipDeviceCapabilities {
     bool userPreferredComfortShell = false;
 };
 
+struct PipDeviceSelectionOption {
+    std::string itemId;
+    PipDeviceModel model = PipDeviceModel::PipPad3500;
+    std::string displayName;
+    bool currentlyActive = false;
+    bool supportsMediaIndex = false;
+    bool supportsFullWorkspace = false;
+    bool hasDigitalMap = false;
+    bool usesPhysicalNavigation = false;
+    bool userPreferredComfortShell = false;
+};
+
 PipDeviceCapabilities GetPipDeviceCapabilities(PipDeviceModel model);
 const char* DeviceDisplayName(PipDeviceModel model);
 bool IsKnownPipDeviceId(std::string_view deviceId);
@@ -165,6 +177,8 @@ bool HasActivePipDevice(const SessionProfile& profile);
 bool SelectPipDevice(SessionProfile& profile, std::string_view deviceId);
 bool BeginPipDeviceReselect(SessionProfile& profile);
 std::string ActivePipDeviceDisplayName(const SessionProfile& profile);
+std::vector<PipDeviceSelectionOption> BuildPipDeviceSelectionOptions(const SessionProfile& profile);
+bool CompletePipDeviceReselect(SessionProfile& profile, std::string_view deviceId);
 bool IsSelectablePipDevice(PipDeviceModel model);
 bool IsPropOnlyPipDevice(PipDeviceModel model);
 bool HasDigitalMap(PipDeviceModel model);

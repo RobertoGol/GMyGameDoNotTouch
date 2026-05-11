@@ -17,9 +17,12 @@ bool HasInventoryEntry(const SessionProfile& profile, const std::string& itemId)
 }
 
 bool IsKnownPipDeviceId(const std::string& itemId) {
-    return itemId == "#%it_pippad" ||
+    return itemId == "#%it_pipboy_0_1" ||
         itemId == "#%it_pipboy_1_0" ||
-        itemId == "#%it_pipboy_3000";
+        itemId == "#%it_pipboy_2000_classic" ||
+        itemId == "#%it_pipboy_2000_mark_vi" ||
+        itemId == "#%it_pipboy_3000" ||
+        itemId == "#%it_pippad";
 }
 
 std::string FirstInventoryPipDeviceId(const SessionProfile& profile) {

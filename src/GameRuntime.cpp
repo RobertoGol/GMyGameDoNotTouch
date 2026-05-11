@@ -3122,26 +3122,49 @@ const char* DeviceDisplayName(PipDeviceModel model) {
     return GetPipDeviceCapabilities(model).displayName;
 }
 
+namespace {
+
+struct PipDeviceItemSpec {
+    std::string_view itemId;
+    PipDeviceModel model;
+    float inventoryWeight;
+};
+
+constexpr std::array<PipDeviceItemSpec, 6> kPipDeviceItemSpecs{{
+    {"#%it_pipboy_0_1", PipDeviceModel::PipBoy01, 1.0f},
+    {"#%it_pipboy_1_0", PipDeviceModel::PipBoy10, 1.0f},
+    {"#%it_pipboy_2000_classic", PipDeviceModel::PipBoy2000Classic, 1.2f},
+    {"#%it_pipboy_2000_mark_vi", PipDeviceModel::PipBoy2000MarkVI, 1.25f},
+    {"#%it_pipboy_3000", PipDeviceModel::PipBoy3000MarkIV, 1.1f},
+    {"#%it_pippad", PipDeviceModel::PipPad3500, 0.8f},
+}};
+
+const PipDeviceItemSpec* FindPipDeviceItemSpec(std::string_view deviceId) {
+    const auto found = std::find_if(kPipDeviceItemSpecs.begin(), kPipDeviceItemSpecs.end(), [&](const auto& spec) {
+        return spec.itemId == deviceId;
+    });
+    return found == kPipDeviceItemSpecs.end() ? nullptr : &(*found);
+}
+
+bool IsSelectablePipDeviceSpec(const PipDeviceItemSpec& spec) {
+    const auto capabilities = GetPipDeviceCapabilities(spec.model);
+    return capabilities.selectable && !capabilities.propOnly;
+}
+
+}  // namespace
+
 bool IsKnownPipDeviceId(std::string_view deviceId) {
-    return deviceId == "#%it_pippad" ||
-        deviceId == "#%it_pipboy_1_0" ||
-        deviceId == "#%it_pipboy_3000";
+    const auto* spec = FindPipDeviceItemSpec(deviceId);
+    return spec != nullptr && IsSelectablePipDeviceSpec(*spec);
 }
 
 bool TryGetPipDeviceModelForId(std::string_view deviceId, PipDeviceModel& outModel) {
-    if (deviceId == "#%it_pippad") {
-        outModel = PipDeviceModel::PipPad3500;
-        return true;
+    const auto* spec = FindPipDeviceItemSpec(deviceId);
+    if (spec == nullptr || !IsSelectablePipDeviceSpec(*spec)) {
+        return false;
     }
-    if (deviceId == "#%it_pipboy_1_0") {
-        outModel = PipDeviceModel::PipBoy10;
-        return true;
-    }
-    if (deviceId == "#%it_pipboy_3000") {
-        outModel = PipDeviceModel::PipBoy3000MarkIV;
-        return true;
-    }
-    return false;
+    outModel = spec->model;
+    return true;
 }
 
 PipDeviceCapabilities ActivePipDeviceCapabilities(const SessionProfile& profile) {
@@ -3172,35 +3195,33 @@ std::string ActivePipDeviceIdOrDefault(const SessionProfile& profile) {
     if (IsKnownPipDeviceId(profile.activePipDeviceId)) {
         return profile.activePipDeviceId;
     }
-    if (HasInventoryItem(profile, "#%it_pippad")) {
-        return "#%it_pippad";
-    }
-    if (HasInventoryItem(profile, "#%it_pipboy_1_0")) {
-        return "#%it_pipboy_1_0";
-    }
-    if (HasInventoryItem(profile, "#%it_pipboy_3000")) {
-        return "#%it_pipboy_3000";
+    for (const auto& spec : kPipDeviceItemSpecs) {
+        if (IsSelectablePipDeviceSpec(spec) && HasInventoryItem(profile, std::string(spec.itemId))) {
+            return std::string(spec.itemId);
+        }
     }
     return "#%it_pippad";
 }
 
 bool HasActivePipDevice(const SessionProfile& profile) {
-    return IsKnownPipDeviceId(profile.activePipDeviceId) ||
-        profile.story.pipPadRecovered ||
-        HasInventoryItem(profile, "#%it_pippad") ||
-        HasInventoryItem(profile, "#%it_pipboy_1_0") ||
-        HasInventoryItem(profile, "#%it_pipboy_3000");
+    if (IsKnownPipDeviceId(profile.activePipDeviceId) || profile.story.pipPadRecovered) {
+        return true;
+    }
+    return std::any_of(kPipDeviceItemSpecs.begin(), kPipDeviceItemSpecs.end(), [&](const auto& spec) {
+        return IsSelectablePipDeviceSpec(spec) && HasInventoryItem(profile, std::string(spec.itemId));
+    });
 }
 
 bool SelectPipDevice(SessionProfile& profile, std::string_view deviceId) {
-    if (!IsKnownPipDeviceId(deviceId)) {
+    const auto* spec = FindPipDeviceItemSpec(deviceId);
+    if (spec == nullptr || !IsSelectablePipDeviceSpec(*spec)) {
         return false;
     }
-    const std::string selectedDeviceId(deviceId);
+    const std::string selectedDeviceId(spec->itemId);
     const bool changed = profile.activePipDeviceId != selectedDeviceId || !profile.story.pipPadRecovered;
     profile.activePipDeviceId = selectedDeviceId;
     if (!HasInventoryItem(profile, selectedDeviceId)) {
-        AddInventoryItem(profile, selectedDeviceId, 1, selectedDeviceId == "#%it_pippad" ? 0.8f : 1.0f);
+        AddInventoryItem(profile, selectedDeviceId, 1, spec->inventoryWeight);
     }
     profile.story.pipPadRecovered = true;
     profile.pipDeviceReselectPending = false;
@@ -3216,14 +3237,45 @@ bool BeginPipDeviceReselect(SessionProfile& profile) {
 }
 
 std::string ActivePipDeviceDisplayName(const SessionProfile& profile) {
-    const std::string deviceId = ActivePipDeviceIdOrDefault(profile);
-    if (deviceId == "#%it_pipboy_1_0") {
-        return "Pip-Boy 1.0";
-    }
-    if (deviceId == "#%it_pipboy_3000") {
-        return "Pip-Boy 3000 / Mark IV";
+    PipDeviceModel model = PipDeviceModel::PipPad3500;
+    if (TryGetPipDeviceModelForId(ActivePipDeviceIdOrDefault(profile), model)) {
+        return DeviceDisplayName(model);
     }
     return "Pip-Pad 3500";
+}
+
+std::vector<PipDeviceSelectionOption> BuildPipDeviceSelectionOptions(const SessionProfile& profile) {
+    std::vector<PipDeviceSelectionOption> options;
+    options.reserve(kPipDeviceItemSpecs.size());
+    for (const auto& spec : kPipDeviceItemSpecs) {
+        if (!IsSelectablePipDeviceSpec(spec)) {
+            continue;
+        }
+        const auto capabilities = GetPipDeviceCapabilities(spec.model);
+        options.push_back({
+            std::string(spec.itemId),
+            spec.model,
+            capabilities.displayName,
+            std::string_view(profile.activePipDeviceId) == spec.itemId,
+            capabilities.supportsMediaIndex,
+            capabilities.supportsFullPipPadWorkspace,
+            capabilities.hasDigitalMap,
+            capabilities.physicalNavigationOnly,
+            capabilities.userPreferredComfortShell});
+    }
+    return options;
+}
+
+bool CompletePipDeviceReselect(SessionProfile& profile, std::string_view deviceId) {
+    const auto* spec = FindPipDeviceItemSpec(deviceId);
+    if (spec == nullptr || !IsSelectablePipDeviceSpec(*spec)) {
+        return false;
+    }
+    if (HasActivePipDevice(profile) && !profile.pipDeviceReselectPending) {
+        return false;
+    }
+    SelectPipDevice(profile, spec->itemId);
+    return true;
 }
 
 bool IsSelectablePipDevice(PipDeviceModel model) {
