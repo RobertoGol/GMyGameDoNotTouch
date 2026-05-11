@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <initializer_list>
 #include <string_view>
 
 #include "GameRuntimePipPad.hpp"
@@ -3329,6 +3330,76 @@ bool SetActivePipDeviceCustomization(SessionProfile& profile,
     profile.pipDeviceDisplayMode = normalizedProfile.pipDeviceDisplayMode;
     profile.pipDeviceCarryMode = normalizedProfile.pipDeviceCarryMode;
     return true;
+}
+
+std::string_view NextPipCustomizationValue(std::string_view current, std::initializer_list<std::string_view> values) {
+    auto it = std::find(values.begin(), values.end(), current);
+    if (it == values.end()) {
+        return *values.begin();
+    }
+    ++it;
+    return it == values.end() ? *values.begin() : *it;
+}
+
+std::string PipCustomizationSlotLabel(PipDeviceCustomizationSlot slot) {
+    switch (slot) {
+        case PipDeviceCustomizationSlot::Theme: return "theme";
+        case PipDeviceCustomizationSlot::DisplayMode: return "display mode";
+        case PipDeviceCustomizationSlot::CarryMode: return "carry mode";
+    }
+    return "customization";
+}
+
+bool CycleActivePipDeviceCustomization(SessionProfile& profile,
+    PipDeviceCustomizationSlot slot,
+    GameState* gameState) {
+    std::string nextTheme = profile.pipDeviceThemeId;
+    std::string nextDisplayMode = profile.pipDeviceDisplayMode;
+    std::string nextCarryMode = profile.pipDeviceCarryMode;
+    switch (slot) {
+        case PipDeviceCustomizationSlot::Theme:
+            nextTheme = std::string(NextPipCustomizationValue(
+                profile.pipDeviceThemeId,
+                {"classic_green", "amber", "monochrome", "high_contrast"}));
+            break;
+        case PipDeviceCustomizationSlot::DisplayMode:
+            nextDisplayMode = std::string(NextPipCustomizationValue(
+                profile.pipDeviceDisplayMode,
+                {"standard", "readable", "compact"}));
+            break;
+        case PipDeviceCustomizationSlot::CarryMode:
+            nextCarryMode = std::string(NextPipCustomizationValue(
+                profile.pipDeviceCarryMode,
+                {"auto", "wrist", "handheld"}));
+            break;
+    }
+    if (!SetActivePipDeviceCustomization(profile, nextTheme, nextDisplayMode, nextCarryMode)) {
+        return false;
+    }
+    if (gameState != nullptr) {
+        gameState->lastEvent = "Pip device " + PipCustomizationSlotLabel(slot) + " set. " +
+            ActivePipDeviceCustomizationSummary(profile);
+    }
+    return true;
+}
+
+bool ApplyActivePipDeviceCustomizationCommand(SessionProfile& profile,
+    std::string_view command,
+    GameState* gameState) {
+    if (command == "theme_next") {
+        return CycleActivePipDeviceCustomization(profile, PipDeviceCustomizationSlot::Theme, gameState);
+    }
+    if (command == "display_next") {
+        return CycleActivePipDeviceCustomization(profile, PipDeviceCustomizationSlot::DisplayMode, gameState);
+    }
+    if (command == "carry_next") {
+        return CycleActivePipDeviceCustomization(profile, PipDeviceCustomizationSlot::CarryMode, gameState);
+    }
+    if (gameState != nullptr) {
+        gameState->lastEvent = "Pip device customization command not recognized. " +
+            ActivePipDeviceCustomizationSummary(profile);
+    }
+    return false;
 }
 
 bool IsSelectablePipDevice(PipDeviceModel model) {

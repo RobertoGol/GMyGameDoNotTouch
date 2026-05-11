@@ -163,6 +163,12 @@ struct PipDeviceSelectionOption {
     bool userPreferredComfortShell = false;
 };
 
+enum class PipDeviceCustomizationSlot {
+    Theme,
+    DisplayMode,
+    CarryMode
+};
+
 PipDeviceCapabilities GetPipDeviceCapabilities(PipDeviceModel model);
 const char* DeviceDisplayName(PipDeviceModel model);
 bool IsKnownPipDeviceId(std::string_view deviceId);
@@ -185,6 +191,12 @@ bool SetActivePipDeviceCustomization(SessionProfile& profile,
     std::string_view themeId,
     std::string_view displayMode,
     std::string_view carryMode);
+bool CycleActivePipDeviceCustomization(SessionProfile& profile,
+    PipDeviceCustomizationSlot slot,
+    GameState* gameState = nullptr);
+bool ApplyActivePipDeviceCustomizationCommand(SessionProfile& profile,
+    std::string_view command,
+    GameState* gameState = nullptr);
 bool IsSelectablePipDevice(PipDeviceModel model);
 bool IsPropOnlyPipDevice(PipDeviceModel model);
 bool HasDigitalMap(PipDeviceModel model);

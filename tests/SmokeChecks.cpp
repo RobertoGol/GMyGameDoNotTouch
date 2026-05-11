@@ -7121,6 +7121,124 @@ bool RunActivePipDeviceCustomizationStateSmoke() {
     return true;
 }
 
+bool RunActivePipDeviceCustomizationCommandSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::NormalizeSessionProfile(profile);
+    bunker::GameState gameState;
+
+    if (!Check(profile.pipDeviceThemeId == "classic_green" &&
+            profile.pipDeviceDisplayMode == "standard" &&
+            profile.pipDeviceCarryMode == "auto",
+            "active_pip_device_customization_commands expected fresh normalized defaults")) {
+        return false;
+    }
+
+    if (!Check(bunker::CycleActivePipDeviceCustomization(profile, bunker::PipDeviceCustomizationSlot::Theme, &gameState) &&
+            profile.pipDeviceThemeId == "amber" &&
+            gameState.lastEvent.find("amber theme") != std::string::npos &&
+            bunker::CycleActivePipDeviceCustomization(profile, bunker::PipDeviceCustomizationSlot::Theme) &&
+            profile.pipDeviceThemeId == "monochrome" &&
+            bunker::CycleActivePipDeviceCustomization(profile, bunker::PipDeviceCustomizationSlot::Theme) &&
+            profile.pipDeviceThemeId == "high_contrast" &&
+            bunker::CycleActivePipDeviceCustomization(profile, bunker::PipDeviceCustomizationSlot::Theme) &&
+            profile.pipDeviceThemeId == "classic_green",
+            "active_pip_device_customization_commands_cycle_theme expected full theme cycle")) {
+        return false;
+    }
+
+    if (!Check(bunker::ApplyActivePipDeviceCustomizationCommand(profile, "display_next", &gameState) &&
+            profile.pipDeviceDisplayMode == "readable" &&
+            gameState.lastEvent.find("readable display") != std::string::npos &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(profile, "display_next") &&
+            profile.pipDeviceDisplayMode == "compact" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(profile, "display_next") &&
+            profile.pipDeviceDisplayMode == "standard",
+            "active_pip_device_customization_commands_cycle_display expected full display cycle")) {
+        return false;
+    }
+
+    if (!Check(bunker::ApplyActivePipDeviceCustomizationCommand(profile, "carry_next", &gameState) &&
+            profile.pipDeviceCarryMode == "wrist" &&
+            gameState.lastEvent.find("wrist mode") != std::string::npos &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(profile, "carry_next") &&
+            profile.pipDeviceCarryMode == "handheld" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(profile, "carry_next") &&
+            profile.pipDeviceCarryMode == "auto",
+            "active_pip_device_customization_commands_cycle_carry expected full carry cycle")) {
+        return false;
+    }
+
+    const std::string themeBeforeInvalid = profile.pipDeviceThemeId;
+    const std::string displayBeforeInvalid = profile.pipDeviceDisplayMode;
+    const std::string carryBeforeInvalid = profile.pipDeviceCarryMode;
+    if (!Check(!bunker::ApplyActivePipDeviceCustomizationCommand(profile, "rgb_party", &gameState) &&
+            profile.pipDeviceThemeId == themeBeforeInvalid &&
+            profile.pipDeviceDisplayMode == displayBeforeInvalid &&
+            profile.pipDeviceCarryMode == carryBeforeInvalid,
+            "active_pip_device_customization_commands_reject_unknown expected unknown command not to mutate profile")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::SelectPipDevice(profile, "#%it_pippad");
+    profile.story.exitedBunker = true;
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.pipDeviceThemeId == themeBeforeInvalid &&
+            profile.pipDeviceDisplayMode == displayBeforeInvalid &&
+            profile.pipDeviceCarryMode == carryBeforeInvalid &&
+            gameState.lastEvent.find("display-only") != std::string::npos,
+            "active_pip_device_customization_commands_retired_station_no_mutation expected retired station not to change customization")) {
+        return false;
+    }
+
+    if (!Check(bunker::ApplyActivePipDeviceCustomizationCommand(profile, "theme_next", &gameState) &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(profile, "display_next", &gameState) &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(profile, "carry_next", &gameState) &&
+            profile.pipDeviceThemeId == "amber" &&
+            profile.pipDeviceDisplayMode == "readable" &&
+            profile.pipDeviceCarryMode == "wrist",
+            "active_pip_device_customization_commands_after_retirement expected active device commands after station retirement")) {
+        return false;
+    }
+    if (!Check(bunker::TryToggleActivePipDeviceUi(player, profile, gameState) &&
+            gameState.lastEvent.find("Active config: amber theme, readable display, wrist mode.") != std::string::npos,
+            "active_pip_device_customization_commands_ui_summary expected cycled config in active device UI")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "active_pip_device_customization_command_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "active_pip_device_customization_commands_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "active_pip_device_customization_commands_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "active_pip_device_customization_commands_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(loadedProfile.pipDeviceThemeId == "amber" &&
+            loadedProfile.pipDeviceDisplayMode == "readable" &&
+            loadedProfile.pipDeviceCarryMode == "wrist",
+            "active_pip_device_customization_commands_save_load expected cycled config to persist");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunPipDeviceSelectionHelperContractSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     if (!Check(!bunker::HasActivePipDevice(profile) &&
@@ -8114,6 +8232,7 @@ int main() {
         RunActivePipDeviceUsableAfterStationRetirementSmoke() &&
         RunActivePipDeviceUiCompatibilityWrapperSmoke() &&
         RunActivePipDeviceCustomizationStateSmoke() &&
+        RunActivePipDeviceCustomizationCommandSmoke() &&
         RunPipDeviceSelectionHelperContractSmoke() &&
         RunPipDeviceItemRegistryAndStationOptionsSmoke() &&
         RunPipDeviceProfileNormalizationRegistrySmoke() &&
