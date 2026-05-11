@@ -3122,6 +3122,70 @@ const char* DeviceDisplayName(PipDeviceModel model) {
     return GetPipDeviceCapabilities(model).displayName;
 }
 
+bool IsKnownPipDeviceId(std::string_view deviceId) {
+    return deviceId == "#%it_pippad" ||
+        deviceId == "#%it_pipboy_1_0" ||
+        deviceId == "#%it_pipboy_3000";
+}
+
+std::string ActivePipDeviceIdOrDefault(const SessionProfile& profile) {
+    if (IsKnownPipDeviceId(profile.activePipDeviceId)) {
+        return profile.activePipDeviceId;
+    }
+    if (HasInventoryItem(profile, "#%it_pippad")) {
+        return "#%it_pippad";
+    }
+    if (HasInventoryItem(profile, "#%it_pipboy_1_0")) {
+        return "#%it_pipboy_1_0";
+    }
+    if (HasInventoryItem(profile, "#%it_pipboy_3000")) {
+        return "#%it_pipboy_3000";
+    }
+    return "#%it_pippad";
+}
+
+bool HasActivePipDevice(const SessionProfile& profile) {
+    return IsKnownPipDeviceId(profile.activePipDeviceId) ||
+        profile.story.pipPadRecovered ||
+        HasInventoryItem(profile, "#%it_pippad") ||
+        HasInventoryItem(profile, "#%it_pipboy_1_0") ||
+        HasInventoryItem(profile, "#%it_pipboy_3000");
+}
+
+bool SelectPipDevice(SessionProfile& profile, std::string_view deviceId) {
+    if (!IsKnownPipDeviceId(deviceId)) {
+        return false;
+    }
+    const std::string selectedDeviceId(deviceId);
+    const bool changed = profile.activePipDeviceId != selectedDeviceId || !profile.story.pipPadRecovered;
+    profile.activePipDeviceId = selectedDeviceId;
+    if (!HasInventoryItem(profile, selectedDeviceId)) {
+        AddInventoryItem(profile, selectedDeviceId, 1, selectedDeviceId == "#%it_pippad" ? 0.8f : 1.0f);
+    }
+    profile.story.pipPadRecovered = true;
+    profile.pipDeviceReselectPending = false;
+    return changed;
+}
+
+bool BeginPipDeviceReselect(SessionProfile& profile) {
+    if (!HasActivePipDevice(profile)) {
+        return false;
+    }
+    profile.pipDeviceReselectPending = true;
+    return true;
+}
+
+std::string ActivePipDeviceDisplayName(const SessionProfile& profile) {
+    const std::string deviceId = ActivePipDeviceIdOrDefault(profile);
+    if (deviceId == "#%it_pipboy_1_0") {
+        return "Pip-Boy 1.0";
+    }
+    if (deviceId == "#%it_pipboy_3000") {
+        return "Pip-Boy 3000 / Mark IV";
+    }
+    return "Pip-Pad 3500";
+}
+
 bool IsSelectablePipDevice(PipDeviceModel model) {
     return GetPipDeviceCapabilities(model).selectable;
 }
@@ -3147,24 +3211,11 @@ bool SupportsFullPipPadWorkspace(PipDeviceModel model) {
 }
 
 bool HasPipPad(const SessionProfile& profile) {
-    return !profile.activePipDeviceId.empty() ||
-        profile.story.pipPadRecovered ||
-        HasInventoryItem(profile, "#%it_pippad") ||
-        HasInventoryItem(profile, "#%it_pipboy_1_0") ||
-        HasInventoryItem(profile, "#%it_pipboy_3000");
+    return HasActivePipDevice(profile);
 }
 
 bool RecoverPipPad(SessionProfile& profile) {
-    const bool alreadyRecovered = HasPipPad(profile);
-    if (profile.activePipDeviceId.empty()) {
-        profile.activePipDeviceId = "#%it_pippad";
-    }
-    if (!HasInventoryItem(profile, profile.activePipDeviceId)) {
-        AddInventoryItem(profile, profile.activePipDeviceId, 1, 0.8f);
-    }
-    profile.story.pipPadRecovered = true;
-    profile.pipDeviceReselectPending = false;
-    return !alreadyRecovered;
+    return SelectPipDevice(profile, ActivePipDeviceIdOrDefault(profile));
 }
 
 bool HasBlueLinkModule(const SessionProfile& profile) {
@@ -5675,7 +5726,7 @@ void HandleInteraction(const MapObject* nearest,
 
     if (nearest->registryId == "[%pip_0001]") {
         if (profile.story.pipPadRecovered) {
-            profile.pipDeviceReselectPending = true;
+            BeginPipDeviceReselect(profile);
             gameState.lastEvent = "Pip-Boy cradle opened. Current device is being returned to the rack; choose another model when the swap cycle completes.";
             return;
         }
@@ -5684,7 +5735,7 @@ void HandleInteraction(const MapObject* nearest,
             return;
         }
 
-        RecoverPipPad(profile);
+        SelectPipDevice(profile, "#%it_pippad");
         AddInventoryItem(profile, "cryo_medkit", 1, 0.5f);
         gameState.lastEvent = profile.firstPlayableRoute.prePipPadClueCount >= 2
             ? "Pip-Boy/Pip-Pad station selected the default Pip-Pad 3500. Press TAB to open the Pip-Pad; the bunker paper trail now makes sense."

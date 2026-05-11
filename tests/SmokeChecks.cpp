@@ -6767,6 +6767,90 @@ bool RunPipDeviceReselectFlowSmoke() {
             "pip_device_reselect_flow expected route to continue through BlueLink/archive/BT-72 after reselect flow");
 }
 
+bool RunPipDeviceSelectionHelperContractSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    if (!Check(!bunker::HasActivePipDevice(profile) &&
+            bunker::ActivePipDeviceIdOrDefault(profile) == "#%it_pippad" &&
+            !bunker::SelectPipDevice(profile, "#%it_invalid_pip") &&
+            profile.activePipDeviceId.empty(),
+            "pip_device_helpers_reject_invalid_device expected invalid device to leave profile unchanged")) {
+        return false;
+    }
+
+    if (!Check(bunker::SelectPipDevice(profile, "#%it_pippad") &&
+            bunker::HasActivePipDevice(profile) &&
+            bunker::HasPipPad(profile) &&
+            profile.activePipDeviceId == "#%it_pippad" &&
+            bunker::ActivePipDeviceDisplayName(profile) == "Pip-Pad 3500" &&
+            CountInventoryItem(profile, "#%it_pippad") == 1,
+            "pip_device_helpers_select_default_device expected default Pip-Pad selection")) {
+        return false;
+    }
+    if (!Check(!bunker::SelectPipDevice(profile, "#%it_pippad") &&
+            CountInventoryItem(profile, "#%it_pippad") == 1,
+            "pip_device_helpers_select_default_device expected repeated default selection not to duplicate")) {
+        return false;
+    }
+    if (!Check(bunker::BeginPipDeviceReselect(profile) &&
+            profile.pipDeviceReselectPending,
+            "pip_device_helpers_begin_reselect expected active device to enter reselect flow")) {
+        return false;
+    }
+    if (!Check(bunker::SelectPipDevice(profile, "#%it_pipboy_1_0") &&
+            profile.activePipDeviceId == "#%it_pipboy_1_0" &&
+            !profile.pipDeviceReselectPending &&
+            CountInventoryItem(profile, "#%it_pipboy_1_0") == 1 &&
+            bunker::ActivePipDeviceDisplayName(profile) == "Pip-Boy 1.0",
+            "pip_device_helpers_select_pipboy_1_0 expected alternate Pip-Boy 1.0 selection")) {
+        return false;
+    }
+    if (!Check(bunker::SelectPipDevice(profile, "#%it_pipboy_3000") &&
+            profile.activePipDeviceId == "#%it_pipboy_3000" &&
+            CountInventoryItem(profile, "#%it_pipboy_3000") == 1 &&
+            bunker::ActivePipDeviceDisplayName(profile).find("Pip-Boy 3000") != std::string::npos,
+            "pip_device_helpers_select_pipboy_3000 expected alternate Pip-Boy 3000 selection")) {
+        return false;
+    }
+    const std::string activeBeforeInvalid = profile.activePipDeviceId;
+    if (!Check(!bunker::SelectPipDevice(profile, "#%it_consumer_tablet") &&
+            profile.activePipDeviceId == activeBeforeInvalid,
+            "pip_device_helpers_reject_invalid_device expected invalid device not to replace active device")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "pip_device_selection_helper_contract_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "pip_device_helpers_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "pip_device_helpers_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "pip_device_helpers_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(loadedProfile.activePipDeviceId == "#%it_pipboy_3000" &&
+            bunker::HasActivePipDevice(loadedProfile) &&
+            bunker::HasPipPad(loadedProfile),
+            "pip_device_helpers_save_load expected active device id to persist") &&
+        Check(!bunker::CanUsePipPadMediaIndex(loadedProfile) &&
+                loadedProfile.pipPadExpansionCoverPresent &&
+                bunker::InstallBlueLinkModule(loadedProfile) == false,
+            "pip_device_helpers_media_index_requires_bluelink expected active device alone not to unlock media");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() {
     bunker::World legacyWorld;
     legacyWorld.GeneratePrototypeZone();
@@ -7338,6 +7422,7 @@ int main() {
         RunPipDeviceSelectionStationPersistsAfterPickupSmoke() &&
         RunPipDeviceSelectionStationRoundtripSmoke() &&
         RunPipDeviceReselectFlowSmoke() &&
+        RunPipDeviceSelectionHelperContractSmoke() &&
         RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() &&
         RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() &&
         RunStarterRuntimeObjectSpecDriftSmoke() &&

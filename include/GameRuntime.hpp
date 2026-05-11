@@ -153,6 +153,12 @@ struct PipDeviceCapabilities {
 
 PipDeviceCapabilities GetPipDeviceCapabilities(PipDeviceModel model);
 const char* DeviceDisplayName(PipDeviceModel model);
+bool IsKnownPipDeviceId(std::string_view deviceId);
+std::string ActivePipDeviceIdOrDefault(const SessionProfile& profile);
+bool HasActivePipDevice(const SessionProfile& profile);
+bool SelectPipDevice(SessionProfile& profile, std::string_view deviceId);
+bool BeginPipDeviceReselect(SessionProfile& profile);
+std::string ActivePipDeviceDisplayName(const SessionProfile& profile);
 bool IsSelectablePipDevice(PipDeviceModel model);
 bool IsPropOnlyPipDevice(PipDeviceModel model);
 bool HasDigitalMap(PipDeviceModel model);
