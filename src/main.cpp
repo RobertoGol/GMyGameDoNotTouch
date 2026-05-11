@@ -634,7 +634,7 @@ int main() {
 
         const bool toggleUiNow = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
         if (toggleUiNow && !gameState.uiPressed) {
-            bunker::TryTogglePipPadUi(player, sessionProfile, gameState);
+            bunker::TryToggleActivePipDeviceUi(player, sessionProfile, gameState);
         }
         gameState.uiPressed = toggleUiNow;
 
