@@ -52,6 +52,9 @@ struct GameState {
     bool bucketPressed = false;
     bool seatSwapPressed = false;
     bool uiPressed = false;
+    bool pipThemePressed = false;
+    bool pipDisplayPressed = false;
+    bool pipCarryPressed = false;
     bool savePressed = false;
     bool healPressed = false;
     bool reloadPressed = false;
