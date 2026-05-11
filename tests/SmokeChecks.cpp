@@ -7045,17 +7045,17 @@ bool RunActivePipDeviceCustomizationStateSmoke() {
 
     bunker::SessionProfile configuredProfile = bunker::MakeDefaultSessionProfile();
     bunker::SelectPipDevice(configuredProfile, "#%it_pipboy_3000");
-    if (!Check(bunker::SetActivePipDeviceCustomization(configuredProfile, "amber", "readable", "handheld") &&
+    if (!Check(bunker::SetActivePipDeviceCustomization(configuredProfile, "amber", "readable", "wrist") &&
             configuredProfile.pipDeviceThemeId == "amber" &&
             configuredProfile.pipDeviceDisplayMode == "readable" &&
-            configuredProfile.pipDeviceCarryMode == "handheld",
+            configuredProfile.pipDeviceCarryMode == "wrist",
             "active_pip_device_customization_set_valid expected valid customization to apply")) {
         return false;
     }
-    if (!Check(!bunker::SetActivePipDeviceCustomization(configuredProfile, "consumer_rgb", "readable", "handheld") &&
+    if (!Check(!bunker::SetActivePipDeviceCustomization(configuredProfile, "consumer_rgb", "readable", "wrist") &&
             configuredProfile.pipDeviceThemeId == "amber" &&
             configuredProfile.pipDeviceDisplayMode == "readable" &&
-            configuredProfile.pipDeviceCarryMode == "handheld",
+            configuredProfile.pipDeviceCarryMode == "wrist",
             "active_pip_device_customization_reject_invalid expected invalid customization not to mutate profile")) {
         return false;
     }
@@ -7082,7 +7082,7 @@ bool RunActivePipDeviceCustomizationStateSmoke() {
     if (!Check(loadedProfile.activePipDeviceId == "#%it_pipboy_3000" &&
             loadedProfile.pipDeviceThemeId == "amber" &&
             loadedProfile.pipDeviceDisplayMode == "readable" &&
-            loadedProfile.pipDeviceCarryMode == "handheld",
+            loadedProfile.pipDeviceCarryMode == "wrist",
             "active_pip_device_customization_save_load expected customization to persist")) {
         fs::remove_all(tempRoot, ec);
         return false;
@@ -7111,7 +7111,7 @@ bool RunActivePipDeviceCustomizationStateSmoke() {
     if (!Check(bunker::TryToggleActivePipDeviceUi(player, loadedProfile, gameState) &&
             player.uiVisible &&
             gameState.lastEvent.find("Pip-Boy 3000 / Mark IV") != std::string::npos &&
-            gameState.lastEvent.find("Active config: amber theme, readable display, handheld mode.") != std::string::npos,
+            gameState.lastEvent.find("Active config: amber theme, readable display, wrist mode.") != std::string::npos,
             "active_pip_device_customization_ui_summary expected active config summary after station retirement")) {
         fs::remove_all(tempRoot, ec);
         return false;
@@ -7123,6 +7123,7 @@ bool RunActivePipDeviceCustomizationStateSmoke() {
 
 bool RunActivePipDeviceCustomizationCommandSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(profile, "#%it_pippad");
     bunker::NormalizeSessionProfile(profile);
     bunker::GameState gameState;
 
@@ -7234,6 +7235,111 @@ bool RunActivePipDeviceCustomizationCommandSmoke() {
             loadedProfile.pipDeviceDisplayMode == "readable" &&
             loadedProfile.pipDeviceCarryMode == "wrist",
             "active_pip_device_customization_commands_save_load expected cycled config to persist");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunActivePipDeviceCustomizationCapabilityRulesSmoke() {
+    bunker::SessionProfile pipPadProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipPadProfile, "#%it_pippad");
+    if (!Check(bunker::SetActivePipDeviceCustomization(pipPadProfile, "high_contrast", "compact", "handheld") &&
+            pipPadProfile.pipDeviceThemeId == "high_contrast" &&
+            pipPadProfile.pipDeviceDisplayMode == "compact" &&
+            pipPadProfile.pipDeviceCarryMode == "handheld" &&
+            bunker::ActivePipDeviceCustomizationSummary(pipPadProfile).find("high-contrast theme") != std::string::npos,
+            "active_pip_device_customization_capabilities_pippad_expected_full_customization")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy3000Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy3000Profile, "#%it_pipboy_3000");
+    if (!Check(!bunker::SetActivePipDeviceCustomization(pipBoy3000Profile, "high_contrast", "standard", "auto") &&
+            pipBoy3000Profile.pipDeviceThemeId == "classic_green" &&
+            !bunker::SetActivePipDeviceCustomization(pipBoy3000Profile, "amber", "readable", "handheld") &&
+            pipBoy3000Profile.pipDeviceThemeId == "classic_green" &&
+            pipBoy3000Profile.pipDeviceDisplayMode == "standard" &&
+            pipBoy3000Profile.pipDeviceCarryMode == "auto",
+            "active_pip_device_customization_capabilities_pipboy_3000_rejects_pippad_only_values")) {
+        return false;
+    }
+    if (!Check(bunker::SetActivePipDeviceCustomization(pipBoy3000Profile, "amber", "readable", "wrist") &&
+            pipBoy3000Profile.pipDeviceThemeId == "amber" &&
+            pipBoy3000Profile.pipDeviceDisplayMode == "readable" &&
+            pipBoy3000Profile.pipDeviceCarryMode == "wrist",
+            "active_pip_device_customization_capabilities_pipboy_3000_accepts_wrist_map_device_values")) {
+        return false;
+    }
+    bunker::SetActivePipDeviceCustomization(pipBoy3000Profile, "classic_green", "standard", "auto");
+    if (!Check(bunker::CycleActivePipDeviceCustomization(pipBoy3000Profile, bunker::PipDeviceCustomizationSlot::CarryMode) &&
+            pipBoy3000Profile.pipDeviceCarryMode == "wrist" &&
+            bunker::CycleActivePipDeviceCustomization(pipBoy3000Profile, bunker::PipDeviceCustomizationSlot::CarryMode) &&
+            pipBoy3000Profile.pipDeviceCarryMode == "auto",
+            "active_pip_device_customization_capabilities_pipboy_3000_carry_cycle_expected_auto_wrist_only")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy10Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy10Profile, "#%it_pipboy_1_0");
+    if (!Check(!bunker::SetActivePipDeviceCustomization(pipBoy10Profile, "amber", "standard", "auto") &&
+            !bunker::SetActivePipDeviceCustomization(pipBoy10Profile, "classic_green", "readable", "auto") &&
+            !bunker::SetActivePipDeviceCustomization(pipBoy10Profile, "classic_green", "standard", "handheld") &&
+            bunker::SetActivePipDeviceCustomization(pipBoy10Profile, "monochrome", "standard", "wrist") &&
+            pipBoy10Profile.pipDeviceThemeId == "monochrome" &&
+            pipBoy10Profile.pipDeviceDisplayMode == "standard" &&
+            pipBoy10Profile.pipDeviceCarryMode == "wrist",
+            "active_pip_device_customization_capabilities_pipboy_1_0_expected_old_physical_limits")) {
+        return false;
+    }
+    bunker::SetActivePipDeviceCustomization(pipBoy10Profile, "classic_green", "standard", "auto");
+    if (!Check(bunker::CycleActivePipDeviceCustomization(pipBoy10Profile, bunker::PipDeviceCustomizationSlot::Theme) &&
+            pipBoy10Profile.pipDeviceThemeId == "monochrome" &&
+            bunker::CycleActivePipDeviceCustomization(pipBoy10Profile, bunker::PipDeviceCustomizationSlot::Theme) &&
+            pipBoy10Profile.pipDeviceThemeId == "classic_green" &&
+            bunker::CycleActivePipDeviceCustomization(pipBoy10Profile, bunker::PipDeviceCustomizationSlot::DisplayMode) &&
+            pipBoy10Profile.pipDeviceDisplayMode == "standard",
+            "active_pip_device_customization_capabilities_pipboy_1_0_cycle_expected_supported_values_only")) {
+        return false;
+    }
+
+    bunker::SessionProfile noDeviceProfile = bunker::MakeDefaultSessionProfile();
+    bunker::GameState gameState;
+    if (!Check(!bunker::SetActivePipDeviceCustomization(noDeviceProfile, "amber", "readable", "handheld") &&
+            !bunker::ApplyActivePipDeviceCustomizationCommand(noDeviceProfile, "rgb_party", &gameState) &&
+            noDeviceProfile.pipDeviceThemeId == "classic_green" &&
+            noDeviceProfile.pipDeviceDisplayMode == "standard" &&
+            noDeviceProfile.pipDeviceCarryMode == "auto",
+            "active_pip_device_customization_capabilities_no_active_device_expected_safe_rejection")) {
+        return false;
+    }
+
+    bunker::SetActivePipDeviceCustomization(pipBoy3000Profile, "amber", "readable", "wrist");
+    const fs::path tempRoot = fs::current_path() / "active_pip_device_customization_capability_rules_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "active_pip_device_customization_capabilities_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(pipBoy3000Profile, profilePath);
+    if (!Check(saveStatus.ok, "active_pip_device_customization_capabilities_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "active_pip_device_customization_capabilities_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(loadedProfile.activePipDeviceId == "#%it_pipboy_3000" &&
+            loadedProfile.pipDeviceThemeId == "amber" &&
+            loadedProfile.pipDeviceDisplayMode == "readable" &&
+            loadedProfile.pipDeviceCarryMode == "wrist" &&
+            !bunker::SetActivePipDeviceCustomization(loadedProfile, "high_contrast", "readable", "wrist"),
+            "active_pip_device_customization_capabilities_save_load expected supported config to persist and unsupported mutation to fail");
 
     fs::remove_all(tempRoot, ec);
     return ok;
@@ -8233,6 +8339,7 @@ int main() {
         RunActivePipDeviceUiCompatibilityWrapperSmoke() &&
         RunActivePipDeviceCustomizationStateSmoke() &&
         RunActivePipDeviceCustomizationCommandSmoke() &&
+        RunActivePipDeviceCustomizationCapabilityRulesSmoke() &&
         RunPipDeviceSelectionHelperContractSmoke() &&
         RunPipDeviceItemRegistryAndStationOptionsSmoke() &&
         RunPipDeviceProfileNormalizationRegistrySmoke() &&

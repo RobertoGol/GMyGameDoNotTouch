@@ -187,6 +187,13 @@ std::vector<PipDeviceSelectionOption> BuildPipDeviceSelectionOptions(const Sessi
 bool CompletePipDeviceReselect(SessionProfile& profile, std::string_view deviceId);
 bool IsPipDeviceSelectionStationRetired(const SessionProfile& profile);
 std::string ActivePipDeviceCustomizationSummary(const SessionProfile& profile);
+bool ActivePipDeviceSupportsTheme(const SessionProfile& profile, std::string_view themeId);
+bool ActivePipDeviceSupportsDisplayMode(const SessionProfile& profile, std::string_view displayMode);
+bool ActivePipDeviceSupportsCarryMode(const SessionProfile& profile, std::string_view carryMode);
+bool ActivePipDeviceSupportsCustomization(const SessionProfile& profile,
+    std::string_view themeId,
+    std::string_view displayMode,
+    std::string_view carryMode);
 bool SetActivePipDeviceCustomization(SessionProfile& profile,
     std::string_view themeId,
     std::string_view displayMode,

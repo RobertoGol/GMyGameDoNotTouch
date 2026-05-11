@@ -3311,6 +3311,78 @@ std::string ActivePipDeviceCustomizationSummary(const SessionProfile& profile) {
         carryLabel(profile.pipDeviceCarryMode) + ".";
 }
 
+bool ActivePipDeviceSupportsTheme(const SessionProfile& profile, std::string_view themeId) {
+    PipDeviceModel model = PipDeviceModel::PipPad3500;
+    if (!TryGetPipDeviceModelForId(profile.activePipDeviceId, model)) {
+        return themeId == "classic_green";
+    }
+    switch (model) {
+        case PipDeviceModel::PipPad3500:
+            return themeId == "classic_green" || themeId == "amber" ||
+                themeId == "monochrome" || themeId == "high_contrast";
+        case PipDeviceModel::PipBoy3000MarkIV:
+        case PipDeviceModel::PipBoy2000Classic:
+        case PipDeviceModel::PipBoy2000MarkVI:
+            return themeId == "classic_green" || themeId == "amber" || themeId == "monochrome";
+        case PipDeviceModel::PipBoy01:
+        case PipDeviceModel::PipBoy10:
+            return themeId == "classic_green" || themeId == "monochrome";
+        case PipDeviceModel::PipBoy3000MarkV:
+            return false;
+    }
+    return false;
+}
+
+bool ActivePipDeviceSupportsDisplayMode(const SessionProfile& profile, std::string_view displayMode) {
+    PipDeviceModel model = PipDeviceModel::PipPad3500;
+    if (!TryGetPipDeviceModelForId(profile.activePipDeviceId, model)) {
+        return displayMode == "standard";
+    }
+    switch (model) {
+        case PipDeviceModel::PipPad3500:
+            return displayMode == "standard" || displayMode == "readable" || displayMode == "compact";
+        case PipDeviceModel::PipBoy3000MarkIV:
+        case PipDeviceModel::PipBoy2000Classic:
+        case PipDeviceModel::PipBoy2000MarkVI:
+            return displayMode == "standard" || displayMode == "readable";
+        case PipDeviceModel::PipBoy01:
+        case PipDeviceModel::PipBoy10:
+            return displayMode == "standard";
+        case PipDeviceModel::PipBoy3000MarkV:
+            return false;
+    }
+    return false;
+}
+
+bool ActivePipDeviceSupportsCarryMode(const SessionProfile& profile, std::string_view carryMode) {
+    PipDeviceModel model = PipDeviceModel::PipPad3500;
+    if (!TryGetPipDeviceModelForId(profile.activePipDeviceId, model)) {
+        return carryMode == "auto";
+    }
+    switch (model) {
+        case PipDeviceModel::PipPad3500:
+            return carryMode == "auto" || carryMode == "wrist" || carryMode == "handheld";
+        case PipDeviceModel::PipBoy01:
+        case PipDeviceModel::PipBoy10:
+        case PipDeviceModel::PipBoy2000Classic:
+        case PipDeviceModel::PipBoy2000MarkVI:
+        case PipDeviceModel::PipBoy3000MarkIV:
+            return carryMode == "auto" || carryMode == "wrist";
+        case PipDeviceModel::PipBoy3000MarkV:
+            return false;
+    }
+    return false;
+}
+
+bool ActivePipDeviceSupportsCustomization(const SessionProfile& profile,
+    std::string_view themeId,
+    std::string_view displayMode,
+    std::string_view carryMode) {
+    return ActivePipDeviceSupportsTheme(profile, themeId) &&
+        ActivePipDeviceSupportsDisplayMode(profile, displayMode) &&
+        ActivePipDeviceSupportsCarryMode(profile, carryMode);
+}
+
 bool SetActivePipDeviceCustomization(SessionProfile& profile,
     std::string_view themeId,
     std::string_view displayMode,
@@ -3323,6 +3395,13 @@ bool SetActivePipDeviceCustomization(SessionProfile& profile,
     if (normalizedProfile.pipDeviceThemeId != std::string(themeId) ||
         normalizedProfile.pipDeviceDisplayMode != std::string(displayMode) ||
         normalizedProfile.pipDeviceCarryMode != std::string(carryMode)) {
+        return false;
+    }
+    if (!ActivePipDeviceSupportsCustomization(
+            profile,
+            normalizedProfile.pipDeviceThemeId,
+            normalizedProfile.pipDeviceDisplayMode,
+            normalizedProfile.pipDeviceCarryMode)) {
         return false;
     }
 
@@ -3339,6 +3418,29 @@ std::string_view NextPipCustomizationValue(std::string_view current, std::initia
     }
     ++it;
     return it == values.end() ? *values.begin() : *it;
+}
+
+std::string_view NextSupportedPipCustomizationValue(
+    const SessionProfile& profile,
+    PipDeviceCustomizationSlot slot,
+    std::string_view current,
+    std::initializer_list<std::string_view> values) {
+    auto supportsValue = [&](std::string_view value) {
+        switch (slot) {
+            case PipDeviceCustomizationSlot::Theme: return ActivePipDeviceSupportsTheme(profile, value);
+            case PipDeviceCustomizationSlot::DisplayMode: return ActivePipDeviceSupportsDisplayMode(profile, value);
+            case PipDeviceCustomizationSlot::CarryMode: return ActivePipDeviceSupportsCarryMode(profile, value);
+        }
+        return false;
+    };
+    std::string_view candidate = NextPipCustomizationValue(current, values);
+    for (std::size_t attempts = 0; attempts < values.size(); ++attempts) {
+        if (supportsValue(candidate)) {
+            return candidate;
+        }
+        candidate = NextPipCustomizationValue(candidate, values);
+    }
+    return current;
 }
 
 std::string PipCustomizationSlotLabel(PipDeviceCustomizationSlot slot) {
@@ -3358,17 +3460,23 @@ bool CycleActivePipDeviceCustomization(SessionProfile& profile,
     std::string nextCarryMode = profile.pipDeviceCarryMode;
     switch (slot) {
         case PipDeviceCustomizationSlot::Theme:
-            nextTheme = std::string(NextPipCustomizationValue(
+            nextTheme = std::string(NextSupportedPipCustomizationValue(
+                profile,
+                slot,
                 profile.pipDeviceThemeId,
                 {"classic_green", "amber", "monochrome", "high_contrast"}));
             break;
         case PipDeviceCustomizationSlot::DisplayMode:
-            nextDisplayMode = std::string(NextPipCustomizationValue(
+            nextDisplayMode = std::string(NextSupportedPipCustomizationValue(
+                profile,
+                slot,
                 profile.pipDeviceDisplayMode,
                 {"standard", "readable", "compact"}));
             break;
         case PipDeviceCustomizationSlot::CarryMode:
-            nextCarryMode = std::string(NextPipCustomizationValue(
+            nextCarryMode = std::string(NextSupportedPipCustomizationValue(
+                profile,
+                slot,
                 profile.pipDeviceCarryMode,
                 {"auto", "wrist", "handheld"}));
             break;
