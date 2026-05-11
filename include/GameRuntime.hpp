@@ -194,6 +194,7 @@ bool ActivePipDeviceSupportsCustomization(const SessionProfile& profile,
     std::string_view themeId,
     std::string_view displayMode,
     std::string_view carryMode);
+bool CanCustomizeActivePipDevice(const SessionProfile& profile);
 bool SetActivePipDeviceCustomization(SessionProfile& profile,
     std::string_view themeId,
     std::string_view displayMode,

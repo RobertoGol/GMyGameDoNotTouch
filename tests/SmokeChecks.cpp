@@ -7345,6 +7345,70 @@ bool RunActivePipDeviceCustomizationCapabilityRulesSmoke() {
     return ok;
 }
 
+bool RunActivePipDeviceCustomizationCommandGateSmoke() {
+    bunker::SessionProfile noDeviceProfile = bunker::MakeDefaultSessionProfile();
+    bunker::NormalizeSessionProfile(noDeviceProfile);
+    bunker::GameState gameState;
+    const std::string themeBeforeNoDevice = noDeviceProfile.pipDeviceThemeId;
+    const std::string displayBeforeNoDevice = noDeviceProfile.pipDeviceDisplayMode;
+    const std::string carryBeforeNoDevice = noDeviceProfile.pipDeviceCarryMode;
+    if (!Check(!bunker::CanCustomizeActivePipDevice(noDeviceProfile) &&
+            !bunker::SetActivePipDeviceCustomization(noDeviceProfile, "classic_green", "standard", "auto") &&
+            !bunker::ApplyActivePipDeviceCustomizationCommand(noDeviceProfile, "theme_next", &gameState) &&
+            gameState.lastEvent.find("No active Pip device") != std::string::npos &&
+            !bunker::ApplyActivePipDeviceCustomizationCommand(noDeviceProfile, "display_next", &gameState) &&
+            gameState.lastEvent.find("No active Pip device") != std::string::npos &&
+            !bunker::ApplyActivePipDeviceCustomizationCommand(noDeviceProfile, "carry_next", &gameState) &&
+            gameState.lastEvent.find("No active Pip device") != std::string::npos &&
+            noDeviceProfile.pipDeviceThemeId == themeBeforeNoDevice &&
+            noDeviceProfile.pipDeviceDisplayMode == displayBeforeNoDevice &&
+            noDeviceProfile.pipDeviceCarryMode == carryBeforeNoDevice,
+            "active_pip_device_customization_command_gate_no_device expected known commands to require active device")) {
+        return false;
+    }
+
+    bunker::SessionProfile pippadProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pippadProfile, "#%it_pippad");
+    if (!Check(bunker::CanCustomizeActivePipDevice(pippadProfile) &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "theme_next", &gameState) &&
+            pippadProfile.pipDeviceThemeId == "amber" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "display_next", &gameState) &&
+            pippadProfile.pipDeviceDisplayMode == "readable" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "carry_next", &gameState) &&
+            pippadProfile.pipDeviceCarryMode == "wrist" &&
+            bunker::SetActivePipDeviceCustomization(pippadProfile, "high_contrast", "compact", "handheld"),
+            "active_pip_device_customization_command_gate_pippad expected active Pip-Pad customization commands")) {
+        return false;
+    }
+
+    pippadProfile.story.exitedBunker = true;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(pippadProfile) &&
+            bunker::CanCustomizeActivePipDevice(pippadProfile) &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "theme_next", &gameState) &&
+            pippadProfile.pipDeviceThemeId == "classic_green",
+            "active_pip_device_customization_command_gate_retired_station expected active device commands after station retirement")) {
+        return false;
+    }
+
+    bunker::SessionProfile invalidActiveProfile = bunker::MakeDefaultSessionProfile();
+    invalidActiveProfile.activePipDeviceId = "#%it_consumer_tablet";
+    invalidActiveProfile.pipDeviceThemeId = "amber";
+    invalidActiveProfile.pipDeviceDisplayMode = "readable";
+    invalidActiveProfile.pipDeviceCarryMode = "handheld";
+    bunker::NormalizeSessionProfile(invalidActiveProfile);
+    const std::string invalidThemeBeforeCommand = invalidActiveProfile.pipDeviceThemeId;
+    const std::string invalidDisplayBeforeCommand = invalidActiveProfile.pipDeviceDisplayMode;
+    const std::string invalidCarryBeforeCommand = invalidActiveProfile.pipDeviceCarryMode;
+    return Check(invalidActiveProfile.activePipDeviceId.empty() &&
+            !bunker::CanCustomizeActivePipDevice(invalidActiveProfile) &&
+            !bunker::ApplyActivePipDeviceCustomizationCommand(invalidActiveProfile, "theme_next", &gameState) &&
+            gameState.lastEvent.find("No active Pip device") != std::string::npos &&
+            invalidActiveProfile.pipDeviceThemeId == invalidThemeBeforeCommand &&
+            invalidActiveProfile.pipDeviceDisplayMode == invalidDisplayBeforeCommand &&
+            invalidActiveProfile.pipDeviceCarryMode == invalidCarryBeforeCommand,
+            "active_pip_device_customization_command_gate_invalid_active_id expected normalized invalid id to reject commands");
+}
+
 bool RunPipDeviceSelectionHelperContractSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     if (!Check(!bunker::HasActivePipDevice(profile) &&
@@ -8340,6 +8404,7 @@ int main() {
         RunActivePipDeviceCustomizationStateSmoke() &&
         RunActivePipDeviceCustomizationCommandSmoke() &&
         RunActivePipDeviceCustomizationCapabilityRulesSmoke() &&
+        RunActivePipDeviceCustomizationCommandGateSmoke() &&
         RunPipDeviceSelectionHelperContractSmoke() &&
         RunPipDeviceItemRegistryAndStationOptionsSmoke() &&
         RunPipDeviceProfileNormalizationRegistrySmoke() &&

@@ -3383,10 +3383,17 @@ bool ActivePipDeviceSupportsCustomization(const SessionProfile& profile,
         ActivePipDeviceSupportsCarryMode(profile, carryMode);
 }
 
+bool CanCustomizeActivePipDevice(const SessionProfile& profile) {
+    return HasActivePipDevice(profile) && IsKnownPipDeviceId(profile.activePipDeviceId);
+}
+
 bool SetActivePipDeviceCustomization(SessionProfile& profile,
     std::string_view themeId,
     std::string_view displayMode,
     std::string_view carryMode) {
+    if (!CanCustomizeActivePipDevice(profile)) {
+        return false;
+    }
     SessionProfile normalizedProfile = profile;
     normalizedProfile.pipDeviceThemeId = std::string(themeId);
     normalizedProfile.pipDeviceDisplayMode = std::string(displayMode);
@@ -3455,6 +3462,12 @@ std::string PipCustomizationSlotLabel(PipDeviceCustomizationSlot slot) {
 bool CycleActivePipDeviceCustomization(SessionProfile& profile,
     PipDeviceCustomizationSlot slot,
     GameState* gameState) {
+    if (!CanCustomizeActivePipDevice(profile)) {
+        if (gameState != nullptr) {
+            gameState->lastEvent = "No active Pip device available for customization.";
+        }
+        return false;
+    }
     std::string nextTheme = profile.pipDeviceThemeId;
     std::string nextDisplayMode = profile.pipDeviceDisplayMode;
     std::string nextCarryMode = profile.pipDeviceCarryMode;
