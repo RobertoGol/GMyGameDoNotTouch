@@ -7029,6 +7029,81 @@ bool RunPipDeviceItemRegistryAndStationOptionsSmoke() {
     return ok;
 }
 
+bool RunPipDeviceProfileNormalizationRegistrySmoke() {
+    for (const auto itemId : bunker::kCanonicalPipDeviceItemIds) {
+        bunker::SessionProfile activeProfile = bunker::MakeDefaultSessionProfile();
+        activeProfile.activePipDeviceId = std::string(itemId);
+        bunker::NormalizeSessionProfile(activeProfile);
+        if (!Check(activeProfile.activePipDeviceId == itemId &&
+                activeProfile.story.pipPadRecovered,
+                "pip_device_profile_normalization_accepts_canonical_active_ids expected canonical active Pip device id to survive")) {
+            return false;
+        }
+
+        bunker::SessionProfile inventoryProfile = bunker::MakeDefaultSessionProfile();
+        inventoryProfile.character.inventory.push_back({std::string(itemId), 1, 1.0f});
+        bunker::NormalizeSessionProfile(inventoryProfile);
+        if (!Check(inventoryProfile.activePipDeviceId == itemId &&
+                inventoryProfile.story.pipPadRecovered,
+                "pip_device_profile_normalization_uses_canonical_inventory_ids expected inventory Pip device id to become active")) {
+            return false;
+        }
+    }
+
+    bunker::SessionProfile propOnlyProfile = bunker::MakeDefaultSessionProfile();
+    propOnlyProfile.activePipDeviceId = "#%it_pipboy_3000_mark_v";
+    bunker::NormalizeSessionProfile(propOnlyProfile);
+    if (!Check(propOnlyProfile.activePipDeviceId.empty() &&
+            !propOnlyProfile.story.pipPadRecovered,
+            "pip_device_profile_normalization_rejects_prop_only_mark_v expected prop-only model to clear")) {
+        return false;
+    }
+
+    bunker::SessionProfile invalidProfile = bunker::MakeDefaultSessionProfile();
+    invalidProfile.activePipDeviceId = "#%it_consumer_tablet";
+    bunker::NormalizeSessionProfile(invalidProfile);
+    if (!Check(invalidProfile.activePipDeviceId.empty() &&
+            !invalidProfile.story.pipPadRecovered,
+            "pip_device_profile_normalization_rejects_invalid_device expected invalid model to clear")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "pip_device_profile_normalization_registry_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "pip_device_profile_normalization_save_load failed to create temp directory")) {
+        return false;
+    }
+
+    bool ok = true;
+    int index = 0;
+    for (const auto itemId : bunker::kCanonicalPipDeviceItemIds) {
+        bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+        profile.activePipDeviceId = std::string(itemId);
+        profile.story.pipPadRecovered = true;
+        const fs::path profilePath = tempRoot / ("profile_" + std::to_string(index++) + ".txt");
+        const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+        if (!Check(saveStatus.ok, "pip_device_profile_normalization_save_load failed to save profile: " + saveStatus.message)) {
+            fs::remove_all(tempRoot, ec);
+            return false;
+        }
+        bunker::SessionProfile loadedProfile;
+        if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+                "pip_device_profile_normalization_save_load failed to load profile")) {
+            fs::remove_all(tempRoot, ec);
+            return false;
+        }
+        ok = Check(loadedProfile.activePipDeviceId == itemId &&
+                bunker::IsKnownPipDeviceId(loadedProfile.activePipDeviceId),
+                "pip_device_profile_normalization_save_load expected canonical id to persist") &&
+            ok;
+    }
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunActivePipDeviceCapabilityRulesSmoke() {
     bunker::SessionProfile defaultProfile = bunker::MakeDefaultSessionProfile();
     bunker::SelectPipDevice(defaultProfile, "#%it_pippad");
@@ -7683,6 +7758,7 @@ int main() {
         RunPipDeviceReselectFlowSmoke() &&
         RunPipDeviceSelectionHelperContractSmoke() &&
         RunPipDeviceItemRegistryAndStationOptionsSmoke() &&
+        RunPipDeviceProfileNormalizationRegistrySmoke() &&
         RunActivePipDeviceCapabilityRulesSmoke() &&
         RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() &&
         RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() &&

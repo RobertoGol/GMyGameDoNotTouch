@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <ctime>
 #include <fstream>
@@ -28,6 +29,20 @@ struct InventoryEntry {
     int count = 0;
     float unitWeight = 0.0f;
 };
+
+inline constexpr std::array<std::string_view, 6> kCanonicalPipDeviceItemIds{{
+    "#%it_pipboy_0_1",
+    "#%it_pipboy_1_0",
+    "#%it_pipboy_2000_classic",
+    "#%it_pipboy_2000_mark_vi",
+    "#%it_pipboy_3000",
+    "#%it_pippad",
+}};
+
+inline bool IsCanonicalPipDeviceItemId(std::string_view itemId) {
+    return std::find(kCanonicalPipDeviceItemIds.begin(), kCanonicalPipDeviceItemIds.end(), itemId) !=
+        kCanonicalPipDeviceItemIds.end();
+}
 
 struct TapeEntry {
     std::string tapeId;

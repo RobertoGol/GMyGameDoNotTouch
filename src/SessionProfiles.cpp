@@ -16,18 +16,9 @@ bool HasInventoryEntry(const SessionProfile& profile, const std::string& itemId)
         [&](const InventoryEntry& entry) { return entry.itemId == itemId && entry.count > 0; });
 }
 
-bool IsKnownPipDeviceId(const std::string& itemId) {
-    return itemId == "#%it_pipboy_0_1" ||
-        itemId == "#%it_pipboy_1_0" ||
-        itemId == "#%it_pipboy_2000_classic" ||
-        itemId == "#%it_pipboy_2000_mark_vi" ||
-        itemId == "#%it_pipboy_3000" ||
-        itemId == "#%it_pippad";
-}
-
 std::string FirstInventoryPipDeviceId(const SessionProfile& profile) {
     for (const auto& item : profile.character.inventory) {
-        if (item.count > 0 && IsKnownPipDeviceId(item.itemId)) {
+        if (item.count > 0 && IsCanonicalPipDeviceItemId(item.itemId)) {
             return item.itemId;
         }
     }
@@ -227,7 +218,7 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     profile.lanlineServices.relayCredits = std::max(0, profile.lanlineServices.relayCredits);
     profile.launcherAnnouncements.lastSeenBuildNumber = std::max(0, profile.launcherAnnouncements.lastSeenBuildNumber);
     profile.continuityAnchorVariance = std::clamp(profile.continuityAnchorVariance, 0.0f, 1.0f);
-    if (!profile.activePipDeviceId.empty() && !IsKnownPipDeviceId(profile.activePipDeviceId)) {
+    if (!profile.activePipDeviceId.empty() && !IsCanonicalPipDeviceItemId(profile.activePipDeviceId)) {
         profile.activePipDeviceId.clear();
     }
     if (profile.activePipDeviceId.empty()) {

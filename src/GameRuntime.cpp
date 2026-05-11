@@ -3130,13 +3130,13 @@ struct PipDeviceItemSpec {
     float inventoryWeight;
 };
 
-constexpr std::array<PipDeviceItemSpec, 6> kPipDeviceItemSpecs{{
-    {"#%it_pipboy_0_1", PipDeviceModel::PipBoy01, 1.0f},
-    {"#%it_pipboy_1_0", PipDeviceModel::PipBoy10, 1.0f},
-    {"#%it_pipboy_2000_classic", PipDeviceModel::PipBoy2000Classic, 1.2f},
-    {"#%it_pipboy_2000_mark_vi", PipDeviceModel::PipBoy2000MarkVI, 1.25f},
-    {"#%it_pipboy_3000", PipDeviceModel::PipBoy3000MarkIV, 1.1f},
-    {"#%it_pippad", PipDeviceModel::PipPad3500, 0.8f},
+constexpr std::array<PipDeviceItemSpec, kCanonicalPipDeviceItemIds.size()> kPipDeviceItemSpecs{{
+    {kCanonicalPipDeviceItemIds[0], PipDeviceModel::PipBoy01, 1.0f},
+    {kCanonicalPipDeviceItemIds[1], PipDeviceModel::PipBoy10, 1.0f},
+    {kCanonicalPipDeviceItemIds[2], PipDeviceModel::PipBoy2000Classic, 1.2f},
+    {kCanonicalPipDeviceItemIds[3], PipDeviceModel::PipBoy2000MarkVI, 1.25f},
+    {kCanonicalPipDeviceItemIds[4], PipDeviceModel::PipBoy3000MarkIV, 1.1f},
+    {kCanonicalPipDeviceItemIds[5], PipDeviceModel::PipPad3500, 0.8f},
 }};
 
 const PipDeviceItemSpec* FindPipDeviceItemSpec(std::string_view deviceId) {
