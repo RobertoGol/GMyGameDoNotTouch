@@ -70,6 +70,16 @@ bool HasDuplicateRegistryIds(const bunker::World& world, std::string* duplicateI
     return false;
 }
 
+int CountInventoryItem(const bunker::SessionProfile& profile, const std::string& itemId) {
+    int total = 0;
+    for (const auto& item : profile.character.inventory) {
+        if (item.itemId == itemId) {
+            total += item.count;
+        }
+    }
+    return total;
+}
+
 bool WriteTextFile(const fs::path& path, const std::string& text) {
     std::ofstream file(path);
     if (!file.is_open()) {
@@ -576,7 +586,9 @@ bool RunProfileMigrationContractSmoke() {
 
     const std::string savedText = ReadTextFile(currentPath);
     const bool ok = Check(ContainsText(savedText, "profile_format=BPF1\n") &&
-            ContainsText(savedText, "profile_version=11\n") &&
+            ContainsText(savedText, "profile_version=12\n") &&
+            ContainsText(savedText, "active_pip_device_id=") &&
+            ContainsText(savedText, "pip_device_reselect_pending=") &&
             ContainsText(savedText, "pippad_expansion_cover_present=") &&
             ContainsText(savedText, "bluelink_module_recovered=") &&
             ContainsText(savedText, "bluelink_module_installed=") &&
@@ -6269,9 +6281,9 @@ bool RunStarterScenarioIdentitySurvivesPipPadPickupSmoke() {
 
     return Check(bunker::HasPipPad(profile) &&
             profile.story.pipPadRecovered &&
-            world.FindObjectByRegistryId("[%pip_0001]") == nullptr &&
+            world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
             world.IsStarterScenarioWorld(),
-            "starter_scenario_identity_survives_pippad_pickup expected removable Pip-Pad locker not to define starter identity");
+            "starter_scenario_identity_survives_pippad_pickup expected persistent Pip-Boy/Pip-Pad station after selection");
 }
 
 bool RunStarterScenarioIdentitySurvivesPipPadPickupRoundtripSmoke() {
@@ -6295,8 +6307,8 @@ bool RunStarterScenarioIdentitySurvivesPipPadPickupRoundtripSmoke() {
     bunker::HandleInteraction(world.FindObjectByRegistryId("[%core_0001]"), world, player, profile, staticEraser, gameState);
     bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
 
-    if (!Check(world.FindObjectByRegistryId("[%pip_0001]") == nullptr,
-            "starter_scenario_identity_survives_pippad_pickup_roundtrip expected Pip-Pad locker removed before save")) {
+    if (!Check(world.FindObjectByRegistryId("[%pip_0001]") != nullptr,
+            "starter_scenario_identity_survives_pippad_pickup_roundtrip expected Pip-Boy/Pip-Pad station before save")) {
         fs::remove_all(tempRoot, ec);
         return false;
     }
@@ -6318,12 +6330,12 @@ bool RunStarterScenarioIdentitySurvivesPipPadPickupRoundtripSmoke() {
 
     std::string duplicateId;
     const bool ok = Check(loadedWorld.IsStarterScenarioWorld() &&
-            loadedWorld.FindObjectByRegistryId("[%pip_0001]") == nullptr &&
+            loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
             HasV940StarterRouteRuntimeObjects(loadedWorld) &&
             !HasDuplicateRegistryIds(loadedWorld, &duplicateId),
             "starter_scenario_identity_survives_pippad_pickup_roundtrip expected picked starter world identity and route objects") &&
-        Check(loadedWorld.FindObjectByRegistryId("[%pip_0001]") == nullptr,
-            "starter_infrastructure_does_not_respawn_picked_pippad_locker expected no Pip-Pad locker resurrection");
+        Check(loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr,
+            "starter_infrastructure_keeps_persistent_pip_selection_station expected station to remain after pickup");
 
     fs::remove_all(tempRoot, ec);
     return ok;
@@ -6361,7 +6373,7 @@ bool RunLoadedStarterWorldContinuesRouteAfterPipPadPickupSmoke() {
     bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
     if (!Check(bunker::HasPipPad(profile) &&
             profile.story.pipPadRecovered &&
-            world.FindObjectByRegistryId("[%pip_0001]") == nullptr &&
+            world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
             world.IsStarterScenarioWorld() &&
             HasV940StarterRouteRuntimeObjects(world),
             "loaded_starter_route_continues_after_pippad_pickup_save_load expected picked Pip-Pad world to continue route")) {
@@ -6384,11 +6396,11 @@ bool RunLoadedStarterWorldContinuesRouteAfterPipPadPickupSmoke() {
     }
     loadedWorld.EnsureStarterInfrastructure();
     if (!Check(loadedWorld.IsStarterScenarioWorld() &&
-            loadedWorld.FindObjectByRegistryId("[%pip_0001]") == nullptr &&
+            loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
             HasV940StarterRouteRuntimeObjects(loadedWorld) &&
             !HasDuplicateRegistryIds(loadedWorld, &duplicateId) &&
             StarterRouteRuntimeObjectTypesMatch(loadedWorld),
-            "loaded_starter_route_after_pippad_pickup_does_not_respawn_locker expected no Pip-Pad locker resurrection")) {
+            "loaded_starter_route_after_pippad_pickup_keeps_selection_station expected persistent Pip station after load")) {
         fs::remove_all(tempRoot, ec);
         return false;
     }
@@ -6483,7 +6495,7 @@ bool RunLoadedProfileAndWorldContinueAfterPipPadPickupSmoke() {
             profile.firstPlayableRoute.accessCardRecovered &&
             bunker::HasInventoryItem(profile, "bunker_access_card") &&
             profile.continuityAnchorSeeded &&
-            world.FindObjectByRegistryId("[%pip_0001]") == nullptr &&
+            world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
             world.IsStarterScenarioWorld() &&
             HasV940StarterRouteRuntimeObjects(world),
             "loaded_profile_and_world_after_pippad_pickup expected picked profile/world before save")) {
@@ -6521,7 +6533,7 @@ bool RunLoadedProfileAndWorldContinueAfterPipPadPickupSmoke() {
 
     std::string duplicateId;
     if (!Check(loadedWorld.IsStarterScenarioWorld() &&
-            loadedWorld.FindObjectByRegistryId("[%pip_0001]") == nullptr &&
+            loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
             HasV940StarterRouteRuntimeObjects(loadedWorld) &&
             !HasDuplicateRegistryIds(loadedWorld, &duplicateId) &&
             StarterRouteRuntimeObjectTypesMatch(loadedWorld) &&
@@ -6614,6 +6626,145 @@ bool RunLoadedProfileAndWorldContinueAfterPipPadPickupSmoke() {
 
     fs::remove_all(tempRoot, ec);
     return ok;
+}
+
+bool RunPipDeviceSelectionStationPersistsAfterPickupSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    const int selectedDeviceCount = CountInventoryItem(profile, "#%it_pippad");
+    if (!Check(world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            bunker::HasPipPad(profile) &&
+            profile.story.pipPadRecovered &&
+            profile.activePipDeviceId == "#%it_pippad" &&
+            selectedDeviceCount == 1,
+            "pip_device_selection_station_persists_after_pickup expected persistent station and default active device")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    return Check(world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            CountInventoryItem(profile, "#%it_pippad") == selectedDeviceCount &&
+            profile.pipDeviceReselectPending &&
+            gameState.lastEvent.find("returned to the rack") != std::string::npos,
+            "pip_device_selection_station_persists_after_pickup expected repeated interaction to start reselect flow without duplicate device");
+}
+
+bool RunPipDeviceSelectionStationRoundtripSmoke() {
+    const fs::path tempRoot = fs::current_path() / "pip_device_selection_station_roundtrip_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "pip_device_selection_station_roundtrip failed to create temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+
+    const fs::path worldPath = tempRoot / "pip_station_world.bwld";
+    const fs::path profilePath = tempRoot / "profile.txt";
+    if (!Check(world.Save(worldPath.string()),
+            "pip_device_selection_station_roundtrip failed to save world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "pip_device_selection_station_roundtrip failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    bunker::SessionProfile loadedProfile;
+    if (!Check(loadedWorld.Load(worldPath.string()) &&
+            bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "pip_device_selection_station_roundtrip failed to load world/profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+    const int selectedDeviceCount = CountInventoryItem(loadedProfile, "#%it_pippad");
+    bunker::HandleInteraction(loadedWorld.FindObjectByRegistryId("[%pip_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+
+    const bool ok = Check(loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            bunker::HasPipPad(loadedProfile) &&
+            loadedProfile.activePipDeviceId == "#%it_pippad" &&
+            CountInventoryItem(loadedProfile, "#%it_pippad") == selectedDeviceCount &&
+            loadedProfile.pipDeviceReselectPending,
+            "pip_device_selection_station_roundtrip expected persistent station and no duplicate selected device");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunPipDeviceReselectFlowSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    auto objectById = [&](const std::string& registryId) {
+        return world.FindObjectByRegistryId(registryId);
+    };
+
+    bunker::HandleInteraction(objectById("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.activePipDeviceId == "#%it_pippad" &&
+            bunker::HasPipPad(profile) &&
+            objectById("[%pip_0001]") != nullptr,
+            "pip_device_reselect_flow expected first interaction to select default device")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.pipDeviceReselectPending &&
+            bunker::HasPipPad(profile) &&
+            objectById("[%pip_0001]") != nullptr,
+            "pip_device_reselect_flow expected second interaction to mark return-to-rack flow")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%bluelink_module_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pippad_expansion_bay_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%archive_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%garage_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%hangar_power_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_control_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_path_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_hook_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_lift_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), world, player, profile, staticEraser, gameState);
+
+    return Check(bunker::IsBlueLinkInstalled(profile) &&
+            profile.story.archiveRecovered &&
+            profile.bt72HullLockedInRestorationCradle &&
+            profile.firstPlayableRoute.bt72Restored,
+            "pip_device_reselect_flow expected route to continue through BlueLink/archive/BT-72 after reselect flow");
 }
 
 bool RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() {
@@ -7184,6 +7335,9 @@ int main() {
         RunStarterScenarioIdentitySurvivesPipPadPickupRoundtripSmoke() &&
         RunLoadedStarterWorldContinuesRouteAfterPipPadPickupSmoke() &&
         RunLoadedProfileAndWorldContinueAfterPipPadPickupSmoke() &&
+        RunPipDeviceSelectionStationPersistsAfterPickupSmoke() &&
+        RunPipDeviceSelectionStationRoundtripSmoke() &&
+        RunPipDeviceReselectFlowSmoke() &&
         RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() &&
         RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() &&
         RunStarterRuntimeObjectSpecDriftSmoke() &&

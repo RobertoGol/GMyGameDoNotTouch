@@ -412,6 +412,8 @@ struct SessionProfile {
     int scavengerRunsCompleted = 0;
     bool continuityAnchorSeeded = false;
     float continuityAnchorVariance = 0.0f;
+    std::string activePipDeviceId{};
+    bool pipDeviceReselectPending = false;
     bool pipPadExpansionCoverPresent = true;
     bool blueLinkModuleRecovered = false;
     bool blueLinkModuleInstalled = false;

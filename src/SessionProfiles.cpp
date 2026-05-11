@@ -7,13 +7,28 @@ namespace bunker {
 namespace {
 
 constexpr char kSessionProfileFormat[] = "BPF1";
-constexpr int kCurrentSessionProfileVersion = 11;
+constexpr int kCurrentSessionProfileVersion = 12;
 
 bool HasInventoryEntry(const SessionProfile& profile, const std::string& itemId) {
     return std::any_of(
         profile.character.inventory.begin(),
         profile.character.inventory.end(),
         [&](const InventoryEntry& entry) { return entry.itemId == itemId && entry.count > 0; });
+}
+
+bool IsKnownPipDeviceId(const std::string& itemId) {
+    return itemId == "#%it_pippad" ||
+        itemId == "#%it_pipboy_1_0" ||
+        itemId == "#%it_pipboy_3000";
+}
+
+std::string FirstInventoryPipDeviceId(const SessionProfile& profile) {
+    for (const auto& item : profile.character.inventory) {
+        if (item.count > 0 && IsKnownPipDeviceId(item.itemId)) {
+            return item.itemId;
+        }
+    }
+    return {};
 }
 
 void NormalizeFirstPlayableRouteProgress(SessionProfile& profile) {
@@ -209,6 +224,19 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     profile.lanlineServices.relayCredits = std::max(0, profile.lanlineServices.relayCredits);
     profile.launcherAnnouncements.lastSeenBuildNumber = std::max(0, profile.launcherAnnouncements.lastSeenBuildNumber);
     profile.continuityAnchorVariance = std::clamp(profile.continuityAnchorVariance, 0.0f, 1.0f);
+    if (!profile.activePipDeviceId.empty() && !IsKnownPipDeviceId(profile.activePipDeviceId)) {
+        profile.activePipDeviceId.clear();
+    }
+    if (profile.activePipDeviceId.empty()) {
+        profile.activePipDeviceId = FirstInventoryPipDeviceId(profile);
+    }
+    if (profile.story.pipPadRecovered && profile.activePipDeviceId.empty()) {
+        profile.activePipDeviceId = "#%it_pippad";
+    }
+    profile.story.pipPadRecovered = profile.story.pipPadRecovered || !profile.activePipDeviceId.empty();
+    if (!profile.story.pipPadRecovered) {
+        profile.pipDeviceReselectPending = false;
+    }
     if (profile.blueLinkModuleInstalled) {
         profile.blueLinkModuleRecovered = true;
         profile.pipPadExpansionCoverPresent = false;
@@ -332,6 +360,8 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
     out << "scavenger_runs_completed=" << profile.scavengerRunsCompleted << '\n';
     out << "continuity_anchor_seeded=" << (profile.continuityAnchorSeeded ? 1 : 0) << '\n';
     out << "continuity_anchor_variance=" << profile.continuityAnchorVariance << '\n';
+    out << "active_pip_device_id=" << profile.activePipDeviceId << '\n';
+    out << "pip_device_reselect_pending=" << (profile.pipDeviceReselectPending ? 1 : 0) << '\n';
     out << "pippad_expansion_cover_present=" << (profile.pipPadExpansionCoverPresent ? 1 : 0) << '\n';
     out << "bluelink_module_recovered=" << (profile.blueLinkModuleRecovered ? 1 : 0) << '\n';
     out << "bluelink_module_installed=" << (profile.blueLinkModuleInstalled ? 1 : 0) << '\n';
@@ -508,6 +538,15 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         if (pos == std::string::npos) continue;
         const std::string key = line.substr(0, pos);
         const std::string value = line.substr(pos + 1);
+
+        if (key == "active_pip_device_id" || key == "selected_pip_device_id") {
+            outProfile.activePipDeviceId = value;
+            continue;
+        }
+        if (key == "pip_device_reselect_pending") {
+            outProfile.pipDeviceReselectPending = (std::stoi(value) != 0);
+            continue;
+        }
 
         if (key == "profile_format") {
             hasExplicitFormatHeader = (value == kSessionProfileFormat);

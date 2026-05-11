@@ -3147,15 +3147,23 @@ bool SupportsFullPipPadWorkspace(PipDeviceModel model) {
 }
 
 bool HasPipPad(const SessionProfile& profile) {
-    return profile.story.pipPadRecovered || HasInventoryItem(profile, "#%it_pippad");
+    return !profile.activePipDeviceId.empty() ||
+        profile.story.pipPadRecovered ||
+        HasInventoryItem(profile, "#%it_pippad") ||
+        HasInventoryItem(profile, "#%it_pipboy_1_0") ||
+        HasInventoryItem(profile, "#%it_pipboy_3000");
 }
 
 bool RecoverPipPad(SessionProfile& profile) {
     const bool alreadyRecovered = HasPipPad(profile);
-    if (!HasInventoryItem(profile, "#%it_pippad")) {
-        AddInventoryItem(profile, "#%it_pippad", 1, 0.8f);
+    if (profile.activePipDeviceId.empty()) {
+        profile.activePipDeviceId = "#%it_pippad";
+    }
+    if (!HasInventoryItem(profile, profile.activePipDeviceId)) {
+        AddInventoryItem(profile, profile.activePipDeviceId, 1, 0.8f);
     }
     profile.story.pipPadRecovered = true;
+    profile.pipDeviceReselectPending = false;
     return !alreadyRecovered;
 }
 
@@ -3318,7 +3326,10 @@ void SyncStoryFlagsFromWorld(SessionProfile& profile, const StaticEraser& static
     profile.story.bucketRecovered =
         profile.story.bucketRecovered || profile.firstPlayableRoute.clearanceModuleInstalled || staticEraser.IsErased("#%it_bucket_0001");
     profile.story.outerRoadCleared = profile.story.outerRoadCleared || staticEraser.IsErased("#%res_scrap_0001");
-    profile.story.pipPadRecovered = profile.story.pipPadRecovered || HasInventoryItem(profile, "#%it_pippad");
+    profile.story.pipPadRecovered = profile.story.pipPadRecovered || HasPipPad(profile);
+    if (profile.story.pipPadRecovered && profile.activePipDeviceId.empty()) {
+        profile.activePipDeviceId = "#%it_pippad";
+    }
     profile.story.tankLinked = profile.story.tankLinked || profile.partnerTank.deployed;
     profile.partnerTank.secondSeatUnlocked = profile.partnerTank.secondSeatUnlocked || profile.story.tankLinked;
     profile.partnerTank.secondSeatPolicy = NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy);
@@ -5664,22 +5675,20 @@ void HandleInteraction(const MapObject* nearest,
 
     if (nearest->registryId == "[%pip_0001]") {
         if (profile.story.pipPadRecovered) {
-            gameState.lastEvent = "Pip-Pad locker already cleared.";
+            profile.pipDeviceReselectPending = true;
+            gameState.lastEvent = "Pip-Boy cradle opened. Current device is being returned to the rack; choose another model when the swap cycle completes.";
             return;
         }
         if (!profile.firstPlayableRoute.accessCardRecovered) {
-            gameState.lastEvent = "The recovery locker is still under mechanical card-lock. Pull a bunker access card from the core service racks first.";
+            gameState.lastEvent = "The Pip-Boy/Pip-Pad selection station is still under mechanical card-lock. Pull a bunker access card from the core service racks first.";
             return;
         }
 
         RecoverPipPad(profile);
         AddInventoryItem(profile, "cryo_medkit", 1, 0.5f);
-        staticEraser.Erase(nearest->registryId);
-        staticEraser.Save(profile.selectedWorld);
-        world.RemoveObject(nearest->registryId);
         gameState.lastEvent = profile.firstPlayableRoute.prePipPadClueCount >= 2
-            ? "Pip-Pad recovered. Press TAB to open the Pip-Pad; the bunker paper trail now makes sense."
-            : "Pip-Pad recovered. Press TAB to open the Pip-Pad; the bunker paper trail is still incomplete.";
+            ? "Pip-Boy/Pip-Pad station selected the default Pip-Pad 3500. Press TAB to open the Pip-Pad; the bunker paper trail now makes sense."
+            : "Pip-Boy/Pip-Pad station selected the default Pip-Pad 3500. Press TAB to open the Pip-Pad; the bunker paper trail is still incomplete.";
         return;
     }
 
