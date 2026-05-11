@@ -199,6 +199,7 @@ bool MoveBt72HullToServiceLift(SessionProfile& profile);
 bool CanInstallBt72Core(const SessionProfile& profile);
 bool CanCompleteBt72StagedRestoration(const SessionProfile& profile);
 bool PlayerHasPipPadAccess(const SessionProfile& profile);
+bool TryToggleActivePipDeviceUi(PlayerState& player, const SessionProfile& profile, GameState& gameState);
 bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState);
 void AdvanceViewMode(PlayerState& player);
 void TryToggleBt72CrewSeat(PlayerState& player, SessionProfile& profile, GameState& gameState);

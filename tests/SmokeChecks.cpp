@@ -6952,6 +6952,71 @@ bool RunActivePipDeviceUsableAfterStationRetirementSmoke() {
             "active_pip_device_after_station_retirement expected no-device UI toggle to fail safely");
 }
 
+bool RunActivePipDeviceUiCompatibilityWrapperSmoke() {
+    auto equivalentToggleBehavior = [](const bunker::SessionProfile& profile) {
+        bunker::PlayerState activePlayer;
+        bunker::PlayerState wrapperPlayer;
+        bunker::GameState activeGameState;
+        bunker::GameState wrapperGameState;
+
+        const bool activeOpen = bunker::TryToggleActivePipDeviceUi(activePlayer, profile, activeGameState);
+        const bool wrapperOpen = bunker::TryTogglePipPadUi(wrapperPlayer, profile, wrapperGameState);
+        if (activeOpen != wrapperOpen ||
+            activePlayer.uiVisible != wrapperPlayer.uiVisible ||
+            activeGameState.lastEvent != wrapperGameState.lastEvent) {
+            return false;
+        }
+
+        const bool activeClose = bunker::TryToggleActivePipDeviceUi(activePlayer, profile, activeGameState);
+        const bool wrapperClose = bunker::TryTogglePipPadUi(wrapperPlayer, profile, wrapperGameState);
+        return activeClose == wrapperClose &&
+            activePlayer.uiVisible == wrapperPlayer.uiVisible &&
+            activeGameState.lastEvent == wrapperGameState.lastEvent;
+    };
+
+    bunker::SessionProfile pippadProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pippadProfile, "#%it_pippad");
+    pippadProfile.story.exitedBunker = true;
+    if (!Check(equivalentToggleBehavior(pippadProfile),
+            "active_pip_device_ui_wrapper_pippad expected legacy wrapper to match active-device helper")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy10Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy10Profile, "#%it_pipboy_1_0");
+    pipBoy10Profile.story.exitedBunker = true;
+    if (!Check(equivalentToggleBehavior(pipBoy10Profile),
+            "active_pip_device_ui_wrapper_pipboy_1_0 expected legacy wrapper to match active-device helper")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy3000Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy3000Profile, "#%it_pipboy_3000");
+    pipBoy3000Profile.story.exitedBunker = true;
+    if (!Check(equivalentToggleBehavior(pipBoy3000Profile),
+            "active_pip_device_ui_wrapper_pipboy_3000 expected legacy wrapper to match active-device helper")) {
+        return false;
+    }
+
+    bunker::SessionProfile noDeviceProfile = bunker::MakeDefaultSessionProfile();
+    noDeviceProfile.story.exitedBunker = true;
+    bunker::PlayerState activePlayer;
+    bunker::PlayerState wrapperPlayer;
+    activePlayer.uiVisible = true;
+    wrapperPlayer.uiVisible = true;
+    bunker::GameState activeGameState;
+    bunker::GameState wrapperGameState;
+    const bool activeResult = bunker::TryToggleActivePipDeviceUi(activePlayer, noDeviceProfile, activeGameState);
+    const bool wrapperResult = bunker::TryTogglePipPadUi(wrapperPlayer, noDeviceProfile, wrapperGameState);
+    return Check(!activeResult &&
+            !wrapperResult &&
+            !activePlayer.uiVisible &&
+            !wrapperPlayer.uiVisible &&
+            activeGameState.lastEvent == wrapperGameState.lastEvent &&
+            activeGameState.lastEvent.find("No active Pip device") != std::string::npos,
+            "active_pip_device_ui_wrapper_no_device expected matching safe rejection");
+}
+
 bool RunPipDeviceSelectionHelperContractSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     if (!Check(!bunker::HasActivePipDevice(profile) &&
@@ -7943,6 +8008,7 @@ int main() {
         RunPipDeviceReselectFlowSmoke() &&
         RunPipDeviceSelectionStationRetiresAfterBunkerExitSmoke() &&
         RunActivePipDeviceUsableAfterStationRetirementSmoke() &&
+        RunActivePipDeviceUiCompatibilityWrapperSmoke() &&
         RunPipDeviceSelectionHelperContractSmoke() &&
         RunPipDeviceItemRegistryAndStationOptionsSmoke() &&
         RunPipDeviceProfileNormalizationRegistrySmoke() &&

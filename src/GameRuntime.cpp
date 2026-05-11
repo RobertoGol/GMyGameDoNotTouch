@@ -3367,7 +3367,7 @@ std::string ActivePipDeviceUiCapabilitySummary(const SessionProfile& profile) {
     return "Field interface online.";
 }
 
-bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState) {
+bool TryToggleActivePipDeviceUi(PlayerState& player, const SessionProfile& profile, GameState& gameState) {
     if (!HasPipPad(profile)) {
         player.uiVisible = false;
         gameState.lastEvent = "No Pip-Pad linked yet. No active Pip device assigned; recover a Pip-Boy or Pip-Pad first.";
@@ -3381,6 +3381,10 @@ bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameS
         gameState.lastEvent = ActivePipDeviceDisplayName(profile) + " closed.";
     }
     return true;
+}
+
+bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState) {
+    return TryToggleActivePipDeviceUi(player, profile, gameState);
 }
 
 void AdvanceViewMode(PlayerState& player) {
