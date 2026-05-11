@@ -6329,6 +6329,133 @@ bool RunStarterScenarioIdentitySurvivesPipPadPickupRoundtripSmoke() {
     return ok;
 }
 
+bool RunLoadedStarterWorldContinuesRouteAfterPipPadPickupSmoke() {
+    const fs::path tempRoot = fs::current_path() / "loaded_starter_route_after_pippad_pickup_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "loaded_starter_route_continues_after_pippad_pickup_save_load failed to create temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    std::string duplicateId;
+    if (!Check(world.IsStarterScenarioWorld() &&
+            world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            HasV940StarterRouteRuntimeObjects(world) &&
+            !HasDuplicateRegistryIds(world, &duplicateId),
+            "loaded_starter_route_continues_after_pippad_pickup_save_load expected initial starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(bunker::HasPipPad(profile) &&
+            profile.story.pipPadRecovered &&
+            world.FindObjectByRegistryId("[%pip_0001]") == nullptr &&
+            world.IsStarterScenarioWorld() &&
+            HasV940StarterRouteRuntimeObjects(world),
+            "loaded_starter_route_continues_after_pippad_pickup_save_load expected picked Pip-Pad world to continue route")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path worldPath = tempRoot / "starter_after_pippad_pickup_continue.bwld";
+    if (!Check(world.Save(worldPath.string()),
+            "loaded_starter_route_continues_after_pippad_pickup_save_load failed to save world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(worldPath.string()),
+            "loaded_starter_route_continues_after_pippad_pickup_save_load failed to load world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+    if (!Check(loadedWorld.IsStarterScenarioWorld() &&
+            loadedWorld.FindObjectByRegistryId("[%pip_0001]") == nullptr &&
+            HasV940StarterRouteRuntimeObjects(loadedWorld) &&
+            !HasDuplicateRegistryIds(loadedWorld, &duplicateId) &&
+            StarterRouteRuntimeObjectTypesMatch(loadedWorld),
+            "loaded_starter_route_after_pippad_pickup_does_not_respawn_locker expected no Pip-Pad locker resurrection")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    auto objectById = [&](const std::string& registryId) {
+        return loadedWorld.FindObjectByRegistryId(registryId);
+    };
+
+    bunker::HandleInteraction(objectById("[%bluelink_module_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pippad_expansion_bay_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%archive_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%garage_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    if (!Check(bunker::IsBlueLinkInstalled(profile) &&
+            bunker::CanUsePipPadMediaIndex(profile) &&
+            profile.story.archiveRecovered &&
+            profile.firstPlayableRoute.bt72HullInspected &&
+            profile.firstPlayableRoute.bt72CoreRecovered &&
+            profile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            bunker::HasInventoryItem(profile, "power_cell") &&
+            bunker::HasInventoryItem(profile, "old_plate") &&
+            bunker::HasInventoryItem(profile, "repair_patch"),
+            "loaded_starter_route_continues_after_pippad_pickup_save_load expected loaded route knowledge and materials")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%hangar_power_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_control_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_path_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_hook_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_lift_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    if (!Check(profile.hangarPowerRestored &&
+            profile.bt72CraneControlOnline &&
+            profile.bt72CranePathClear &&
+            !profile.bt72HullAttachedToCrane &&
+            profile.bt72HullMovedToServiceLift &&
+            profile.bt72HullLockedInRestorationCradle,
+            "loaded_starter_route_continues_after_pippad_pickup_save_load expected loaded crane chain to lock cradle")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    if (!Check(profile.firstPlayableRoute.bt72Restored &&
+            profile.partnerTank.secondSeatUnlocked &&
+            !profile.story.tankLinked &&
+            !player.insideTank,
+            "loaded_starter_route_after_pippad_pickup_reaches_bt72_link expected restore before cockpit link")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    const bool ok = Check(player.insideTank &&
+            profile.story.tankLinked &&
+            profile.partnerTank.deployed &&
+            player.viewMode == bunker::ViewMode::Cockpit &&
+            bunker::CurrentStoryObjectivePreview(profile).find("Restore BT-72") == std::string::npos,
+            "loaded_starter_route_after_pippad_pickup_reaches_bt72_link expected cockpit link after loaded continuation");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() {
     bunker::World legacyWorld;
     legacyWorld.GeneratePrototypeZone();
@@ -6895,6 +7022,7 @@ int main() {
         RunStarterWorldRegistryIdentitySmoke() &&
         RunStarterScenarioIdentitySurvivesPipPadPickupSmoke() &&
         RunStarterScenarioIdentitySurvivesPipPadPickupRoundtripSmoke() &&
+        RunLoadedStarterWorldContinuesRouteAfterPipPadPickupSmoke() &&
         RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() &&
         RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() &&
         RunStarterRuntimeObjectSpecDriftSmoke() &&
