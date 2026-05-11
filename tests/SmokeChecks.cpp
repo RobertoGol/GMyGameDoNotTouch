@@ -6247,6 +6247,88 @@ bool RunStarterWorldRegistryIdentitySmoke() {
             "legacy_starter_upgrade_restores_route_objects_without_duplicates expected complete unique upgraded starter IDs");
 }
 
+bool RunStarterScenarioIdentitySurvivesPipPadPickupSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    if (!Check(world.IsStarterScenarioWorld() &&
+            HasRequiredFirstRouteRuntimeObjects(world) &&
+            world.FindObjectByRegistryId("[%pip_0001]") != nullptr,
+            "starter_scenario_identity_survives_pippad_pickup expected starter world with Pip-Pad locker before pickup")) {
+        return false;
+    }
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+
+    return Check(bunker::HasPipPad(profile) &&
+            profile.story.pipPadRecovered &&
+            world.FindObjectByRegistryId("[%pip_0001]") == nullptr &&
+            world.IsStarterScenarioWorld(),
+            "starter_scenario_identity_survives_pippad_pickup expected removable Pip-Pad locker not to define starter identity");
+}
+
+bool RunStarterScenarioIdentitySurvivesPipPadPickupRoundtripSmoke() {
+    const fs::path tempRoot = fs::current_path() / "starter_identity_after_pippad_pickup_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "starter_scenario_identity_survives_pippad_pickup_roundtrip failed to create temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+
+    if (!Check(world.FindObjectByRegistryId("[%pip_0001]") == nullptr,
+            "starter_scenario_identity_survives_pippad_pickup_roundtrip expected Pip-Pad locker removed before save")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path worldPath = tempRoot / "starter_after_pippad_pickup.bwld";
+    if (!Check(world.Save(worldPath.string()),
+            "starter_scenario_identity_survives_pippad_pickup_roundtrip failed to save starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(worldPath.string()),
+            "starter_scenario_identity_survives_pippad_pickup_roundtrip failed to load starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+
+    std::string duplicateId;
+    const bool ok = Check(loadedWorld.IsStarterScenarioWorld() &&
+            loadedWorld.FindObjectByRegistryId("[%pip_0001]") == nullptr &&
+            HasV940StarterRouteRuntimeObjects(loadedWorld) &&
+            !HasDuplicateRegistryIds(loadedWorld, &duplicateId),
+            "starter_scenario_identity_survives_pippad_pickup_roundtrip expected picked starter world identity and route objects") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%pip_0001]") == nullptr,
+            "starter_infrastructure_does_not_respawn_picked_pippad_locker expected no Pip-Pad locker resurrection");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() {
     bunker::World legacyWorld;
     legacyWorld.GeneratePrototypeZone();
@@ -6811,6 +6893,8 @@ int main() {
         RunStarterWorldFirstRouteObjectAvailabilitySmoke() &&
         RunStarterWorldFirstPlayableRouteSmoke() &&
         RunStarterWorldRegistryIdentitySmoke() &&
+        RunStarterScenarioIdentitySurvivesPipPadPickupSmoke() &&
+        RunStarterScenarioIdentitySurvivesPipPadPickupRoundtripSmoke() &&
         RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() &&
         RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() &&
         RunStarterRuntimeObjectSpecDriftSmoke() &&

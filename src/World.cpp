@@ -2142,7 +2142,6 @@ bool World::HasLinkTarget(const std::string& linkTarget) const {
 
 bool World::IsStarterScenarioWorld() const {
     return HasObject("[%cryo_0001]") &&
-        HasObject("[%pip_0001]") &&
         HasObject("[%archive_0001]") &&
         HasObject("[#tr_hull_0001]");
 }
