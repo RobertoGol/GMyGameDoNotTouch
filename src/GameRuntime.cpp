@@ -3286,6 +3286,51 @@ bool IsPipDeviceSelectionStationRetired(const SessionProfile& profile) {
         profile.story.returnedToBase;
 }
 
+std::string ActivePipDeviceCustomizationSummary(const SessionProfile& profile) {
+    auto themeLabel = [](std::string_view themeId) {
+        if (themeId == "amber") return "amber theme";
+        if (themeId == "monochrome") return "monochrome theme";
+        if (themeId == "high_contrast") return "high-contrast theme";
+        return "classic green theme";
+    };
+    auto displayLabel = [](std::string_view displayMode) {
+        if (displayMode == "readable") return "readable display";
+        if (displayMode == "compact") return "compact display";
+        return "standard display";
+    };
+    auto carryLabel = [](std::string_view carryMode) {
+        if (carryMode == "wrist") return "wrist mode";
+        if (carryMode == "handheld") return "handheld mode";
+        return "auto carry mode";
+    };
+
+    return std::string("Active config: ") +
+        themeLabel(profile.pipDeviceThemeId) + ", " +
+        displayLabel(profile.pipDeviceDisplayMode) + ", " +
+        carryLabel(profile.pipDeviceCarryMode) + ".";
+}
+
+bool SetActivePipDeviceCustomization(SessionProfile& profile,
+    std::string_view themeId,
+    std::string_view displayMode,
+    std::string_view carryMode) {
+    SessionProfile normalizedProfile = profile;
+    normalizedProfile.pipDeviceThemeId = std::string(themeId);
+    normalizedProfile.pipDeviceDisplayMode = std::string(displayMode);
+    normalizedProfile.pipDeviceCarryMode = std::string(carryMode);
+    NormalizePipDeviceCustomization(normalizedProfile);
+    if (normalizedProfile.pipDeviceThemeId != std::string(themeId) ||
+        normalizedProfile.pipDeviceDisplayMode != std::string(displayMode) ||
+        normalizedProfile.pipDeviceCarryMode != std::string(carryMode)) {
+        return false;
+    }
+
+    profile.pipDeviceThemeId = normalizedProfile.pipDeviceThemeId;
+    profile.pipDeviceDisplayMode = normalizedProfile.pipDeviceDisplayMode;
+    profile.pipDeviceCarryMode = normalizedProfile.pipDeviceCarryMode;
+    return true;
+}
+
 bool IsSelectablePipDevice(PipDeviceModel model) {
     return GetPipDeviceCapabilities(model).selectable;
 }
@@ -3376,7 +3421,9 @@ bool TryToggleActivePipDeviceUi(PlayerState& player, const SessionProfile& profi
 
     player.uiVisible = !player.uiVisible;
     if (player.uiVisible) {
-        gameState.lastEvent = ActivePipDeviceDisplayName(profile) + " opened. " + ActivePipDeviceUiCapabilitySummary(profile);
+        gameState.lastEvent = ActivePipDeviceDisplayName(profile) + " opened. " +
+            ActivePipDeviceUiCapabilitySummary(profile) + " " +
+            ActivePipDeviceCustomizationSummary(profile);
     } else {
         gameState.lastEvent = ActivePipDeviceDisplayName(profile) + " closed.";
     }

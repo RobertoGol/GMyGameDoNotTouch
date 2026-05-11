@@ -586,9 +586,12 @@ bool RunProfileMigrationContractSmoke() {
 
     const std::string savedText = ReadTextFile(currentPath);
     const bool ok = Check(ContainsText(savedText, "profile_format=BPF1\n") &&
-            ContainsText(savedText, "profile_version=12\n") &&
+            ContainsText(savedText, "profile_version=13\n") &&
             ContainsText(savedText, "active_pip_device_id=") &&
             ContainsText(savedText, "pip_device_reselect_pending=") &&
+            ContainsText(savedText, "pip_device_theme_id=") &&
+            ContainsText(savedText, "pip_device_display_mode=") &&
+            ContainsText(savedText, "pip_device_carry_mode=") &&
             ContainsText(savedText, "pippad_expansion_cover_present=") &&
             ContainsText(savedText, "bluelink_module_recovered=") &&
             ContainsText(savedText, "bluelink_module_installed=") &&
@@ -598,7 +601,7 @@ bool RunProfileMigrationContractSmoke() {
             ContainsText(savedText, "bt72_hull_attached_to_crane=") &&
             ContainsText(savedText, "bt72_hull_moved_to_service_lift=") &&
             ContainsText(savedText, "bt72_hull_locked_in_restoration_cradle="),
-            "profile_migration_current_save_writes_bluelink_and_crane_keys expected current keys");
+            "profile_migration_current_save_writes_bluelink_crane_and_pip_customization_keys expected current keys");
 
     fs::remove_all(tempRoot, ec);
     return ok;
@@ -7017,6 +7020,107 @@ bool RunActivePipDeviceUiCompatibilityWrapperSmoke() {
             "active_pip_device_ui_wrapper_no_device expected matching safe rejection");
 }
 
+bool RunActivePipDeviceCustomizationStateSmoke() {
+    bunker::SessionProfile defaultProfile = bunker::MakeDefaultSessionProfile();
+    bunker::NormalizeSessionProfile(defaultProfile);
+    if (!Check(defaultProfile.pipDeviceThemeId == "classic_green" &&
+            defaultProfile.pipDeviceDisplayMode == "standard" &&
+            defaultProfile.pipDeviceCarryMode == "auto" &&
+            bunker::ActivePipDeviceCustomizationSummary(defaultProfile).find("classic green theme") != std::string::npos,
+            "active_pip_device_customization_defaults expected safe default config after normalization")) {
+        return false;
+    }
+
+    bunker::SessionProfile invalidProfile = bunker::MakeDefaultSessionProfile();
+    invalidProfile.pipDeviceThemeId = "consumer_rgb";
+    invalidProfile.pipDeviceDisplayMode = "cinematic";
+    invalidProfile.pipDeviceCarryMode = "drone";
+    bunker::NormalizePipDeviceCustomization(invalidProfile);
+    if (!Check(invalidProfile.pipDeviceThemeId == "classic_green" &&
+            invalidProfile.pipDeviceDisplayMode == "standard" &&
+            invalidProfile.pipDeviceCarryMode == "auto",
+            "active_pip_device_customization_invalid_values_normalize_to_defaults expected invalid config to reset")) {
+        return false;
+    }
+
+    bunker::SessionProfile configuredProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(configuredProfile, "#%it_pipboy_3000");
+    if (!Check(bunker::SetActivePipDeviceCustomization(configuredProfile, "amber", "readable", "handheld") &&
+            configuredProfile.pipDeviceThemeId == "amber" &&
+            configuredProfile.pipDeviceDisplayMode == "readable" &&
+            configuredProfile.pipDeviceCarryMode == "handheld",
+            "active_pip_device_customization_set_valid expected valid customization to apply")) {
+        return false;
+    }
+    if (!Check(!bunker::SetActivePipDeviceCustomization(configuredProfile, "consumer_rgb", "readable", "handheld") &&
+            configuredProfile.pipDeviceThemeId == "amber" &&
+            configuredProfile.pipDeviceDisplayMode == "readable" &&
+            configuredProfile.pipDeviceCarryMode == "handheld",
+            "active_pip_device_customization_reject_invalid expected invalid customization not to mutate profile")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "active_pip_device_customization_state_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "active_pip_device_customization_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(configuredProfile, profilePath);
+    if (!Check(saveStatus.ok, "active_pip_device_customization_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "active_pip_device_customization_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(loadedProfile.activePipDeviceId == "#%it_pipboy_3000" &&
+            loadedProfile.pipDeviceThemeId == "amber" &&
+            loadedProfile.pipDeviceDisplayMode == "readable" &&
+            loadedProfile.pipDeviceCarryMode == "handheld",
+            "active_pip_device_customization_save_load expected customization to persist")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    loadedProfile.story.exitedBunker = true;
+    const std::string themeBeforeStation = loadedProfile.pipDeviceThemeId;
+    const std::string displayBeforeStation = loadedProfile.pipDeviceDisplayMode;
+    const std::string carryBeforeStation = loadedProfile.pipDeviceCarryMode;
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, loadedProfile, staticEraser, gameState);
+    if (!Check(loadedProfile.pipDeviceThemeId == themeBeforeStation &&
+            loadedProfile.pipDeviceDisplayMode == displayBeforeStation &&
+            loadedProfile.pipDeviceCarryMode == carryBeforeStation &&
+            gameState.lastEvent.find("display-only") != std::string::npos,
+            "active_pip_device_customization_station_retired_no_mutation expected retired station not to change customization")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    if (!Check(bunker::TryToggleActivePipDeviceUi(player, loadedProfile, gameState) &&
+            player.uiVisible &&
+            gameState.lastEvent.find("Pip-Boy 3000 / Mark IV") != std::string::npos &&
+            gameState.lastEvent.find("Active config: amber theme, readable display, handheld mode.") != std::string::npos,
+            "active_pip_device_customization_ui_summary expected active config summary after station retirement")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    fs::remove_all(tempRoot, ec);
+    return true;
+}
+
 bool RunPipDeviceSelectionHelperContractSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     if (!Check(!bunker::HasActivePipDevice(profile) &&
@@ -8009,6 +8113,7 @@ int main() {
         RunPipDeviceSelectionStationRetiresAfterBunkerExitSmoke() &&
         RunActivePipDeviceUsableAfterStationRetirementSmoke() &&
         RunActivePipDeviceUiCompatibilityWrapperSmoke() &&
+        RunActivePipDeviceCustomizationStateSmoke() &&
         RunPipDeviceSelectionHelperContractSmoke() &&
         RunPipDeviceItemRegistryAndStationOptionsSmoke() &&
         RunPipDeviceProfileNormalizationRegistrySmoke() &&

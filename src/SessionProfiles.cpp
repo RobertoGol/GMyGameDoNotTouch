@@ -7,7 +7,7 @@ namespace bunker {
 namespace {
 
 constexpr char kSessionProfileFormat[] = "BPF1";
-constexpr int kCurrentSessionProfileVersion = 12;
+constexpr int kCurrentSessionProfileVersion = 13;
 
 bool HasInventoryEntry(const SessionProfile& profile, const std::string& itemId) {
     return std::any_of(
@@ -23,6 +23,25 @@ std::string FirstInventoryPipDeviceId(const SessionProfile& profile) {
         }
     }
     return {};
+}
+
+bool IsKnownPipDeviceThemeId(std::string_view themeId) {
+    return themeId == "classic_green" ||
+        themeId == "amber" ||
+        themeId == "monochrome" ||
+        themeId == "high_contrast";
+}
+
+bool IsKnownPipDeviceDisplayMode(std::string_view displayMode) {
+    return displayMode == "standard" ||
+        displayMode == "readable" ||
+        displayMode == "compact";
+}
+
+bool IsKnownPipDeviceCarryMode(std::string_view carryMode) {
+    return carryMode == "auto" ||
+        carryMode == "wrist" ||
+        carryMode == "handheld";
 }
 
 void NormalizeFirstPlayableRouteProgress(SessionProfile& profile) {
@@ -194,6 +213,18 @@ void NormalizeWorldFieldState(WorldFieldState& state) {
     }
 }
 
+void NormalizePipDeviceCustomization(SessionProfile& profile) {
+    if (!IsKnownPipDeviceThemeId(profile.pipDeviceThemeId)) {
+        profile.pipDeviceThemeId = "classic_green";
+    }
+    if (!IsKnownPipDeviceDisplayMode(profile.pipDeviceDisplayMode)) {
+        profile.pipDeviceDisplayMode = "standard";
+    }
+    if (!IsKnownPipDeviceCarryMode(profile.pipDeviceCarryMode)) {
+        profile.pipDeviceCarryMode = "auto";
+    }
+}
+
 void NormalizeSessionProfile(SessionProfile& profile) {
     profile.selectedWorld = NormalizeWorldReference(profile.selectedWorld);
     profile.fieldCheckpointWorld = profile.fieldCheckpointWorld.empty()
@@ -218,6 +249,7 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     profile.lanlineServices.relayCredits = std::max(0, profile.lanlineServices.relayCredits);
     profile.launcherAnnouncements.lastSeenBuildNumber = std::max(0, profile.launcherAnnouncements.lastSeenBuildNumber);
     profile.continuityAnchorVariance = std::clamp(profile.continuityAnchorVariance, 0.0f, 1.0f);
+    NormalizePipDeviceCustomization(profile);
     if (!profile.activePipDeviceId.empty() && !IsCanonicalPipDeviceItemId(profile.activePipDeviceId)) {
         profile.activePipDeviceId.clear();
     }
@@ -356,6 +388,9 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
     out << "continuity_anchor_variance=" << profile.continuityAnchorVariance << '\n';
     out << "active_pip_device_id=" << profile.activePipDeviceId << '\n';
     out << "pip_device_reselect_pending=" << (profile.pipDeviceReselectPending ? 1 : 0) << '\n';
+    out << "pip_device_theme_id=" << profile.pipDeviceThemeId << '\n';
+    out << "pip_device_display_mode=" << profile.pipDeviceDisplayMode << '\n';
+    out << "pip_device_carry_mode=" << profile.pipDeviceCarryMode << '\n';
     out << "pippad_expansion_cover_present=" << (profile.pipPadExpansionCoverPresent ? 1 : 0) << '\n';
     out << "bluelink_module_recovered=" << (profile.blueLinkModuleRecovered ? 1 : 0) << '\n';
     out << "bluelink_module_installed=" << (profile.blueLinkModuleInstalled ? 1 : 0) << '\n';
@@ -539,6 +574,18 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         }
         if (key == "pip_device_reselect_pending") {
             outProfile.pipDeviceReselectPending = (std::stoi(value) != 0);
+            continue;
+        }
+        if (key == "pip_device_theme_id" || key == "active_pip_device_theme_id") {
+            outProfile.pipDeviceThemeId = value;
+            continue;
+        }
+        if (key == "pip_device_display_mode" || key == "active_pip_device_display_mode") {
+            outProfile.pipDeviceDisplayMode = value;
+            continue;
+        }
+        if (key == "pip_device_carry_mode" || key == "pip_device_wrist_mode") {
+            outProfile.pipDeviceCarryMode = value;
             continue;
         }
 

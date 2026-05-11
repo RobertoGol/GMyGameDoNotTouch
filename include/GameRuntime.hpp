@@ -180,6 +180,11 @@ std::string ActivePipDeviceDisplayName(const SessionProfile& profile);
 std::vector<PipDeviceSelectionOption> BuildPipDeviceSelectionOptions(const SessionProfile& profile);
 bool CompletePipDeviceReselect(SessionProfile& profile, std::string_view deviceId);
 bool IsPipDeviceSelectionStationRetired(const SessionProfile& profile);
+std::string ActivePipDeviceCustomizationSummary(const SessionProfile& profile);
+bool SetActivePipDeviceCustomization(SessionProfile& profile,
+    std::string_view themeId,
+    std::string_view displayMode,
+    std::string_view carryMode);
 bool IsSelectablePipDevice(PipDeviceModel model);
 bool IsPropOnlyPipDevice(PipDeviceModel model);
 bool HasDigitalMap(PipDeviceModel model);

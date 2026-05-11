@@ -429,6 +429,9 @@ struct SessionProfile {
     float continuityAnchorVariance = 0.0f;
     std::string activePipDeviceId{};
     bool pipDeviceReselectPending = false;
+    std::string pipDeviceThemeId = "classic_green";
+    std::string pipDeviceDisplayMode = "standard";
+    std::string pipDeviceCarryMode = "auto";
     bool pipPadExpansionCoverPresent = true;
     bool blueLinkModuleRecovered = false;
     bool blueLinkModuleInstalled = false;
@@ -799,6 +802,7 @@ inline std::string CurrentTankSyncMode(const PartnerTankProfile& tank) {
 
 SessionProfile MakeDefaultSessionProfile();
 void NormalizeWorldFieldState(WorldFieldState& state);
+void NormalizePipDeviceCustomization(SessionProfile& profile);
 void NormalizeSessionProfile(SessionProfile& profile);
 bool SeedContinuityAnchorAfterBunkerAnomaly(SessionProfile& profile, std::string* diagnosticText = nullptr);
 std::string ContinuityAnchorDiagnostic(const SessionProfile& profile);
