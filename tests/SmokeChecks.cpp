@@ -6219,6 +6219,52 @@ bool RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() {
             "starter_infrastructure_upgrade_is_idempotent expected second infrastructure pass not to duplicate objects");
 }
 
+bool RunStarterRuntimeObjectSpecDriftSmoke() {
+    bunker::World freshWorld;
+    freshWorld.GeneratePrototypeZone();
+    freshWorld.EnsureStarterInfrastructure();
+
+    bunker::World legacyUpgradedWorld;
+    legacyUpgradedWorld.GeneratePrototypeZone();
+    for (const auto& registryId : V940StarterRouteRuntimeObjectIds()) {
+        legacyUpgradedWorld.RemoveObject(registryId);
+    }
+    legacyUpgradedWorld.EnsureStarterInfrastructure();
+
+    const auto nearlyEqual = [](float lhs, float rhs) {
+        return std::abs(lhs - rhs) < 0.001f;
+    };
+    const auto specsMatch = [&](const bunker::MapObject& fresh, const bunker::MapObject& upgraded) {
+        return fresh.displayName == upgraded.displayName &&
+            fresh.interaction == upgraded.interaction &&
+            fresh.category == upgraded.category &&
+            nearlyEqual(fresh.x, upgraded.x) &&
+            nearlyEqual(fresh.y, upgraded.y) &&
+            nearlyEqual(fresh.z, upgraded.z) &&
+            nearlyEqual(fresh.width, upgraded.width) &&
+            nearlyEqual(fresh.depth, upgraded.depth) &&
+            nearlyEqual(fresh.height, upgraded.height) &&
+            nearlyEqual(fresh.health, upgraded.health) &&
+            fresh.blocksMovement == upgraded.blocksMovement &&
+            fresh.discovered == upgraded.discovered &&
+            fresh.manualLoot == upgraded.manualLoot &&
+            fresh.scriptTag == upgraded.scriptTag &&
+            fresh.linkTarget == upgraded.linkTarget;
+    };
+
+    for (const auto& registryId : V940StarterRouteRuntimeObjectIds()) {
+        const auto* freshObject = freshWorld.FindObjectByRegistryId(registryId);
+        const auto* upgradedObject = legacyUpgradedWorld.FindObjectByRegistryId(registryId);
+        if (!Check(freshObject != nullptr && upgradedObject != nullptr &&
+                specsMatch(*freshObject, *upgradedObject),
+                "starter_runtime_object_specs_match_between_fresh_and_legacy_upgrade expected matching object spec for " + registryId)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool RunLoadedStarterWorldFirstPlayableRouteSmoke() {
     const fs::path tempRoot = fs::current_path() / "loaded_starter_world_route_smoke";
     std::error_code ec;
@@ -6673,6 +6719,7 @@ int main() {
         RunStarterWorldFirstPlayableRouteSmoke() &&
         RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() &&
         RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() &&
+        RunStarterRuntimeObjectSpecDriftSmoke() &&
         RunLoadedStarterWorldFirstPlayableRouteSmoke() &&
         RunFirstPlayableRouteEndToEndSmoke() &&
         RunPipPadAccessGatingSmoke();
