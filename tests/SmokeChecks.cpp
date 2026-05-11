@@ -28,6 +28,7 @@
 #include <initializer_list>
 #include <iostream>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -54,6 +55,19 @@ bool Check(bool condition, const std::string& message) {
         return false;
     }
     return true;
+}
+
+bool HasDuplicateRegistryIds(const bunker::World& world, std::string* duplicateId = nullptr) {
+    std::unordered_set<std::string> seen;
+    for (const auto& object : world.objects) {
+        if (!seen.insert(object.registryId).second) {
+            if (duplicateId != nullptr) {
+                *duplicateId = object.registryId;
+            }
+            return true;
+        }
+    }
+    return false;
 }
 
 bool WriteTextFile(const fs::path& path, const std::string& text) {
@@ -6194,6 +6208,45 @@ bool RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() {
     return ok;
 }
 
+bool RunStarterWorldRegistryIdentitySmoke() {
+    std::string duplicateId;
+
+    bunker::World freshWorld;
+    freshWorld.GeneratePrototypeZone();
+    freshWorld.EnsureStarterInfrastructure();
+    if (!Check(freshWorld.IsStarterScenarioWorld() &&
+            !HasDuplicateRegistryIds(freshWorld, &duplicateId) &&
+            HasRequiredFirstRouteRuntimeObjects(freshWorld) &&
+            HasV940StarterRouteRuntimeObjects(freshWorld) &&
+            StarterRouteRuntimeObjectTypesMatch(freshWorld),
+            "starter_world_registry_ids_unique_after_generation expected unique complete starter IDs")) {
+        return false;
+    }
+
+    const auto countBefore = freshWorld.objects.size();
+    freshWorld.EnsureStarterInfrastructure();
+    freshWorld.EnsureStarterInfrastructure();
+    if (!Check(freshWorld.objects.size() == countBefore &&
+            !HasDuplicateRegistryIds(freshWorld, &duplicateId) &&
+            HasRequiredFirstRouteRuntimeObjects(freshWorld),
+            "starter_world_infrastructure_idempotent_without_duplicates expected stable object count and unique IDs")) {
+        return false;
+    }
+
+    bunker::World legacyWorld;
+    legacyWorld.GeneratePrototypeZone();
+    for (const auto& registryId : V940StarterRouteRuntimeObjectIds()) {
+        legacyWorld.RemoveObject(registryId);
+    }
+    legacyWorld.EnsureStarterInfrastructure();
+    legacyWorld.EnsureStarterInfrastructure();
+    return Check(!HasDuplicateRegistryIds(legacyWorld, &duplicateId) &&
+            HasRequiredFirstRouteRuntimeObjects(legacyWorld) &&
+            HasV940StarterRouteRuntimeObjects(legacyWorld) &&
+            StarterRouteRuntimeObjectTypesMatch(legacyWorld),
+            "legacy_starter_upgrade_restores_route_objects_without_duplicates expected complete unique upgraded starter IDs");
+}
+
 bool RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() {
     bunker::World legacyWorld;
     legacyWorld.GeneratePrototypeZone();
@@ -6263,6 +6316,46 @@ bool RunStarterRuntimeObjectSpecDriftSmoke() {
     }
 
     return true;
+}
+
+bool RunStarterWorldRegistryIdentityRoundtripSmoke() {
+    const fs::path tempRoot = fs::current_path() / "starter_world_registry_identity_roundtrip_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "starter_world_registry_identity_persists_after_save_load failed to create temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    const fs::path worldPath = tempRoot / "starter_registry_identity.bwld";
+    if (!Check(world.Save(worldPath.string()),
+            "starter_world_registry_identity_persists_after_save_load failed to save starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(worldPath.string()),
+            "starter_world_registry_identity_persists_after_save_load failed to load starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+    const auto countAfterFirstEnsure = loadedWorld.objects.size();
+    loadedWorld.EnsureStarterInfrastructure();
+
+    std::string duplicateId;
+    const bool ok = Check(loadedWorld.objects.size() == countAfterFirstEnsure &&
+            !HasDuplicateRegistryIds(loadedWorld, &duplicateId) &&
+            HasRequiredFirstRouteRuntimeObjects(loadedWorld) &&
+            StarterRouteRuntimeObjectTypesMatch(loadedWorld),
+            "starter_world_registry_identity_persists_after_save_load expected stable unique loaded starter IDs");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
 }
 
 bool RunLoadedStarterWorldFirstPlayableRouteSmoke() {
@@ -6717,9 +6810,11 @@ int main() {
         RunBt72ServiceNotesAndPatchRuntimeSmoke() &&
         RunStarterWorldFirstRouteObjectAvailabilitySmoke() &&
         RunStarterWorldFirstPlayableRouteSmoke() &&
+        RunStarterWorldRegistryIdentitySmoke() &&
         RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() &&
         RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() &&
         RunStarterRuntimeObjectSpecDriftSmoke() &&
+        RunStarterWorldRegistryIdentityRoundtripSmoke() &&
         RunLoadedStarterWorldFirstPlayableRouteSmoke() &&
         RunFirstPlayableRouteEndToEndSmoke() &&
         RunPipPadAccessGatingSmoke();
