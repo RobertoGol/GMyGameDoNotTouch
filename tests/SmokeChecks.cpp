@@ -6851,6 +6851,87 @@ bool RunPipDeviceSelectionHelperContractSmoke() {
     return ok;
 }
 
+bool RunActivePipDeviceCapabilityRulesSmoke() {
+    bunker::SessionProfile defaultProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(defaultProfile, "#%it_pippad");
+    defaultProfile.blueLinkModuleRecovered = true;
+    if (!Check(bunker::InstallBlueLinkModule(defaultProfile) &&
+            bunker::CanUsePipPadMediaIndex(defaultProfile) &&
+            bunker::ActivePipDeviceSupportsMediaIndex(defaultProfile) &&
+            bunker::ActivePipDeviceSupportsFullWorkspace(defaultProfile) &&
+            bunker::ActivePipDeviceHasDigitalMap(defaultProfile),
+            "active_pip_device_capabilities_default_pippad_expected_media_workspace_and_map")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy10Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy10Profile, "#%it_pipboy_1_0");
+    pipBoy10Profile.blueLinkModuleRecovered = true;
+    if (!Check(bunker::InstallBlueLinkModule(pipBoy10Profile) &&
+            bunker::IsBlueLinkInstalled(pipBoy10Profile) &&
+            !bunker::CanUsePipPadMediaIndex(pipBoy10Profile) &&
+            !bunker::ActivePipDeviceSupportsMediaIndex(pipBoy10Profile) &&
+            !bunker::ActivePipDeviceHasDigitalMap(pipBoy10Profile) &&
+            bunker::ActivePipDeviceUsesPhysicalNavigation(pipBoy10Profile),
+            "active_pip_device_capabilities_pipboy_1_0_expected_no_media_index")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy3000Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy3000Profile, "#%it_pipboy_3000");
+    pipBoy3000Profile.blueLinkModuleRecovered = true;
+    if (!Check(bunker::InstallBlueLinkModule(pipBoy3000Profile) &&
+            bunker::CanUsePipPadMediaIndex(pipBoy3000Profile) &&
+            bunker::ActivePipDeviceSupportsMediaIndex(pipBoy3000Profile) &&
+            bunker::ActivePipDeviceHasDigitalMap(pipBoy3000Profile) &&
+            !bunker::ActivePipDeviceSupportsFullWorkspace(pipBoy3000Profile),
+            "active_pip_device_capabilities_pipboy_3000_expected_media_and_map_without_full_workspace")) {
+        return false;
+    }
+
+    bunker::SessionProfile invalidProfile = bunker::MakeDefaultSessionProfile();
+    invalidProfile.story.pipPadRecovered = true;
+    invalidProfile.activePipDeviceId = "#%it_consumer_tablet";
+    invalidProfile.blueLinkModuleRecovered = true;
+    invalidProfile.blueLinkModuleInstalled = true;
+    invalidProfile.pipPadExpansionCoverPresent = false;
+    if (!Check(!bunker::ActivePipDeviceSupportsMediaIndex(invalidProfile) &&
+            !bunker::ActivePipDeviceHasDigitalMap(invalidProfile) &&
+            !bunker::CanUsePipPadMediaIndex(invalidProfile),
+            "active_pip_device_capabilities_invalid_id_expected_safe_empty_capabilities")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "active_pip_device_capability_rules_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "active_pip_device_capabilities_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(pipBoy3000Profile, profilePath);
+    if (!Check(saveStatus.ok, "active_pip_device_capabilities_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "active_pip_device_capabilities_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(loadedProfile.activePipDeviceId == "#%it_pipboy_3000" &&
+            bunker::CanUsePipPadMediaIndex(loadedProfile) &&
+            bunker::ActivePipDeviceHasDigitalMap(loadedProfile) &&
+            !bunker::ActivePipDeviceSupportsFullWorkspace(loadedProfile),
+            "active_pip_device_capabilities_save_load expected active device capability behavior to persist");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() {
     bunker::World legacyWorld;
     legacyWorld.GeneratePrototypeZone();
@@ -7423,6 +7504,7 @@ int main() {
         RunPipDeviceSelectionStationRoundtripSmoke() &&
         RunPipDeviceReselectFlowSmoke() &&
         RunPipDeviceSelectionHelperContractSmoke() &&
+        RunActivePipDeviceCapabilityRulesSmoke() &&
         RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() &&
         RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() &&
         RunStarterRuntimeObjectSpecDriftSmoke() &&

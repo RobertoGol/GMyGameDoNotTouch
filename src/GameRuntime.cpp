@@ -3128,6 +3128,46 @@ bool IsKnownPipDeviceId(std::string_view deviceId) {
         deviceId == "#%it_pipboy_3000";
 }
 
+bool TryGetPipDeviceModelForId(std::string_view deviceId, PipDeviceModel& outModel) {
+    if (deviceId == "#%it_pippad") {
+        outModel = PipDeviceModel::PipPad3500;
+        return true;
+    }
+    if (deviceId == "#%it_pipboy_1_0") {
+        outModel = PipDeviceModel::PipBoy10;
+        return true;
+    }
+    if (deviceId == "#%it_pipboy_3000") {
+        outModel = PipDeviceModel::PipBoy3000MarkIV;
+        return true;
+    }
+    return false;
+}
+
+PipDeviceCapabilities ActivePipDeviceCapabilities(const SessionProfile& profile) {
+    PipDeviceModel model = PipDeviceModel::PipPad3500;
+    if (!TryGetPipDeviceModelForId(profile.activePipDeviceId, model)) {
+        return {};
+    }
+    return GetPipDeviceCapabilities(model);
+}
+
+bool ActivePipDeviceSupportsMediaIndex(const SessionProfile& profile) {
+    return ActivePipDeviceCapabilities(profile).supportsMediaIndex;
+}
+
+bool ActivePipDeviceSupportsFullWorkspace(const SessionProfile& profile) {
+    return ActivePipDeviceCapabilities(profile).supportsFullPipPadWorkspace;
+}
+
+bool ActivePipDeviceHasDigitalMap(const SessionProfile& profile) {
+    return ActivePipDeviceCapabilities(profile).hasDigitalMap;
+}
+
+bool ActivePipDeviceUsesPhysicalNavigation(const SessionProfile& profile) {
+    return ActivePipDeviceCapabilities(profile).physicalNavigationOnly;
+}
+
 std::string ActivePipDeviceIdOrDefault(const SessionProfile& profile) {
     if (IsKnownPipDeviceId(profile.activePipDeviceId)) {
         return profile.activePipDeviceId;
@@ -3240,7 +3280,8 @@ bool InstallBlueLinkModule(SessionProfile& profile) {
 }
 
 bool CanUsePipPadMediaIndex(const SessionProfile& profile) {
-    return IsBlueLinkInstalled(profile);
+    return IsBlueLinkInstalled(profile) &&
+        ActivePipDeviceSupportsMediaIndex(profile);
 }
 
 bool PlayerHasPipPadAccess(const SessionProfile& profile) {

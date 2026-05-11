@@ -154,6 +154,12 @@ struct PipDeviceCapabilities {
 PipDeviceCapabilities GetPipDeviceCapabilities(PipDeviceModel model);
 const char* DeviceDisplayName(PipDeviceModel model);
 bool IsKnownPipDeviceId(std::string_view deviceId);
+bool TryGetPipDeviceModelForId(std::string_view deviceId, PipDeviceModel& outModel);
+PipDeviceCapabilities ActivePipDeviceCapabilities(const SessionProfile& profile);
+bool ActivePipDeviceSupportsMediaIndex(const SessionProfile& profile);
+bool ActivePipDeviceSupportsFullWorkspace(const SessionProfile& profile);
+bool ActivePipDeviceHasDigitalMap(const SessionProfile& profile);
+bool ActivePipDeviceUsesPhysicalNavigation(const SessionProfile& profile);
 std::string ActivePipDeviceIdOrDefault(const SessionProfile& profile);
 bool HasActivePipDevice(const SessionProfile& profile);
 bool SelectPipDevice(SessionProfile& profile, std::string_view deviceId);
