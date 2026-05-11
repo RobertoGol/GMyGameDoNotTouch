@@ -179,6 +179,7 @@ bool BeginPipDeviceReselect(SessionProfile& profile);
 std::string ActivePipDeviceDisplayName(const SessionProfile& profile);
 std::vector<PipDeviceSelectionOption> BuildPipDeviceSelectionOptions(const SessionProfile& profile);
 bool CompletePipDeviceReselect(SessionProfile& profile, std::string_view deviceId);
+bool IsPipDeviceSelectionStationRetired(const SessionProfile& profile);
 bool IsSelectablePipDevice(PipDeviceModel model);
 bool IsPropOnlyPipDevice(PipDeviceModel model);
 bool HasDigitalMap(PipDeviceModel model);

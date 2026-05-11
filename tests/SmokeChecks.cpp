@@ -6767,6 +6767,102 @@ bool RunPipDeviceReselectFlowSmoke() {
             "pip_device_reselect_flow expected route to continue through BlueLink/archive/BT-72 after reselect flow");
 }
 
+bool RunPipDeviceSelectionStationRetiresAfterBunkerExitSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    auto objectById = [&](const std::string& registryId) {
+        return world.FindObjectByRegistryId(registryId);
+    };
+
+    if (!Check(!bunker::IsPipDeviceSelectionStationRetired(profile),
+            "pip_device_station_retired_after_exit expected fresh profile to keep station active")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.activePipDeviceId == "#%it_pippad" &&
+            bunker::HasActivePipDevice(profile) &&
+            bunker::PlayerHasPipPadAccess(profile) &&
+            world.FindObjectByRegistryId("[%pip_0001]") != nullptr,
+            "pip_device_station_retired_after_exit expected station to select default device before bunker exit")) {
+        return false;
+    }
+
+    const std::string activeBeforeRetiredInteraction = profile.activePipDeviceId;
+    const int pipPadCountBeforeRetiredInteraction = CountInventoryItem(profile, "#%it_pippad");
+    profile.story.exitedBunker = true;
+    profile.pipDeviceReselectPending = false;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(profile),
+            "pip_device_station_retired_after_exit expected story exit to retire station")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            profile.activePipDeviceId == activeBeforeRetiredInteraction &&
+            CountInventoryItem(profile, "#%it_pippad") == pipPadCountBeforeRetiredInteraction &&
+            !profile.pipDeviceReselectPending &&
+            bunker::HasActivePipDevice(profile) &&
+            bunker::PlayerHasPipPadAccess(profile) &&
+            gameState.lastEvent.find("display-only") != std::string::npos,
+            "pip_device_station_retired_after_exit expected retired station to remain visual-only without profile mutation")) {
+        return false;
+    }
+
+    bunker::SessionProfile surfaceProfile = bunker::MakeDefaultSessionProfile();
+    surfaceProfile.firstPlayableRoute.surfaceArrivalReached = true;
+    bunker::SessionProfile lateRouteProfile = bunker::MakeDefaultSessionProfile();
+    lateRouteProfile.story.outerRoadCleared = true;
+    bunker::SessionProfile relayProfile = bunker::MakeDefaultSessionProfile();
+    relayProfile.story.relayRecovered = true;
+    bunker::SessionProfile returnedProfile = bunker::MakeDefaultSessionProfile();
+    returnedProfile.story.returnedToBase = true;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(surfaceProfile) &&
+            bunker::IsPipDeviceSelectionStationRetired(lateRouteProfile) &&
+            bunker::IsPipDeviceSelectionStationRetired(relayProfile) &&
+            bunker::IsPipDeviceSelectionStationRetired(returnedProfile),
+            "pip_device_station_retired_after_exit expected surface and later route flags to retire station")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "pip_device_station_retired_after_exit_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "pip_device_station_retired_after_exit failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "pip_device_station_retired_after_exit failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "pip_device_station_retired_after_exit failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(bunker::IsPipDeviceSelectionStationRetired(loadedProfile) &&
+            loadedProfile.activePipDeviceId == activeBeforeRetiredInteraction &&
+            bunker::HasActivePipDevice(loadedProfile) &&
+            bunker::PlayerHasPipPadAccess(loadedProfile),
+            "pip_device_station_retired_after_exit expected retirement and active device access to persist after save/load");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunPipDeviceSelectionHelperContractSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     if (!Check(!bunker::HasActivePipDevice(profile) &&
@@ -7756,6 +7852,7 @@ int main() {
         RunPipDeviceSelectionStationPersistsAfterPickupSmoke() &&
         RunPipDeviceSelectionStationRoundtripSmoke() &&
         RunPipDeviceReselectFlowSmoke() &&
+        RunPipDeviceSelectionStationRetiresAfterBunkerExitSmoke() &&
         RunPipDeviceSelectionHelperContractSmoke() &&
         RunPipDeviceItemRegistryAndStationOptionsSmoke() &&
         RunPipDeviceProfileNormalizationRegistrySmoke() &&

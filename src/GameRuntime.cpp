@@ -3278,6 +3278,14 @@ bool CompletePipDeviceReselect(SessionProfile& profile, std::string_view deviceI
     return true;
 }
 
+bool IsPipDeviceSelectionStationRetired(const SessionProfile& profile) {
+    return profile.story.exitedBunker ||
+        profile.firstPlayableRoute.surfaceArrivalReached ||
+        profile.story.outerRoadCleared ||
+        profile.story.relayRecovered ||
+        profile.story.returnedToBase;
+}
+
 bool IsSelectablePipDevice(PipDeviceModel model) {
     return GetPipDeviceCapabilities(model).selectable;
 }
@@ -5818,6 +5826,10 @@ void HandleInteraction(const MapObject* nearest,
     }
 
     if (nearest->registryId == "[%pip_0001]") {
+        if (IsPipDeviceSelectionStationRetired(profile)) {
+            gameState.lastEvent = "Pip-Boy/Pip-Pad cradle is now display-only. Field configuration is handled through your active Pip device.";
+            return;
+        }
         if (profile.story.pipPadRecovered) {
             BeginPipDeviceReselect(profile);
             gameState.lastEvent = "Pip-Boy cradle opened. Current device is being returned to the rack; choose another model when the swap cycle completes.";
