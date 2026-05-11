@@ -7550,6 +7550,186 @@ bool RunActivePipDeviceCustomizationRuntimeBindingSmoke() {
     return true;
 }
 
+bool RunExistingFieldGameplayLoopSmoke() {
+    auto configureFieldLoopState = [](bunker::SessionProfile& profile) -> bunker::WorldFieldState* {
+        profile.selectedWorld = "existing_field_gameplay_loop_smoke.bwld";
+        profile.fieldCheckpointKnown = true;
+        profile.fieldCheckpointWorld = profile.selectedWorld;
+        profile.fieldCheckpointLabel = "Surface Foothold";
+        profile.fieldCheckpointX = 18.0f;
+        profile.fieldCheckpointY = 2.0f;
+        profile.rescuedSpecialists.push_back({"engineer_01", "Shelter Engineer", "engineer", "scavenger_support", true});
+        auto* worldState = bunker::FindWorldFieldState(profile, profile.selectedWorld, true);
+        if (worldState != nullptr) {
+            worldState->regionalGridOnline = true;
+            worldState->localRelayAvailable = true;
+            worldState->towerSyncRecovered = false;
+            worldState->caravanRouteActive = true;
+            worldState->etherErosion = 12.0f;
+            worldState->infrastructureDecay = 6.0f;
+        }
+        return worldState;
+    };
+
+    bunker::SessionProfile lockedProfile = bunker::MakeDefaultSessionProfile();
+    auto* lockedWorldState = configureFieldLoopState(lockedProfile);
+    if (!Check(lockedWorldState != nullptr, "existing_field_loop_smoke expected locked world field state")) {
+        return false;
+    }
+    bunker::GameState lockedState;
+    lockedState.scavengerTimer = 0.0f;
+    lockedState.caravanTimer = 0.0f;
+    const int lockedSteelBefore = CountInventoryItem(lockedProfile, "steel_scrap");
+    bunker::UpdateScavengerTeams(lockedProfile, lockedState, 1.0f);
+    bunker::UpdateCaravanRoute(lockedProfile, lockedState, 1.0f);
+    if (!Check(lockedProfile.scavengerRunsCompleted == 0 &&
+            lockedWorldState->caravanRunsCompleted == 0 &&
+            CountInventoryItem(lockedProfile, "steel_scrap") == lockedSteelBefore,
+            "existing_field_loop_locked_before_surface expected no scavenger/caravan rewards before outer route")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    const auto* workshop = world.FindObjectByRegistryId("[%workshop_0001]");
+    const auto* serviceHub = world.FindObjectByScriptTag("lanline_service_hub");
+    if (!Check(workshop != nullptr && serviceHub != nullptr,
+            "existing_field_loop_smoke expected authored workshop and Lanline service hub")) {
+        return false;
+    }
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    auto* worldState = configureFieldLoopState(profile);
+    if (!Check(worldState != nullptr, "existing_field_loop_smoke expected playable world field state")) {
+        return false;
+    }
+    profile.story.awakenedFromCryo = true;
+    if (!Check(bunker::SelectPipDevice(profile, "#%it_pippad"),
+            "existing_field_loop_active_pip_device expected selectable Pip-Pad device")) {
+        return false;
+    }
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.partnerTank.deployed = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    profile.story.outerRoadCleared = true;
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    gameState.scavengerTimer = 0.0f;
+    gameState.caravanTimer = 0.0f;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(profile) &&
+            bunker::TryToggleActivePipDeviceUi(player, profile, gameState) &&
+            player.uiVisible,
+            "existing_field_loop_active_pip_device_after_station_retirement expected active device UI")) {
+        return false;
+    }
+    if (!Check(bunker::HasActiveFieldCheckpoint(profile) &&
+            bunker::HasRegionalGridOnline(profile) &&
+            bunker::HasAwakenedSpecialistRole(profile, "engineer") &&
+            profile.story.outerRoadCleared,
+            "existing_field_loop_scavenger_ready expected checkpoint grid and engineer gates")) {
+        return false;
+    }
+
+    const int caravanSteelBefore = CountInventoryItem(profile, "steel_scrap");
+    gameState.caravanTimer = 0.0f;
+    bunker::UpdateCaravanRoute(profile, gameState, 1.0f);
+    if (!Check(worldState->caravanRunsCompleted == 1 &&
+            CountInventoryItem(profile, "steel_scrap") > caravanSteelBefore &&
+            CountInventoryItem(profile, "old_plate") >= 1,
+            "existing_field_loop_caravan_rewards expected existing caravan inventory and world counter")) {
+        return false;
+    }
+
+    bunker::AddInventoryItem(profile, "#%it_field_ration", 1, 0.3f);
+    const int rationCountBefore = CountInventoryItem(profile, "#%it_field_ration");
+    if (!Check(bunker::TryConsumeFieldRation(profile, gameState) &&
+            gameState.rationEffectTimer > 0.0f &&
+            CountInventoryItem(profile, "#%it_field_ration") == rationCountBefore - 1,
+            "existing_field_loop_medicine_state expected field ration effect and inventory consumption")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(serviceHub, world, player, profile, staticEraser, gameState);
+    if (!Check(!profile.lanlineServices.serviceHubKnown &&
+            gameState.lastEvent.find("Lanline Services stay locked") != std::string::npos,
+            "existing_field_loop_lanline_locked_before_tower_sync expected authored service hub refusal")) {
+        return false;
+    }
+    worldState->towerSyncRecovered = true;
+    bunker::HandleInteraction(serviceHub, world, player, profile, staticEraser, gameState);
+    if (!Check(profile.lanlineServices.serviceHubKnown &&
+            gameState.lanlineServicesVisible &&
+            gameState.lastEvent.find("Lanline service hub handshake") != std::string::npos,
+            "existing_field_loop_lanline_unlocks_after_tower_sync expected service hub handshake")) {
+        return false;
+    }
+
+    profile.partnerTank.worldPositionKnown = true;
+    profile.partnerTank.worldX = workshop->x;
+    profile.partnerTank.worldY = workshop->y;
+    profile.partnerTank.damage.hull = 72.0f;
+    profile.partnerTank.damage.bucket = 76.0f;
+    profile.partnerTank.energyReserve = 100.0f;
+    profile.partnerTank.ammoReserve = 86.0f;
+    bunker::AddInventoryItem(profile, "repair_patch", 1, 0.2f);
+    player.insideTank = false;
+    bunker::HandleInteraction(workshop, world, player, profile, staticEraser, gameState);
+    if (!Check(profile.firstPlayableRoute.firstServicePerformed &&
+            gameState.lastEvent.find("First service halt logged") != std::string::npos,
+            "existing_field_loop_service_state expected existing BT-72 workshop service handoff")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "existing_field_gameplay_loop_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "existing_field_loop_smoke failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "existing_field_loop_persistence failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "existing_field_loop_persistence failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    const auto* loadedWorldState = bunker::FindWorldFieldState(loadedProfile, profile.selectedWorld);
+    const bool ok = Check(loadedWorldState != nullptr,
+            "existing_field_loop_persists_after_save_load expected world field state") &&
+        Check(loadedWorldState == nullptr || loadedWorldState->caravanRunsCompleted == 1,
+            "existing_field_loop_persists_after_save_load expected caravan counter") &&
+        Check(loadedWorldState == nullptr || loadedWorldState->towerSyncRecovered,
+            "existing_field_loop_persists_after_save_load expected tower sync state") &&
+        Check(loadedProfile.lanlineServices.serviceHubKnown,
+            "existing_field_loop_persists_after_save_load expected Lanline hub state") &&
+        Check(loadedProfile.firstPlayableRoute.firstServicePerformed,
+            "existing_field_loop_persists_after_save_load expected first service state") &&
+        Check(bunker::HasActivePipDevice(loadedProfile),
+            "existing_field_loop_persists_after_save_load expected active Pip device") &&
+        Check(bunker::IsPipDeviceSelectionStationRetired(loadedProfile),
+            "existing_field_loop_persists_after_save_load expected retired station derived after load");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunPipDeviceSelectionHelperContractSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     if (!Check(!bunker::HasActivePipDevice(profile) &&
@@ -8548,6 +8728,7 @@ int main() {
         RunActivePipDeviceCustomizationCapabilityRulesSmoke() &&
         RunActivePipDeviceCustomizationCommandGateSmoke() &&
         RunActivePipDeviceCustomizationRuntimeBindingSmoke() &&
+        RunExistingFieldGameplayLoopSmoke() &&
         RunPipDeviceSelectionHelperContractSmoke() &&
         RunPipDeviceItemRegistryAndStationOptionsSmoke() &&
         RunPipDeviceProfileNormalizationRegistrySmoke() &&
