@@ -412,7 +412,7 @@ int main() {
     bunker::PlayerState player;
     player.x = world.metadata.playerSpawnX;
     player.y = world.metadata.playerSpawnY;
-    player.uiVisible = bunker::PlayerHasPipPadAccess(sessionProfile) && player.uiVisible;
+    player.uiVisible = bunker::PlayerHasActivePipDeviceAccess(sessionProfile) && player.uiVisible;
     if (bunker::HasActiveFieldCheckpoint(sessionProfile)) {
         player.x = sessionProfile.fieldCheckpointX;
         player.y = sessionProfile.fieldCheckpointY;
@@ -634,9 +634,27 @@ int main() {
 
         const bool toggleUiNow = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
         if (toggleUiNow && !gameState.uiPressed) {
-            bunker::TryTogglePipPadUi(player, sessionProfile, gameState);
+            bunker::TryToggleActivePipDeviceUi(player, sessionProfile, gameState);
         }
         gameState.uiPressed = toggleUiNow;
+
+        const bool pipThemeNow = glfwGetKey(window, GLFW_KEY_F6) == GLFW_PRESS;
+        if (pipThemeNow && !gameState.pipThemePressed) {
+            bunker::ApplyActivePipDeviceCustomizationCommand(sessionProfile, "theme_next", &gameState);
+        }
+        gameState.pipThemePressed = pipThemeNow;
+
+        const bool pipDisplayNow = glfwGetKey(window, GLFW_KEY_F7) == GLFW_PRESS;
+        if (pipDisplayNow && !gameState.pipDisplayPressed) {
+            bunker::ApplyActivePipDeviceCustomizationCommand(sessionProfile, "display_next", &gameState);
+        }
+        gameState.pipDisplayPressed = pipDisplayNow;
+
+        const bool pipCarryNow = glfwGetKey(window, GLFW_KEY_F8) == GLFW_PRESS;
+        if (pipCarryNow && !gameState.pipCarryPressed) {
+            bunker::ApplyActivePipDeviceCustomizationCommand(sessionProfile, "carry_next", &gameState);
+        }
+        gameState.pipCarryPressed = pipCarryNow;
 
         const bool saveNow = glfwGetKey(window, GLFW_KEY_F5) == GLFW_PRESS;
         if (saveNow && !gameState.savePressed) {
@@ -880,7 +898,7 @@ int main() {
                 ImGui::TextWrapped("%s", executionOverlay.c_str());
             }
             ImGui::Separator();
-            ImGui::Text("TAB Pip-Pad | H Medkit | R Reload | F5 Save");
+            ImGui::Text("TAB Pip Device | F6 Theme | F7 Display | F8 Carry | H Medkit | R Reload | F5 Save");
             ImGui::Text("Left/Right rotate | C camera | V crew seat | B bucket");
             if (promptTowCouplerMounted) {
                 ImGui::TextDisabled("Tow Coupler active: logistics boost, lower mobility");

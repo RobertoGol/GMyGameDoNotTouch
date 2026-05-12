@@ -7,13 +7,41 @@ namespace bunker {
 namespace {
 
 constexpr char kSessionProfileFormat[] = "BPF1";
-constexpr int kCurrentSessionProfileVersion = 8;
+constexpr int kCurrentSessionProfileVersion = 13;
 
 bool HasInventoryEntry(const SessionProfile& profile, const std::string& itemId) {
     return std::any_of(
         profile.character.inventory.begin(),
         profile.character.inventory.end(),
         [&](const InventoryEntry& entry) { return entry.itemId == itemId && entry.count > 0; });
+}
+
+std::string FirstInventoryPipDeviceId(const SessionProfile& profile) {
+    for (const auto& item : profile.character.inventory) {
+        if (item.count > 0 && IsCanonicalPipDeviceItemId(item.itemId)) {
+            return item.itemId;
+        }
+    }
+    return {};
+}
+
+bool IsKnownPipDeviceThemeId(std::string_view themeId) {
+    return themeId == "classic_green" ||
+        themeId == "amber" ||
+        themeId == "monochrome" ||
+        themeId == "high_contrast";
+}
+
+bool IsKnownPipDeviceDisplayMode(std::string_view displayMode) {
+    return displayMode == "standard" ||
+        displayMode == "readable" ||
+        displayMode == "compact";
+}
+
+bool IsKnownPipDeviceCarryMode(std::string_view carryMode) {
+    return carryMode == "auto" ||
+        carryMode == "wrist" ||
+        carryMode == "handheld";
 }
 
 void NormalizeFirstPlayableRouteProgress(SessionProfile& profile) {
@@ -185,6 +213,18 @@ void NormalizeWorldFieldState(WorldFieldState& state) {
     }
 }
 
+void NormalizePipDeviceCustomization(SessionProfile& profile) {
+    if (!IsKnownPipDeviceThemeId(profile.pipDeviceThemeId)) {
+        profile.pipDeviceThemeId = "classic_green";
+    }
+    if (!IsKnownPipDeviceDisplayMode(profile.pipDeviceDisplayMode)) {
+        profile.pipDeviceDisplayMode = "standard";
+    }
+    if (!IsKnownPipDeviceCarryMode(profile.pipDeviceCarryMode)) {
+        profile.pipDeviceCarryMode = "auto";
+    }
+}
+
 void NormalizeSessionProfile(SessionProfile& profile) {
     profile.selectedWorld = NormalizeWorldReference(profile.selectedWorld);
     profile.fieldCheckpointWorld = profile.fieldCheckpointWorld.empty()
@@ -208,6 +248,35 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     profile.worldFieldStates = std::move(normalizedWorldStates);
     profile.lanlineServices.relayCredits = std::max(0, profile.lanlineServices.relayCredits);
     profile.launcherAnnouncements.lastSeenBuildNumber = std::max(0, profile.launcherAnnouncements.lastSeenBuildNumber);
+    profile.continuityAnchorVariance = std::clamp(profile.continuityAnchorVariance, 0.0f, 1.0f);
+    NormalizePipDeviceCustomization(profile);
+    if (!profile.activePipDeviceId.empty() && !IsCanonicalPipDeviceItemId(profile.activePipDeviceId)) {
+        profile.activePipDeviceId.clear();
+    }
+    if (profile.activePipDeviceId.empty()) {
+        profile.activePipDeviceId = FirstInventoryPipDeviceId(profile);
+    }
+    if (profile.story.pipPadRecovered && profile.activePipDeviceId.empty()) {
+        profile.activePipDeviceId = "#%it_pippad";
+    }
+    profile.story.pipPadRecovered = profile.story.pipPadRecovered || !profile.activePipDeviceId.empty();
+    if (!profile.story.pipPadRecovered) {
+        profile.pipDeviceReselectPending = false;
+    }
+    if (profile.blueLinkModuleInstalled) {
+        profile.blueLinkModuleRecovered = true;
+        profile.pipPadExpansionCoverPresent = false;
+    } else {
+        profile.pipPadExpansionCoverPresent = true;
+    }
+    if (profile.firstPlayableRoute.bt72Restored || profile.story.tankLinked || profile.story.bucketRecovered) {
+        profile.hangarPowerRestored = true;
+        profile.bt72CraneControlOnline = true;
+        profile.bt72CranePathClear = true;
+        profile.bt72HullAttachedToCrane = false;
+        profile.bt72HullMovedToServiceLift = true;
+        profile.bt72HullLockedInRestorationCradle = true;
+    }
     if (const auto* selectedWorldState = FindWorldFieldState(profile, profile.selectedWorld); selectedWorldState != nullptr) {
         if (!selectedWorldState->towerSyncRecovered) {
             profile.lanlineServices.serviceHubKnown = false;
@@ -246,6 +315,30 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     }
     NormalizeFirstPlayableRouteProgress(profile);
     (void)FindWorldFieldState(profile, profile.selectedWorld, true);
+}
+
+bool SeedContinuityAnchorAfterBunkerAnomaly(SessionProfile& profile, std::string* diagnosticText) {
+    const bool wasSeeded = profile.continuityAnchorSeeded;
+    profile.continuityAnchorSeeded = true;
+    if (profile.continuityAnchorVariance <= 0.0f) {
+        profile.continuityAnchorVariance = 0.17f;
+    }
+    profile.continuityAnchorVariance = std::clamp(profile.continuityAnchorVariance, 0.0f, 1.0f);
+    if (diagnosticText != nullptr) {
+        *diagnosticText = wasSeeded
+            ? "Identity continuity profile recovered."
+            : "Continuity Anchor variance detected. Identity continuity profile recovered.";
+    }
+    return !wasSeeded;
+}
+
+std::string ContinuityAnchorDiagnostic(const SessionProfile& profile) {
+    if (!profile.continuityAnchorSeeded) {
+        return {};
+    }
+    return profile.continuityAnchorVariance > 0.0f
+        ? "Continuity Anchor variance detected."
+        : "Identity continuity profile recovered.";
 }
 
 bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath) {
@@ -291,6 +384,22 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
     out << "field_checkpoint_world=" << profile.fieldCheckpointWorld << '\n';
     out << "field_checkpoint_label=" << profile.fieldCheckpointLabel << '\n';
     out << "scavenger_runs_completed=" << profile.scavengerRunsCompleted << '\n';
+    out << "continuity_anchor_seeded=" << (profile.continuityAnchorSeeded ? 1 : 0) << '\n';
+    out << "continuity_anchor_variance=" << profile.continuityAnchorVariance << '\n';
+    out << "active_pip_device_id=" << profile.activePipDeviceId << '\n';
+    out << "pip_device_reselect_pending=" << (profile.pipDeviceReselectPending ? 1 : 0) << '\n';
+    out << "pip_device_theme_id=" << profile.pipDeviceThemeId << '\n';
+    out << "pip_device_display_mode=" << profile.pipDeviceDisplayMode << '\n';
+    out << "pip_device_carry_mode=" << profile.pipDeviceCarryMode << '\n';
+    out << "pippad_expansion_cover_present=" << (profile.pipPadExpansionCoverPresent ? 1 : 0) << '\n';
+    out << "bluelink_module_recovered=" << (profile.blueLinkModuleRecovered ? 1 : 0) << '\n';
+    out << "bluelink_module_installed=" << (profile.blueLinkModuleInstalled ? 1 : 0) << '\n';
+    out << "hangar_power_restored=" << (profile.hangarPowerRestored ? 1 : 0) << '\n';
+    out << "bt72_crane_control_online=" << (profile.bt72CraneControlOnline ? 1 : 0) << '\n';
+    out << "bt72_crane_path_clear=" << (profile.bt72CranePathClear ? 1 : 0) << '\n';
+    out << "bt72_hull_attached_to_crane=" << (profile.bt72HullAttachedToCrane ? 1 : 0) << '\n';
+    out << "bt72_hull_moved_to_service_lift=" << (profile.bt72HullMovedToServiceLift ? 1 : 0) << '\n';
+    out << "bt72_hull_locked_in_restoration_cradle=" << (profile.bt72HullLockedInRestorationCradle ? 1 : 0) << '\n';
     out << "partner_tank_id=" << profile.partnerTank.partnerTankId << '\n';
     out << "partner_tank_callsign=" << profile.partnerTank.callSign << '\n';
     out << "partner_tank_class=" << static_cast<int>(profile.partnerTank.tankClass) << '\n';
@@ -459,6 +568,27 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         const std::string key = line.substr(0, pos);
         const std::string value = line.substr(pos + 1);
 
+        if (key == "active_pip_device_id" || key == "selected_pip_device_id") {
+            outProfile.activePipDeviceId = value;
+            continue;
+        }
+        if (key == "pip_device_reselect_pending") {
+            outProfile.pipDeviceReselectPending = (std::stoi(value) != 0);
+            continue;
+        }
+        if (key == "pip_device_theme_id" || key == "active_pip_device_theme_id") {
+            outProfile.pipDeviceThemeId = value;
+            continue;
+        }
+        if (key == "pip_device_display_mode" || key == "active_pip_device_display_mode") {
+            outProfile.pipDeviceDisplayMode = value;
+            continue;
+        }
+        if (key == "pip_device_carry_mode" || key == "pip_device_wrist_mode") {
+            outProfile.pipDeviceCarryMode = value;
+            continue;
+        }
+
         if (key == "profile_format") {
             hasExplicitFormatHeader = (value == kSessionProfileFormat);
         } else if (key == "profile_version") {
@@ -493,6 +623,17 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         else if (key == "field_checkpoint_world") outProfile.fieldCheckpointWorld = value;
         else if (key == "field_checkpoint_label") outProfile.fieldCheckpointLabel = value;
         else if (key == "scavenger_runs_completed") outProfile.scavengerRunsCompleted = std::stoi(value);
+        else if (key == "continuity_anchor_seeded" || key == "soulline_seeded") outProfile.continuityAnchorSeeded = (std::stoi(value) != 0);
+        else if (key == "continuity_anchor_variance" || key == "soulline_variance") outProfile.continuityAnchorVariance = std::stof(value);
+        else if (key == "pippad_expansion_cover_present" || key == "pip_pad_expansion_cover_present") outProfile.pipPadExpansionCoverPresent = (std::stoi(value) != 0);
+        else if (key == "bluelink_module_recovered") outProfile.blueLinkModuleRecovered = (std::stoi(value) != 0);
+        else if (key == "bluelink_module_installed") outProfile.blueLinkModuleInstalled = (std::stoi(value) != 0);
+        else if (key == "hangar_power_restored") outProfile.hangarPowerRestored = (std::stoi(value) != 0);
+        else if (key == "bt72_crane_control_online") outProfile.bt72CraneControlOnline = (std::stoi(value) != 0);
+        else if (key == "bt72_crane_path_clear") outProfile.bt72CranePathClear = (std::stoi(value) != 0);
+        else if (key == "bt72_hull_attached_to_crane") outProfile.bt72HullAttachedToCrane = (std::stoi(value) != 0);
+        else if (key == "bt72_hull_moved_to_service_lift") outProfile.bt72HullMovedToServiceLift = (std::stoi(value) != 0);
+        else if (key == "bt72_hull_locked_in_restoration_cradle") outProfile.bt72HullLockedInRestorationCradle = (std::stoi(value) != 0);
         else if (key == "partner_tank_id") outProfile.partnerTank.partnerTankId = value;
         else if (key == "partner_tank_callsign") outProfile.partnerTank.callSign = value;
         else if (key == "partner_tank_class") outProfile.partnerTank.tankClass = static_cast<TankClass>(std::stoi(value));

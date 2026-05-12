@@ -25,8 +25,11 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <initializer_list>
 #include <iostream>
 #include <string>
+#include <unordered_set>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -52,6 +55,53 @@ bool Check(bool condition, const std::string& message) {
         return false;
     }
     return true;
+}
+
+bool HasDuplicateRegistryIds(const bunker::World& world, std::string* duplicateId = nullptr) {
+    std::unordered_set<std::string> seen;
+    for (const auto& object : world.objects) {
+        if (!seen.insert(object.registryId).second) {
+            if (duplicateId != nullptr) {
+                *duplicateId = object.registryId;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+int CountInventoryItem(const bunker::SessionProfile& profile, const std::string& itemId) {
+    int total = 0;
+    for (const auto& item : profile.character.inventory) {
+        if (item.itemId == itemId) {
+            total += item.count;
+        }
+    }
+    return total;
+}
+
+bool WriteTextFile(const fs::path& path, const std::string& text) {
+    std::ofstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+    file << text;
+    return true;
+}
+
+std::string ReadTextFile(const fs::path& path) {
+    std::ifstream file(path);
+    std::string text;
+    std::string line;
+    while (std::getline(file, line)) {
+        text += line;
+        text += '\n';
+    }
+    return text;
+}
+
+bool ContainsText(const std::string& text, const std::string& needle) {
+    return text.find(needle) != std::string::npos;
 }
 
 void WriteRawString(std::ofstream& file, const std::string& value) {
@@ -265,6 +315,8 @@ bool RunProfileRoundtrip() {
     savedProfile.launcherAnnouncements.lastSeenBuildNumber = bunker::kCurrentBuildNumber;
     savedProfile.launcherAnnouncements.lastSeenAnnouncementId = bunker::CurrentBuildAnnouncement().announcementId;
     savedProfile.launcherAnnouncements.lastSeenVersionLabel = std::string(bunker::kCurrentVersionLabel);
+    savedProfile.continuityAnchorSeeded = true;
+    savedProfile.continuityAnchorVariance = 0.23f;
     savedProfile.story.awakenedFromCryo = true;
     savedProfile.story.pipPadRecovered = true;
     savedProfile.story.archiveRecovered = true;
@@ -320,6 +372,9 @@ bool RunProfileRoundtrip() {
             "profile launcher last-seen build mismatch") &&
         Check(loadedProfile.launcherAnnouncements.lastSeenAnnouncementId == savedProfile.launcherAnnouncements.lastSeenAnnouncementId,
             "profile launcher last-seen announcement mismatch") &&
+        Check(loadedProfile.continuityAnchorSeeded, "profile continuity anchor seeded mismatch") &&
+        Check(std::abs(loadedProfile.continuityAnchorVariance - 0.23f) < 0.01f,
+            "profile continuity anchor variance mismatch") &&
         Check(loadedProfile.firstPlayableRoute.accessCardRecovered, "profile first route access card mismatch") &&
         Check(loadedProfile.firstPlayableRoute.prePipPadClueCount == 2, "profile first route clue count mismatch") &&
         Check(loadedProfile.firstPlayableRoute.bt72Restored, "profile first route restore flag mismatch") &&
@@ -350,6 +405,283 @@ bool RunProfileRoundtrip() {
             "profile roundtrip last route-event outcome mismatch");
 }
 
+bool RunProfileMigrationContractSmoke() {
+    const fs::path tempRoot = fs::current_path() / "profile_migration_contract_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "profile migration smoke failed to create temp directory")) {
+        return false;
+    }
+
+    const fs::path v9Path = tempRoot / "legacy_v9_profile.txt";
+    if (!Check(WriteTextFile(v9Path,
+            "profile_format=BPF1\n"
+            "profile_version=9\n"
+            "story_awakened=1\n"
+            "story_pippad=1\n"
+            "story_archive=1\n"
+            "route_access_card=1\n"
+            "route_pre_pippad_clues=2\n"
+            "route_bt72_hull=1\n"
+            "route_bt72_core=1\n"
+            "route_bt72_notes=1\n"
+            "route_bt72_restored=0\n"
+            "story_tank=0\n"),
+            "profile migration smoke failed to write v9 profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile v9Profile;
+    if (!Check(bunker::LoadSessionProfile(v9Path, v9Profile),
+            "profile_migration_v9_defaults_bluelink_and_crane_locked expected load success")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(v9Profile.story.pipPadRecovered &&
+            bunker::HasPipPad(v9Profile) &&
+            v9Profile.pipPadExpansionCoverPresent &&
+            !v9Profile.blueLinkModuleRecovered &&
+            !v9Profile.blueLinkModuleInstalled &&
+            !bunker::CanUsePipPadMediaIndex(v9Profile) &&
+            !v9Profile.hangarPowerRestored &&
+            !v9Profile.bt72CraneControlOnline &&
+            !v9Profile.bt72CranePathClear &&
+            !v9Profile.bt72HullMovedToServiceLift &&
+            !v9Profile.bt72HullLockedInRestorationCradle &&
+            !v9Profile.firstPlayableRoute.bt72Restored &&
+            !v9Profile.story.tankLinked,
+            "profile_migration_v9_defaults_bluelink_and_crane_locked expected locked defaults")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path v10Path = tempRoot / "legacy_v10_bluelink_profile.txt";
+    if (!Check(WriteTextFile(v10Path,
+            "profile_format=BPF1\n"
+            "profile_version=10\n"
+            "story_awakened=1\n"
+            "story_pippad=1\n"
+            "pippad_expansion_cover_present=0\n"
+            "bluelink_module_recovered=1\n"
+            "bluelink_module_installed=1\n"
+            "story_archive=1\n"
+            "route_bt72_hull=1\n"
+            "route_bt72_core=1\n"
+            "route_bt72_notes=1\n"
+            "route_bt72_restored=0\n"
+            "story_tank=0\n"),
+            "profile migration smoke failed to write v10 profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile v10Profile;
+    if (!Check(bunker::LoadSessionProfile(v10Path, v10Profile),
+            "profile_migration_v10_preserves_bluelink_but_requires_cradle expected load success")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(bunker::IsBlueLinkInstalled(v10Profile) &&
+            bunker::CanUsePipPadMediaIndex(v10Profile) &&
+            !v10Profile.pipPadExpansionCoverPresent &&
+            !v10Profile.hangarPowerRestored &&
+            !v10Profile.bt72CraneControlOnline &&
+            !v10Profile.bt72CranePathClear &&
+            !v10Profile.bt72HullMovedToServiceLift &&
+            !v10Profile.bt72HullLockedInRestorationCradle &&
+            !bunker::CanCompleteBt72StagedRestoration(v10Profile) &&
+            !v10Profile.firstPlayableRoute.bt72Restored &&
+            !v10Profile.story.tankLinked,
+            "profile_migration_v10_preserves_bluelink_but_requires_cradle expected media only and crane locked")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path restoredPath = tempRoot / "legacy_restored_bt72_profile.txt";
+    if (!Check(WriteTextFile(restoredPath,
+            "profile_format=BPF1\n"
+            "profile_version=9\n"
+            "story_pippad=1\n"
+            "story_archive=1\n"
+            "route_bt72_hull=1\n"
+            "route_bt72_core=1\n"
+            "route_bt72_notes=1\n"
+            "route_bt72_restored=1\n"
+            "story_tank=1\n"),
+            "profile migration smoke failed to write legacy restored BT-72 profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile restoredProfile;
+    if (!Check(bunker::LoadSessionProfile(restoredPath, restoredProfile),
+            "profile_migration_legacy_restored_bt72_implies_crane_path expected load success")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(restoredProfile.firstPlayableRoute.bt72Restored &&
+            restoredProfile.story.tankLinked &&
+            restoredProfile.hangarPowerRestored &&
+            restoredProfile.bt72CraneControlOnline &&
+            restoredProfile.bt72CranePathClear &&
+            restoredProfile.bt72HullMovedToServiceLift &&
+            restoredProfile.bt72HullLockedInRestorationCradle &&
+            !restoredProfile.bt72HullAttachedToCrane &&
+            bunker::CanCompleteBt72StagedRestoration(restoredProfile),
+            "profile_migration_legacy_restored_bt72_implies_crane_path expected crane compatibility flags")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile currentProfile = bunker::MakeDefaultSessionProfile();
+    currentProfile.story.awakenedFromCryo = true;
+    currentProfile.continuityAnchorSeeded = true;
+    currentProfile.story.pipPadRecovered = true;
+    bunker::AddInventoryItem(currentProfile, "#%it_pippad", 1, 0.8f);
+    currentProfile.blueLinkModuleRecovered = true;
+    currentProfile.blueLinkModuleInstalled = true;
+    currentProfile.pipPadExpansionCoverPresent = false;
+    currentProfile.story.archiveRecovered = true;
+    currentProfile.firstPlayableRoute.accessCardRecovered = true;
+    currentProfile.firstPlayableRoute.prePipPadClueCount = 2;
+    currentProfile.firstPlayableRoute.bt72HullInspected = true;
+    currentProfile.firstPlayableRoute.bt72CoreRecovered = true;
+    currentProfile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    currentProfile.firstPlayableRoute.bt72Restored = true;
+    currentProfile.hangarPowerRestored = true;
+    currentProfile.bt72CraneControlOnline = true;
+    currentProfile.bt72CranePathClear = true;
+    currentProfile.bt72HullAttachedToCrane = false;
+    currentProfile.bt72HullMovedToServiceLift = true;
+    currentProfile.bt72HullLockedInRestorationCradle = true;
+    currentProfile.story.tankLinked = true;
+
+    const fs::path currentPath = tempRoot / "current_profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(currentProfile, currentPath);
+    if (!Check(saveStatus.ok, "profile_migration_current_roundtrip_preserves_v936_route_state failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile loadedCurrentProfile;
+    if (!Check(bunker::LoadSessionProfile(currentPath, loadedCurrentProfile),
+            "profile_migration_current_roundtrip_preserves_v936_route_state failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(loadedCurrentProfile.story.pipPadRecovered &&
+            bunker::IsBlueLinkInstalled(loadedCurrentProfile) &&
+            bunker::CanUsePipPadMediaIndex(loadedCurrentProfile) &&
+            loadedCurrentProfile.firstPlayableRoute.bt72Restored &&
+            loadedCurrentProfile.story.tankLinked &&
+            loadedCurrentProfile.bt72HullLockedInRestorationCradle &&
+            loadedCurrentProfile.continuityAnchorSeeded &&
+            bunker::CurrentStoryObjectivePreview(loadedCurrentProfile).find("Restore BT-72") == std::string::npos,
+            "profile_migration_current_roundtrip_preserves_v936_route_state expected current final state")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const std::string savedText = ReadTextFile(currentPath);
+    const bool ok = Check(ContainsText(savedText, "profile_format=BPF1\n") &&
+            ContainsText(savedText, "profile_version=13\n") &&
+            ContainsText(savedText, "active_pip_device_id=") &&
+            ContainsText(savedText, "pip_device_reselect_pending=") &&
+            ContainsText(savedText, "pip_device_theme_id=") &&
+            ContainsText(savedText, "pip_device_display_mode=") &&
+            ContainsText(savedText, "pip_device_carry_mode=") &&
+            ContainsText(savedText, "pippad_expansion_cover_present=") &&
+            ContainsText(savedText, "bluelink_module_recovered=") &&
+            ContainsText(savedText, "bluelink_module_installed=") &&
+            ContainsText(savedText, "hangar_power_restored=") &&
+            ContainsText(savedText, "bt72_crane_control_online=") &&
+            ContainsText(savedText, "bt72_crane_path_clear=") &&
+            ContainsText(savedText, "bt72_hull_attached_to_crane=") &&
+            ContainsText(savedText, "bt72_hull_moved_to_service_lift=") &&
+            ContainsText(savedText, "bt72_hull_locked_in_restoration_cradle="),
+            "profile_migration_current_save_writes_bluelink_crane_and_pip_customization_keys expected current keys");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunContinuityAnchorContractSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::World world;
+    bunker::MapObject cryo;
+    cryo.registryId = "[%cryo_0001]";
+    cryo.displayName = "Cryo Capsule";
+    world.AddObject(cryo);
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.continuityAnchorSeeded,
+            "continuity_anchor_seeded_after_bunker_anomaly expected Continuity Anchor to seed")) {
+        return false;
+    }
+    if (!Check(profile.continuityAnchorVariance > 0.0f &&
+            gameState.lastEvent.find("Continuity Anchor variance detected.") != std::string::npos &&
+            gameState.lastEvent.find("Identity continuity profile recovered.") != std::string::npos,
+            "continuity_anchor_seeded_after_bunker_anomaly expected diagnostic copy")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "continuity_anchor_contract_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "continuity anchor smoke failed to create temp directory")) {
+        return false;
+    }
+
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "continuity_anchor_persists_after_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "continuity_anchor_persists_after_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(loadedProfile.continuityAnchorSeeded &&
+            std::abs(loadedProfile.continuityAnchorVariance - profile.continuityAnchorVariance) < 0.01f,
+            "continuity_anchor_persists_after_save_load expected anchor state to roundtrip")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path legacyPath = tempRoot / "legacy_soulline_profile.txt";
+    {
+        std::ofstream legacyProfile(legacyPath);
+        legacyProfile << "profile_format=BPF1\n";
+        legacyProfile << "profile_version=8\n";
+        legacyProfile << "soulline_seeded=1\n";
+        legacyProfile << "soulline_variance=0.42\n";
+    }
+
+    bunker::SessionProfile legacyLoaded;
+    if (!Check(bunker::LoadSessionProfile(legacyPath, legacyLoaded),
+            "continuity_anchor_aliases_soulline_legacy_field failed to load legacy profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    const bool ok = Check(legacyLoaded.continuityAnchorSeeded && bunker::SoulLineSeeded(legacyLoaded),
+            "continuity_anchor_aliases_soulline_legacy_field expected seeded alias") &&
+        Check(std::abs(legacyLoaded.continuityAnchorVariance - 0.42f) < 0.01f &&
+                std::abs(bunker::SoulLineVariance(legacyLoaded) - 0.42f) < 0.01f,
+            "continuity_anchor_aliases_soulline_legacy_field expected variance alias");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunFirstPlayableRouteStorySmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     if (!Check(bunker::CurrentStoryCheckpointLabel(profile) == "Intro // Cryo Wake",
@@ -375,14 +707,19 @@ bool RunFirstPlayableRouteStorySmoke() {
     profile.firstPlayableRoute.bt72HullInspected = true;
     profile.firstPlayableRoute.bt72CoreRecovered = true;
     profile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    profile.hangarPowerRestored = true;
+    profile.bt72CraneControlOnline = true;
+    profile.bt72CranePathClear = true;
+    profile.bt72HullMovedToServiceLift = true;
+    profile.bt72HullLockedInRestorationCradle = true;
     profile.character.inventory.push_back({"power_cell", 1, 0.3f});
     profile.character.inventory.push_back({"repair_patch", 1, 0.2f});
     profile.character.inventory.push_back({"old_plate", 1, 0.5f});
     const auto restoreRoute = bunker::BuildBt72RestorationRoute(profile);
-    if (!Check(restoreRoute.size() == 9, "first route smoke expected BT-72 restore checklist to have nine entries")) {
+    if (!Check(restoreRoute.size() == 10, "first route smoke expected BT-72 restore checklist to have ten entries")) {
         return false;
     }
-    if (!Check(!restoreRoute[4].completed, "first route smoke expected BT-72 restore step to remain incomplete before restore")) {
+    if (!Check(!restoreRoute[5].completed, "first route smoke expected BT-72 restore step to remain incomplete before restore")) {
         return false;
     }
     if (!Check(bunker::CurrentStoryObjectivePreview(profile).find("Restore BT-72") != std::string::npos,
@@ -441,6 +778,133 @@ bool RunFirstPlayableRouteStorySmoke() {
             "first route smoke expected industrial expansion checkpoint label") &&
         Check(bunker::CurrentStoryObjectivePreview(profile).find("rail depot") != std::string::npos,
             "first route smoke expected industrial follow-up objective preview");
+}
+
+bool RunBt72RestorationObjectiveReadoutSmoke() {
+    const auto hasAny = [](const std::string& text, std::initializer_list<const char*> needles) {
+        return std::any_of(needles.begin(), needles.end(), [&](const char* needle) {
+            return text.find(needle) != std::string::npos;
+        });
+    };
+    const auto setRouteOpen = [](bunker::SessionProfile& profile) {
+        profile.story.awakenedFromCryo = true;
+        profile.story.pipPadRecovered = true;
+        profile.story.archiveRecovered = true;
+        profile.firstPlayableRoute.accessCardRecovered = true;
+    };
+    const auto setKnowledgeComplete = [](bunker::SessionProfile& profile) {
+        profile.firstPlayableRoute.bt72HullInspected = true;
+        profile.firstPlayableRoute.bt72CoreRecovered = true;
+        profile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    };
+    const auto setCradleComplete = [](bunker::SessionProfile& profile) {
+        profile.hangarPowerRestored = true;
+        profile.bt72CraneControlOnline = true;
+        profile.bt72CranePathClear = true;
+        profile.bt72HullAttachedToCrane = false;
+        profile.bt72HullMovedToServiceLift = true;
+        profile.bt72HullLockedInRestorationCradle = true;
+    };
+    const auto addRestorationMaterials = [](bunker::SessionProfile& profile) {
+        bunker::AddInventoryItem(profile, "power_cell", 1, 0.3f);
+        bunker::AddInventoryItem(profile, "repair_patch", 1, 0.2f);
+        bunker::AddInventoryItem(profile, "old_plate", 1, 0.5f);
+    };
+
+    bunker::StaticEraser staticEraser;
+
+    bunker::SessionProfile knowledgeMissing = bunker::MakeDefaultSessionProfile();
+    setRouteOpen(knowledgeMissing);
+    const std::string missingPreview = bunker::CurrentStoryObjectivePreview(knowledgeMissing);
+    if (!Check(missingPreview.find("hull") != std::string::npos &&
+            missingPreview.find("starter core") != std::string::npos &&
+            missingPreview.find("service notes") != std::string::npos,
+            "bt72_objective_requires_knowledge_before_cradle expected hull/core/service notes objective")) {
+        return false;
+    }
+
+    bunker::SessionProfile cradleMissing = bunker::MakeDefaultSessionProfile();
+    setRouteOpen(cradleMissing);
+    setKnowledgeComplete(cradleMissing);
+    addRestorationMaterials(cradleMissing);
+    const std::string cradlePreview = bunker::CurrentStoryObjectivePreview(cradleMissing);
+    const std::string cradleObjective = bunker::CurrentStoryObjective(cradleMissing, staticEraser);
+    if (!Check(hasAny(cradlePreview, {"crane", "service lift", "cradle"}) &&
+            hasAny(cradleObjective, {"crane", "service lift", "cradle"}) &&
+            cradlePreview.find("Survey the BT-72 hull, recover the starter core, and decode the service notes") == std::string::npos &&
+            cradleObjective.find("Survey the BT-72 hull, recover the starter core, and decode the service notes") == std::string::npos &&
+            cradlePreview.find("Restore BT-72 to partial operating condition") == std::string::npos &&
+            cradleObjective.find("Restore BT-72 to partial operating condition") == std::string::npos,
+            "bt72_objective_points_to_cradle_after_knowledge expected crane/cradle objective")) {
+        return false;
+    }
+
+    bunker::SessionProfile materialMissing = bunker::MakeDefaultSessionProfile();
+    setRouteOpen(materialMissing);
+    setKnowledgeComplete(materialMissing);
+    setCradleComplete(materialMissing);
+    bunker::AddInventoryItem(materialMissing, "power_cell", 1, 0.3f);
+    bunker::AddInventoryItem(materialMissing, "old_plate", 1, 0.5f);
+    const std::string materialObjective = bunker::CurrentStoryObjective(materialMissing, staticEraser);
+    if (!Check(materialObjective.find("repair patch") != std::string::npos &&
+            materialObjective.find("Survey the BT-72 hull") == std::string::npos &&
+            !hasAny(materialObjective, {"crane", "cradle"}),
+            "bt72_objective_points_to_materials_after_cradle expected repair patch objective")) {
+        return false;
+    }
+
+    bunker::SessionProfile restoreReady = bunker::MakeDefaultSessionProfile();
+    setRouteOpen(restoreReady);
+    setKnowledgeComplete(restoreReady);
+    setCradleComplete(restoreReady);
+    addRestorationMaterials(restoreReady);
+    const std::string restoreReadyObjective = bunker::CurrentStoryObjectivePreview(restoreReady);
+    if (!Check(restoreReadyObjective.find("Restore BT-72") != std::string::npos &&
+            restoreReadyObjective.find("partial operating condition") != std::string::npos,
+            "bt72_objective_restore_ready_after_cradle_and_materials expected restore-ready objective")) {
+        return false;
+    }
+
+    restoreReady.firstPlayableRoute.bt72Restored = true;
+    const std::string syncObjective = bunker::CurrentStoryObjective(restoreReady, staticEraser);
+    if (!Check(syncObjective.find("cockpit") != std::string::npos &&
+            syncObjective.find("link") != std::string::npos &&
+            syncObjective.find("Restore BT-72") == std::string::npos,
+            "bt72_objective_moves_to_sync_after_restore expected cockpit sync objective")) {
+        return false;
+    }
+
+    const auto cradleMissingRoute = bunker::BuildBt72RestorationRoute(cradleMissing);
+    const auto missingCradleEntry = std::find_if(cradleMissingRoute.begin(), cradleMissingRoute.end(), [](const bunker::StoryRouteEntry& entry) {
+        return entry.text.find("cradle") != std::string::npos || entry.text.find("service lift") != std::string::npos;
+    });
+    bunker::SessionProfile cradleComplete = cradleMissing;
+    setCradleComplete(cradleComplete);
+    const auto cradleCompleteRoute = bunker::BuildBt72RestorationRoute(cradleComplete);
+    const auto completeCradleEntry = std::find_if(cradleCompleteRoute.begin(), cradleCompleteRoute.end(), [](const bunker::StoryRouteEntry& entry) {
+        return entry.text.find("cradle") != std::string::npos || entry.text.find("service lift") != std::string::npos;
+    });
+    if (!Check(missingCradleEntry != cradleMissingRoute.end() &&
+            completeCradleEntry != cradleCompleteRoute.end() &&
+            !missingCradleEntry->completed &&
+            completeCradleEntry->completed,
+            "bt72_readout_tracks_restoration_cradle_step expected cradle checklist state")) {
+        return false;
+    }
+
+    bunker::SessionProfile blueLinkOnly = bunker::MakeDefaultSessionProfile();
+    blueLinkOnly.story.awakenedFromCryo = true;
+    bunker::RecoverPipPad(blueLinkOnly);
+    blueLinkOnly.blueLinkModuleRecovered = true;
+    blueLinkOnly.blueLinkModuleInstalled = true;
+    blueLinkOnly.pipPadExpansionCoverPresent = false;
+    const std::string blueLinkObjective = bunker::CurrentStoryObjectivePreview(blueLinkOnly);
+    return Check(bunker::CanUsePipPadMediaIndex(blueLinkOnly) &&
+            !blueLinkOnly.story.archiveRecovered &&
+            !blueLinkOnly.story.tankLinked &&
+            !blueLinkOnly.firstPlayableRoute.bt72Restored &&
+            blueLinkObjective.find("archive") != std::string::npos,
+            "bt72_objective_bluelink_does_not_skip_route expected normal archive objective");
 }
 
 bool RunRouteBeatPresentationSmoke() {
@@ -5086,6 +5550,2984 @@ bool RunRuntimeCameraSmoke() {
             "runtime camera smoke expected cockpit camera to use tighter raised view");
 }
 
+bool RunPipDeviceCapabilityContractSmoke() {
+    return Check(bunker::DeviceDisplayName(bunker::PipDeviceModel::PipBoy3000) ==
+                std::string("Pip-Boy 3000 / Mark IV"),
+            "pipboy_3000_equals_mark_iv_capability expected canonical display name") &&
+        Check(bunker::HasDigitalMap(bunker::PipDeviceModel::PipBoy3000) &&
+                bunker::HasDigitalMap(bunker::PipDeviceModel::PipBoy3000MarkIV),
+            "pipboy_3000_equals_mark_iv_capability expected digital map support") &&
+        Check(!bunker::IsSelectablePipDevice(bunker::PipDeviceModel::PipBoy3000MarkV) &&
+                bunker::IsPropOnlyPipDevice(bunker::PipDeviceModel::PipBoy3000MarkV) &&
+                !bunker::HasDigitalMap(bunker::PipDeviceModel::PipBoy3000MarkV),
+            "pipboy_3000_mark_v_not_selectable expected rejected prop-only model") &&
+        Check(bunker::IsSelectablePipDevice(bunker::PipDeviceModel::PipBoy2000MarkVI) &&
+                bunker::UsesPhysicalNavigation(bunker::PipDeviceModel::PipBoy2000MarkVI) &&
+                bunker::SupportsMediaIndex(bunker::PipDeviceModel::PipBoy2000MarkVI),
+            "fo76_pipboy_shell_is_viable_user_preferred_option expected viable physical-navigation shell") &&
+        Check(bunker::IsSelectablePipDevice(bunker::PipDeviceModel::PipPad3500) &&
+                bunker::SupportsFullPipPadWorkspace(bunker::PipDeviceModel::PipPad3500) &&
+                bunker::GetPipDeviceCapabilities(bunker::PipDeviceModel::PipPad3500).ruggedMilitaryPipBoyDerived,
+            "pippad_is_not_consumer_tablet expected rugged Pip-Boy-derived field tablet") &&
+        Check(bunker::UsesPhysicalNavigation(bunker::PipDeviceModel::PipBoy01) &&
+                bunker::UsesPhysicalNavigation(bunker::PipDeviceModel::PipBoy10) &&
+                bunker::UsesPhysicalNavigation(bunker::PipDeviceModel::PipBoy2000MarkVI),
+            "no_map_devices_use_physical_navigation expected physical navigation for no-map shells");
+}
+
+bool RunBlueLinkExpansionModuleContractSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+
+    if (!Check(!bunker::InstallBlueLinkModule(profile) &&
+            !bunker::CanUsePipPadMediaIndex(profile),
+            "bluelink_requires_pippad_before_install expected install to fail without Pip-Pad")) {
+        return false;
+    }
+    bunker::RecoverPipPad(profile);
+    if (!Check(!bunker::InstallBlueLinkModule(profile) &&
+            !bunker::CanUsePipPadMediaIndex(profile) &&
+            profile.pipPadExpansionCoverPresent,
+            "bluelink_requires_module_before_install expected install to fail without recovered module")) {
+        return false;
+    }
+
+    if (!Check(profile.pipPadExpansionCoverPresent &&
+            !bunker::HasBlueLinkModule(profile) &&
+            !bunker::IsBlueLinkInstalled(profile),
+            "pippad_has_expansion_cover_before_bluelink expected dummy cover without module")) {
+        return false;
+    }
+    if (!Check(!bunker::CanUsePipPadMediaIndex(profile),
+            "pippad_media_index_locked_without_bluelink expected media index lock")) {
+        return false;
+    }
+
+    profile.blueLinkModuleRecovered = true;
+    if (!Check(bunker::InstallBlueLinkModule(profile) &&
+            bunker::IsBlueLinkInstalled(profile) &&
+            bunker::CanUsePipPadMediaIndex(profile) &&
+            !profile.pipPadExpansionCoverPresent,
+            "bluelink_install_unlocks_media_index expected installed module to unlock media index")) {
+        return false;
+    }
+    if (!Check(!profile.story.archiveRecovered &&
+            !profile.story.relayRecovered &&
+            !profile.story.returnedToBase,
+            "bluelink_does_not_unlock_map_without_map_data expected no synthetic map/story data")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "bluelink_expansion_contract_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "bluelink expansion smoke failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "bluelink expansion smoke failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "bluelink expansion smoke failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    const bool ok = Check(bunker::HasBlueLinkModule(loadedProfile) &&
+            bunker::IsBlueLinkInstalled(loadedProfile) &&
+            bunker::CanUsePipPadMediaIndex(loadedProfile) &&
+            !loadedProfile.pipPadExpansionCoverPresent,
+            "bluelink expansion smoke expected module state to persist after save/load");
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunBlueLinkRuntimeInteractionSmoke() {
+    bunker::World world;
+    bunker::MapObject module;
+    module.registryId = "[%bluelink_module_0001]";
+    module.displayName = "BlueLink Media Module";
+    module.interaction = bunker::InteractionType::Container;
+    module.category = bunker::ObjectCategory::Container;
+    world.AddObject(module);
+
+    bunker::MapObject expansionBay;
+    expansionBay.registryId = "[%pippad_expansion_bay_0001]";
+    expansionBay.displayName = "Pip-Pad Expansion Bay";
+    expansionBay.interaction = bunker::InteractionType::Terminal;
+    expansionBay.category = bunker::ObjectCategory::Terminal;
+    world.AddObject(expansionBay);
+
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+
+    const auto* moduleObject = world.FindObjectByRegistryId("[%bluelink_module_0001]");
+    const auto* bayObject = world.FindObjectByRegistryId("[%pippad_expansion_bay_0001]");
+    if (!Check(moduleObject != nullptr && bayObject != nullptr,
+            "bluelink runtime smoke expected synthetic module and expansion bay")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(moduleObject, world, player, profile, staticEraser, gameState);
+    if (!Check(!bunker::HasBlueLinkModule(profile) &&
+            !bunker::CanUsePipPadMediaIndex(profile) &&
+            gameState.lastEvent.find("Recover the Pip-Pad") != std::string::npos,
+            "bluelink_pickup_requires_pippad expected pickup to fail before Pip-Pad")) {
+        return false;
+    }
+
+    bunker::RecoverPipPad(profile);
+    bunker::HandleInteraction(moduleObject, world, player, profile, staticEraser, gameState);
+    if (!Check(profile.blueLinkModuleRecovered &&
+            !profile.blueLinkModuleInstalled &&
+            profile.pipPadExpansionCoverPresent &&
+            !bunker::CanUsePipPadMediaIndex(profile),
+            "bluelink_pickup_recovers_module_only expected recovered module without install")) {
+        return false;
+    }
+
+    bunker::SessionProfile installLockedProfile = bunker::MakeDefaultSessionProfile();
+    bunker::RecoverPipPad(installLockedProfile);
+    bunker::HandleInteraction(bayObject, world, player, installLockedProfile, staticEraser, gameState);
+    if (!Check(!bunker::IsBlueLinkInstalled(installLockedProfile) &&
+            !bunker::CanUsePipPadMediaIndex(installLockedProfile) &&
+            installLockedProfile.pipPadExpansionCoverPresent,
+            "bluelink_install_requires_recovered_module expected install lock before module pickup")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(bayObject, world, player, profile, staticEraser, gameState);
+    if (!Check(profile.blueLinkModuleRecovered &&
+            profile.blueLinkModuleInstalled &&
+            !profile.pipPadExpansionCoverPresent &&
+            bunker::CanUsePipPadMediaIndex(profile),
+            "bluelink_install_unlocks_media_index_runtime expected runtime install to unlock media index")) {
+        return false;
+    }
+
+    return Check(!profile.story.archiveRecovered &&
+            !profile.story.relayRecovered &&
+            !profile.story.returnedToBase,
+            "bluelink_install_does_not_unlock_map_or_story_data expected no synthetic story/map unlocks");
+}
+
+bool RunBt72CraneRestorationContractSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.firstPlayableRoute.bt72HullInspected = true;
+
+    if (!Check(!bunker::CanAttachBt72HullToCrane(profile) &&
+            !bunker::AttachBt72HullToCrane(profile),
+            "bt72_crane_requires_hangar_power expected crane attach to require hangar power")) {
+        return false;
+    }
+
+    profile.hangarPowerRestored = true;
+    profile.bt72CraneControlOnline = true;
+    if (!Check(!bunker::CanAttachBt72HullToCrane(profile) &&
+            !bunker::AttachBt72HullToCrane(profile),
+            "bt72_hull_requires_crane_path_clear expected blocked crane path to prevent attach")) {
+        return false;
+    }
+
+    profile.bt72CranePathClear = true;
+    if (!Check(bunker::CanAttachBt72HullToCrane(profile) &&
+            bunker::AttachBt72HullToCrane(profile) &&
+            bunker::CanMoveBt72HullToServiceLift(profile) &&
+            bunker::MoveBt72HullToServiceLift(profile) &&
+            profile.bt72HullMovedToServiceLift &&
+            profile.bt72HullLockedInRestorationCradle,
+            "bt72_hull_moved_to_service_lift_before_core_install expected crane transfer to lock cradle")) {
+        return false;
+    }
+
+    bunker::SessionProfile blockedCoreProfile = bunker::MakeDefaultSessionProfile();
+    blockedCoreProfile.firstPlayableRoute.bt72HullInspected = true;
+    blockedCoreProfile.firstPlayableRoute.bt72CoreRecovered = true;
+    blockedCoreProfile.hangarPowerRestored = true;
+    blockedCoreProfile.bt72CraneControlOnline = true;
+    blockedCoreProfile.bt72CranePathClear = true;
+    if (!Check(!bunker::CanInstallBt72Core(blockedCoreProfile),
+            "bt72_core_install_locked_until_restoration_cradle expected core install lock before cradle")) {
+        return false;
+    }
+
+    profile.firstPlayableRoute.bt72CoreRecovered = true;
+    if (!Check(bunker::CanInstallBt72Core(profile) &&
+            !bunker::CanCompleteBt72StagedRestoration(profile),
+            "bt72_staged_restoration_requires_service_notes expected service notes to gate final restoration")) {
+        return false;
+    }
+    profile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    if (!Check(bunker::CanCompleteBt72StagedRestoration(profile),
+            "bt72_staged_restoration_requires_service_notes expected staged restoration after notes")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "bt72_crane_contract_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "bt72 crane smoke failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "bt72 crane smoke failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "bt72 crane smoke failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    const bool ok = Check(loadedProfile.hangarPowerRestored &&
+            loadedProfile.bt72CraneControlOnline &&
+            loadedProfile.bt72CranePathClear &&
+            loadedProfile.bt72HullMovedToServiceLift &&
+            loadedProfile.bt72HullLockedInRestorationCradle &&
+            bunker::CanCompleteBt72StagedRestoration(loadedProfile),
+            "bt72 crane smoke expected crane restoration flags to persist");
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunBt72CraneRuntimeInteractionSmoke() {
+    bunker::World world;
+    auto addTerminal = [&](const std::string& registryId, const std::string& displayName) {
+        bunker::MapObject object;
+        object.registryId = registryId;
+        object.displayName = displayName;
+        object.interaction = bunker::InteractionType::Terminal;
+        object.category = bunker::ObjectCategory::Terminal;
+        world.AddObject(object);
+    };
+    addTerminal("[%hangar_power_0001]", "Hangar Power Bus");
+    addTerminal("[%bt72_crane_control_0001]", "BT-72 Crane Control");
+    addTerminal("[%bt72_crane_path_0001]", "BT-72 Crane Path");
+    addTerminal("[%bt72_crane_hook_0001]", "BT-72 Crane Hook");
+    addTerminal("[%bt72_service_lift_0001]", "BT-72 Service Lift");
+
+    bunker::MapObject hull;
+    hull.registryId = "[#tr_hull_0001]";
+    hull.displayName = "BT-72 Hull";
+    hull.interaction = bunker::InteractionType::VehicleAnchor;
+    hull.category = bunker::ObjectCategory::Vehicle;
+    world.AddObject(hull);
+
+    const auto* power = world.FindObjectByRegistryId("[%hangar_power_0001]");
+    const auto* control = world.FindObjectByRegistryId("[%bt72_crane_control_0001]");
+    const auto* path = world.FindObjectByRegistryId("[%bt72_crane_path_0001]");
+    const auto* hook = world.FindObjectByRegistryId("[%bt72_crane_hook_0001]");
+    const auto* lift = world.FindObjectByRegistryId("[%bt72_service_lift_0001]");
+    const auto* hullObject = world.FindObjectByRegistryId("[#tr_hull_0001]");
+    if (!Check(power != nullptr && control != nullptr && path != nullptr && hook != nullptr && lift != nullptr && hullObject != nullptr,
+            "bt72 crane runtime smoke expected all synthetic crane objects")) {
+        return false;
+    }
+
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::HandleInteraction(control, world, player, profile, staticEraser, gameState);
+    if (!Check(!profile.bt72CraneControlOnline,
+            "bt72_crane_control_requires_power expected crane control to stay offline without power")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(power, world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(control, world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(path, world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(hook, world, player, profile, staticEraser, gameState);
+    if (!Check(!profile.bt72HullAttachedToCrane,
+            "bt72_crane_hook_requires_hull_survey expected hook to reject unsurveyed hull")) {
+        return false;
+    }
+
+    bunker::SessionProfile blockedPathProfile = bunker::MakeDefaultSessionProfile();
+    blockedPathProfile.firstPlayableRoute.bt72HullInspected = true;
+    bunker::HandleInteraction(power, world, player, blockedPathProfile, staticEraser, gameState);
+    bunker::HandleInteraction(control, world, player, blockedPathProfile, staticEraser, gameState);
+    bunker::HandleInteraction(hook, world, player, blockedPathProfile, staticEraser, gameState);
+    if (!Check(!blockedPathProfile.bt72HullAttachedToCrane,
+            "bt72_crane_hook_requires_clear_path expected hook to reject blocked path")) {
+        return false;
+    }
+
+    bunker::SessionProfile liftBlockedProfile = blockedPathProfile;
+    liftBlockedProfile.bt72CranePathClear = true;
+    bunker::HandleInteraction(lift, world, player, liftBlockedProfile, staticEraser, gameState);
+    if (!Check(!liftBlockedProfile.bt72HullMovedToServiceLift &&
+            !liftBlockedProfile.bt72HullLockedInRestorationCradle,
+            "bt72_service_lift_requires_attached_hull expected lift to reject unattached hull")) {
+        return false;
+    }
+
+    bunker::SessionProfile restoreBlockedProfile = bunker::MakeDefaultSessionProfile();
+    bunker::RecoverPipPad(restoreBlockedProfile);
+    restoreBlockedProfile.firstPlayableRoute.bt72HullInspected = true;
+    restoreBlockedProfile.firstPlayableRoute.bt72CoreRecovered = true;
+    restoreBlockedProfile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    restoreBlockedProfile.character.inventory.push_back({"power_cell", 1, 0.3f});
+    restoreBlockedProfile.character.inventory.push_back({"repair_patch", 1, 0.2f});
+    restoreBlockedProfile.character.inventory.push_back({"old_plate", 1, 0.5f});
+    bunker::HandleInteraction(hullObject, world, player, restoreBlockedProfile, staticEraser, gameState);
+    if (!Check(!restoreBlockedProfile.firstPlayableRoute.bt72Restored,
+            "bt72_restore_rejected_before_cradle expected restore to reject pre-cradle hull")) {
+        return false;
+    }
+
+    bunker::SessionProfile restoreProfile = bunker::MakeDefaultSessionProfile();
+    bunker::RecoverPipPad(restoreProfile);
+    restoreProfile.firstPlayableRoute.bt72HullInspected = true;
+    restoreProfile.firstPlayableRoute.bt72CoreRecovered = true;
+    restoreProfile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+    restoreProfile.character.inventory.push_back({"power_cell", 1, 0.3f});
+    restoreProfile.character.inventory.push_back({"repair_patch", 1, 0.2f});
+    restoreProfile.character.inventory.push_back({"old_plate", 1, 0.5f});
+    bunker::HandleInteraction(power, world, player, restoreProfile, staticEraser, gameState);
+    bunker::HandleInteraction(control, world, player, restoreProfile, staticEraser, gameState);
+    bunker::HandleInteraction(path, world, player, restoreProfile, staticEraser, gameState);
+    bunker::HandleInteraction(hook, world, player, restoreProfile, staticEraser, gameState);
+    bunker::HandleInteraction(lift, world, player, restoreProfile, staticEraser, gameState);
+    bunker::HandleInteraction(hullObject, world, player, restoreProfile, staticEraser, gameState);
+    return Check(restoreProfile.bt72HullLockedInRestorationCradle &&
+            restoreProfile.firstPlayableRoute.bt72Restored &&
+            restoreProfile.partnerTank.secondSeatUnlocked,
+            "bt72_restore_allowed_after_cradle_core_notes_materials expected runtime restore after crane chain");
+}
+
+bool RunBt72ServiceNotesAndPatchRuntimeSmoke() {
+    bunker::World world;
+    auto addObject = [&](const std::string& registryId,
+                         const std::string& displayName,
+                         bunker::InteractionType interaction,
+                         bunker::ObjectCategory category) {
+        bunker::MapObject object;
+        object.registryId = registryId;
+        object.displayName = displayName;
+        object.interaction = interaction;
+        object.category = category;
+        world.AddObject(object);
+    };
+
+    addObject("[%bt72_service_notes_0001]", "BT-72 Service Notes", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%bt72_repair_patch_0001]", "BT-72 Repair Patch Locker", bunker::InteractionType::Container, bunker::ObjectCategory::Container);
+
+    auto objectById = [&](const std::string& registryId) {
+        return world.FindObjectByRegistryId(registryId);
+    };
+
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::SessionProfile lockedProfile = bunker::MakeDefaultSessionProfile();
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), world, player, lockedProfile, staticEraser, gameState);
+    if (!Check(!lockedProfile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            !bunker::HasCollectedTapeId(lockedProfile, "bt72_service_reel_001"),
+            "bt72_service_notes_require_pippad expected service notes to stay locked before Pip-Pad")) {
+        return false;
+    }
+
+    bunker::SessionProfile notesProfile = bunker::MakeDefaultSessionProfile();
+    bunker::RecoverPipPad(notesProfile);
+    notesProfile.story.archiveRecovered = true;
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), world, player, notesProfile, staticEraser, gameState);
+    if (!Check(notesProfile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            bunker::HasCollectedTapeId(notesProfile, "bt72_service_reel_001") &&
+            !notesProfile.story.tankLinked &&
+            !notesProfile.firstPlayableRoute.bt72Restored,
+            "bt72_service_notes_runtime_recovered expected runtime service notes without tank unlock")) {
+        return false;
+    }
+
+    bunker::SessionProfile patchProfile = bunker::MakeDefaultSessionProfile();
+    bunker::RecoverPipPad(patchProfile);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), world, player, patchProfile, staticEraser, gameState);
+    if (!Check(bunker::HasInventoryItem(patchProfile, "repair_patch") &&
+            !patchProfile.firstPlayableRoute.bt72Restored &&
+            !patchProfile.story.tankLinked,
+            "bt72_repair_patch_runtime_recovered expected runtime repair patch without tank unlock")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), world, player, notesProfile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), world, player, patchProfile, staticEraser, gameState);
+    return Check(notesProfile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            bunker::HasCollectedTapeId(notesProfile, "bt72_service_reel_001") &&
+            bunker::HasInventoryItem(patchProfile, "repair_patch") &&
+            !notesProfile.firstPlayableRoute.bt72Restored &&
+            !patchProfile.firstPlayableRoute.bt72Restored,
+            "bt72_service_material_pickups_are_idempotent expected stable duplicate interactions");
+}
+
+const std::vector<std::string>& RequiredFirstRouteRuntimeObjectIds() {
+    static const std::vector<std::string> ids = {
+        "[%cryo_0001]",
+        "[%core_0001]",
+        "[%pip_0001]",
+        "[%archive_0001]",
+        "[%garage_0001]",
+        "[#tr_hull_0001]",
+        "[%bluelink_module_0001]",
+        "[%pippad_expansion_bay_0001]",
+        "[%hangar_power_0001]",
+        "[%bt72_crane_control_0001]",
+        "[%bt72_crane_path_0001]",
+        "[%bt72_crane_hook_0001]",
+        "[%bt72_service_lift_0001]",
+        "[%bt72_service_notes_0001]",
+        "[%bt72_repair_patch_0001]",
+    };
+    return ids;
+}
+
+const std::vector<std::string>& V940StarterRouteRuntimeObjectIds() {
+    static const std::vector<std::string> ids = {
+        "[%bluelink_module_0001]",
+        "[%pippad_expansion_bay_0001]",
+        "[%hangar_power_0001]",
+        "[%bt72_crane_control_0001]",
+        "[%bt72_crane_path_0001]",
+        "[%bt72_crane_hook_0001]",
+        "[%bt72_service_lift_0001]",
+        "[%bt72_service_notes_0001]",
+        "[%bt72_repair_patch_0001]",
+    };
+    return ids;
+}
+
+bool HasRequiredFirstRouteRuntimeObjects(const bunker::World& world) {
+    return std::all_of(RequiredFirstRouteRuntimeObjectIds().begin(),
+        RequiredFirstRouteRuntimeObjectIds().end(),
+        [&](const std::string& registryId) {
+            return world.FindObjectByRegistryId(registryId) != nullptr;
+        });
+}
+
+bool HasV940StarterRouteRuntimeObjects(const bunker::World& world) {
+    return std::all_of(V940StarterRouteRuntimeObjectIds().begin(),
+        V940StarterRouteRuntimeObjectIds().end(),
+        [&](const std::string& registryId) {
+            return world.FindObjectByRegistryId(registryId) != nullptr;
+        });
+}
+
+bool StarterRouteRuntimeObjectTypesMatch(const bunker::World& world) {
+    const auto hasTypedObject = [&](const std::string& registryId,
+                                    bunker::InteractionType interaction,
+                                    bunker::ObjectCategory category) {
+        const auto* object = world.FindObjectByRegistryId(registryId);
+        return object != nullptr &&
+            object->interaction == interaction &&
+            object->category == category;
+    };
+
+    return hasTypedObject("[%bluelink_module_0001]", bunker::InteractionType::Container, bunker::ObjectCategory::Container) &&
+        hasTypedObject("[%pippad_expansion_bay_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%hangar_power_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%bt72_crane_control_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%bt72_crane_path_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%bt72_crane_hook_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%bt72_service_lift_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%bt72_service_notes_0001]", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal) &&
+        hasTypedObject("[%bt72_repair_patch_0001]", bunker::InteractionType::Container, bunker::ObjectCategory::Container) &&
+        hasTypedObject("[#tr_hull_0001]", bunker::InteractionType::VehicleAnchor, bunker::ObjectCategory::Vehicle);
+}
+
+bool RunStarterWorldFirstRouteObjectAvailabilitySmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+
+    const auto hasObject = [&](const std::string& registryId) {
+        return world.FindObjectByRegistryId(registryId) != nullptr;
+    };
+
+    if (!Check(world.IsStarterScenarioWorld(),
+            "starter_world_contains_pippad_and_bt72_route_objects expected starter scenario world")) {
+        return false;
+    }
+    if (!Check(hasObject("[%cryo_0001]") &&
+            hasObject("[%core_0001]") &&
+            hasObject("[%pip_0001]") &&
+            hasObject("[%archive_0001]") &&
+            hasObject("[%garage_0001]") &&
+            hasObject("[#tr_hull_0001]"),
+            "starter_world_contains_pippad_and_bt72_route_objects expected core route objects")) {
+        return false;
+    }
+    if (!Check(hasObject("[%bluelink_module_0001]") &&
+            hasObject("[%pippad_expansion_bay_0001]"),
+            "starter_world_contains_bluelink_runtime_objects expected BlueLink runtime objects")) {
+        return false;
+    }
+    if (!Check(hasObject("[%hangar_power_0001]") &&
+            hasObject("[%bt72_crane_control_0001]") &&
+            hasObject("[%bt72_crane_path_0001]") &&
+            hasObject("[%bt72_crane_hook_0001]") &&
+            hasObject("[%bt72_service_lift_0001]"),
+            "starter_world_contains_bt72_crane_runtime_objects expected crane runtime objects")) {
+        return false;
+    }
+    return Check(hasObject("[%bt72_service_notes_0001]") &&
+            hasObject("[%bt72_repair_patch_0001]"),
+            "starter_world_contains_bt72_service_material_objects expected service/material runtime objects");
+}
+
+bool RunStarterWorldFirstPlayableRouteSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+
+    auto objectById = [&](const std::string& registryId) {
+        return world.FindObjectByRegistryId(registryId);
+    };
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(objectById("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.story.awakenedFromCryo &&
+            profile.continuityAnchorSeeded &&
+            profile.firstPlayableRoute.accessCardRecovered &&
+            bunker::HasInventoryItem(profile, "bunker_access_card") &&
+            bunker::HasPipPad(profile) &&
+            bunker::HasInventoryItem(profile, "#%it_pippad"),
+            "starter_world_e2e_cryo_to_pippad expected cryo, access card, and Pip-Pad recovery")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%bluelink_module_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.blueLinkModuleRecovered &&
+            !bunker::CanUsePipPadMediaIndex(profile) &&
+            !profile.story.archiveRecovered &&
+            !profile.story.relayRecovered &&
+            !profile.story.returnedToBase,
+            "starter_world_e2e_bluelink_installed expected BlueLink pickup without story unlock")) {
+        return false;
+    }
+    bunker::HandleInteraction(objectById("[%pippad_expansion_bay_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(bunker::IsBlueLinkInstalled(profile) &&
+            bunker::CanUsePipPadMediaIndex(profile) &&
+            !profile.pipPadExpansionCoverPresent &&
+            !profile.story.archiveRecovered &&
+            !profile.story.relayRecovered &&
+            !profile.story.returnedToBase,
+            "starter_world_e2e_bluelink_installed expected installed media module only")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%archive_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%garage_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.story.archiveRecovered &&
+            bunker::HasCollectedTapeId(profile, "archive_missing_personnel") &&
+            profile.firstPlayableRoute.bt72HullInspected &&
+            profile.firstPlayableRoute.bt72CoreRecovered &&
+            profile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            bunker::HasCollectedTapeId(profile, "bt72_service_reel_001") &&
+            bunker::HasInventoryItem(profile, "old_plate") &&
+            bunker::HasInventoryItem(profile, "power_cell") &&
+            bunker::HasInventoryItem(profile, "repair_patch"),
+            "starter_world_e2e_archive_and_bt72_knowledge expected archive and BT-72 route knowledge/materials")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%hangar_power_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_control_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_path_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_hook_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_lift_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.hangarPowerRestored &&
+            profile.bt72CraneControlOnline &&
+            profile.bt72CranePathClear &&
+            !profile.bt72HullAttachedToCrane &&
+            profile.bt72HullMovedToServiceLift &&
+            profile.bt72HullLockedInRestorationCradle,
+            "starter_world_e2e_crane_cradle_locked expected authored crane chain to lock cradle")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.firstPlayableRoute.bt72Restored &&
+            profile.partnerTank.secondSeatUnlocked &&
+            !profile.story.tankLinked,
+            "starter_world_e2e_bt72_restored_and_linked expected restore before cockpit link")) {
+        return false;
+    }
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), world, player, profile, staticEraser, gameState);
+    return Check(player.insideTank &&
+            profile.story.tankLinked &&
+            profile.partnerTank.deployed &&
+            player.viewMode == bunker::ViewMode::Cockpit &&
+            bunker::CurrentStoryObjectivePreview(profile).find("Restore BT-72") == std::string::npos,
+            "starter_world_e2e_bt72_restored_and_linked expected cockpit link and advanced objective");
+}
+
+bool RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() {
+    const fs::path tempRoot = fs::current_path() / "starter_world_route_persistence_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "starter_world_route_objects_persist_after_save_load failed to create temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    if (!Check(world.IsStarterScenarioWorld(),
+            "starter_world_route_objects_persist_after_save_load expected generated starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path worldPath = tempRoot / "starter_route_persistence.bwld";
+    if (!Check(world.Save(worldPath.string()),
+            "starter_world_route_objects_persist_after_save_load failed to save starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(worldPath.string()),
+            "starter_world_route_objects_persist_after_save_load failed to load starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+
+    const bool ok = Check(loadedWorld.IsStarterScenarioWorld() &&
+            HasRequiredFirstRouteRuntimeObjects(loadedWorld),
+            "starter_world_route_objects_persist_after_save_load expected all first route objects") &&
+        Check(StarterRouteRuntimeObjectTypesMatch(loadedWorld),
+            "starter_world_route_object_types_persist_after_save_load expected route object interaction types");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunStarterWorldRegistryIdentitySmoke() {
+    std::string duplicateId;
+
+    bunker::World freshWorld;
+    freshWorld.GeneratePrototypeZone();
+    freshWorld.EnsureStarterInfrastructure();
+    if (!Check(freshWorld.IsStarterScenarioWorld() &&
+            !HasDuplicateRegistryIds(freshWorld, &duplicateId) &&
+            HasRequiredFirstRouteRuntimeObjects(freshWorld) &&
+            HasV940StarterRouteRuntimeObjects(freshWorld) &&
+            StarterRouteRuntimeObjectTypesMatch(freshWorld),
+            "starter_world_registry_ids_unique_after_generation expected unique complete starter IDs")) {
+        return false;
+    }
+
+    const auto countBefore = freshWorld.objects.size();
+    freshWorld.EnsureStarterInfrastructure();
+    freshWorld.EnsureStarterInfrastructure();
+    if (!Check(freshWorld.objects.size() == countBefore &&
+            !HasDuplicateRegistryIds(freshWorld, &duplicateId) &&
+            HasRequiredFirstRouteRuntimeObjects(freshWorld),
+            "starter_world_infrastructure_idempotent_without_duplicates expected stable object count and unique IDs")) {
+        return false;
+    }
+
+    bunker::World legacyWorld;
+    legacyWorld.GeneratePrototypeZone();
+    for (const auto& registryId : V940StarterRouteRuntimeObjectIds()) {
+        legacyWorld.RemoveObject(registryId);
+    }
+    legacyWorld.EnsureStarterInfrastructure();
+    legacyWorld.EnsureStarterInfrastructure();
+    return Check(!HasDuplicateRegistryIds(legacyWorld, &duplicateId) &&
+            HasRequiredFirstRouteRuntimeObjects(legacyWorld) &&
+            HasV940StarterRouteRuntimeObjects(legacyWorld) &&
+            StarterRouteRuntimeObjectTypesMatch(legacyWorld),
+            "legacy_starter_upgrade_restores_route_objects_without_duplicates expected complete unique upgraded starter IDs");
+}
+
+bool RunStarterScenarioIdentitySurvivesPipPadPickupSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    if (!Check(world.IsStarterScenarioWorld() &&
+            HasRequiredFirstRouteRuntimeObjects(world) &&
+            world.FindObjectByRegistryId("[%pip_0001]") != nullptr,
+            "starter_scenario_identity_survives_pippad_pickup expected starter world with Pip-Pad locker before pickup")) {
+        return false;
+    }
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+
+    return Check(bunker::HasPipPad(profile) &&
+            profile.story.pipPadRecovered &&
+            world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            world.IsStarterScenarioWorld(),
+            "starter_scenario_identity_survives_pippad_pickup expected persistent Pip-Boy/Pip-Pad station after selection");
+}
+
+bool RunStarterScenarioIdentitySurvivesPipPadPickupRoundtripSmoke() {
+    const fs::path tempRoot = fs::current_path() / "starter_identity_after_pippad_pickup_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "starter_scenario_identity_survives_pippad_pickup_roundtrip failed to create temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+
+    if (!Check(world.FindObjectByRegistryId("[%pip_0001]") != nullptr,
+            "starter_scenario_identity_survives_pippad_pickup_roundtrip expected Pip-Boy/Pip-Pad station before save")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path worldPath = tempRoot / "starter_after_pippad_pickup.bwld";
+    if (!Check(world.Save(worldPath.string()),
+            "starter_scenario_identity_survives_pippad_pickup_roundtrip failed to save starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(worldPath.string()),
+            "starter_scenario_identity_survives_pippad_pickup_roundtrip failed to load starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+
+    std::string duplicateId;
+    const bool ok = Check(loadedWorld.IsStarterScenarioWorld() &&
+            loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            HasV940StarterRouteRuntimeObjects(loadedWorld) &&
+            !HasDuplicateRegistryIds(loadedWorld, &duplicateId),
+            "starter_scenario_identity_survives_pippad_pickup_roundtrip expected picked starter world identity and route objects") &&
+        Check(loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr,
+            "starter_infrastructure_keeps_persistent_pip_selection_station expected station to remain after pickup");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunLoadedStarterWorldContinuesRouteAfterPipPadPickupSmoke() {
+    const fs::path tempRoot = fs::current_path() / "loaded_starter_route_after_pippad_pickup_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "loaded_starter_route_continues_after_pippad_pickup_save_load failed to create temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    std::string duplicateId;
+    if (!Check(world.IsStarterScenarioWorld() &&
+            world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            HasV940StarterRouteRuntimeObjects(world) &&
+            !HasDuplicateRegistryIds(world, &duplicateId),
+            "loaded_starter_route_continues_after_pippad_pickup_save_load expected initial starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(bunker::HasPipPad(profile) &&
+            profile.story.pipPadRecovered &&
+            world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            world.IsStarterScenarioWorld() &&
+            HasV940StarterRouteRuntimeObjects(world),
+            "loaded_starter_route_continues_after_pippad_pickup_save_load expected picked Pip-Pad world to continue route")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path worldPath = tempRoot / "starter_after_pippad_pickup_continue.bwld";
+    if (!Check(world.Save(worldPath.string()),
+            "loaded_starter_route_continues_after_pippad_pickup_save_load failed to save world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(worldPath.string()),
+            "loaded_starter_route_continues_after_pippad_pickup_save_load failed to load world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+    if (!Check(loadedWorld.IsStarterScenarioWorld() &&
+            loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            HasV940StarterRouteRuntimeObjects(loadedWorld) &&
+            !HasDuplicateRegistryIds(loadedWorld, &duplicateId) &&
+            StarterRouteRuntimeObjectTypesMatch(loadedWorld),
+            "loaded_starter_route_after_pippad_pickup_keeps_selection_station expected persistent Pip station after load")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    auto objectById = [&](const std::string& registryId) {
+        return loadedWorld.FindObjectByRegistryId(registryId);
+    };
+
+    bunker::HandleInteraction(objectById("[%bluelink_module_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pippad_expansion_bay_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%archive_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%garage_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    if (!Check(bunker::IsBlueLinkInstalled(profile) &&
+            bunker::CanUsePipPadMediaIndex(profile) &&
+            profile.story.archiveRecovered &&
+            profile.firstPlayableRoute.bt72HullInspected &&
+            profile.firstPlayableRoute.bt72CoreRecovered &&
+            profile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            bunker::HasInventoryItem(profile, "power_cell") &&
+            bunker::HasInventoryItem(profile, "old_plate") &&
+            bunker::HasInventoryItem(profile, "repair_patch"),
+            "loaded_starter_route_continues_after_pippad_pickup_save_load expected loaded route knowledge and materials")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%hangar_power_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_control_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_path_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_hook_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_lift_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    if (!Check(profile.hangarPowerRestored &&
+            profile.bt72CraneControlOnline &&
+            profile.bt72CranePathClear &&
+            !profile.bt72HullAttachedToCrane &&
+            profile.bt72HullMovedToServiceLift &&
+            profile.bt72HullLockedInRestorationCradle,
+            "loaded_starter_route_continues_after_pippad_pickup_save_load expected loaded crane chain to lock cradle")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    if (!Check(profile.firstPlayableRoute.bt72Restored &&
+            profile.partnerTank.secondSeatUnlocked &&
+            !profile.story.tankLinked &&
+            !player.insideTank,
+            "loaded_starter_route_after_pippad_pickup_reaches_bt72_link expected restore before cockpit link")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    const bool ok = Check(player.insideTank &&
+            profile.story.tankLinked &&
+            profile.partnerTank.deployed &&
+            player.viewMode == bunker::ViewMode::Cockpit &&
+            bunker::CurrentStoryObjectivePreview(profile).find("Restore BT-72") == std::string::npos,
+            "loaded_starter_route_after_pippad_pickup_reaches_bt72_link expected cockpit link after loaded continuation");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunLoadedProfileAndWorldContinueAfterPipPadPickupSmoke() {
+    const fs::path tempRoot = fs::current_path() / "loaded_profile_and_world_after_pippad_pickup_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "loaded_profile_and_world_after_pippad_pickup expected temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.selectedWorld = "starter_profile_world_after_pippad.bwld";
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(bunker::HasPipPad(profile) &&
+            profile.story.pipPadRecovered &&
+            profile.firstPlayableRoute.accessCardRecovered &&
+            bunker::HasInventoryItem(profile, "bunker_access_card") &&
+            profile.continuityAnchorSeeded &&
+            world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            world.IsStarterScenarioWorld() &&
+            HasV940StarterRouteRuntimeObjects(world),
+            "loaded_profile_and_world_after_pippad_pickup expected picked profile/world before save")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const fs::path worldPath = tempRoot / profile.selectedWorld;
+    if (!Check(world.Save(worldPath.string()),
+            "loaded_profile_and_world_after_pippad_pickup failed to save world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "loaded_profile_and_world_after_pippad_pickup failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(worldPath.string()),
+            "loaded_profile_and_world_after_pippad_pickup failed to load world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "loaded_profile_and_world_after_pippad_pickup failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    std::string duplicateId;
+    if (!Check(loadedWorld.IsStarterScenarioWorld() &&
+            loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            HasV940StarterRouteRuntimeObjects(loadedWorld) &&
+            !HasDuplicateRegistryIds(loadedWorld, &duplicateId) &&
+            StarterRouteRuntimeObjectTypesMatch(loadedWorld) &&
+            bunker::HasPipPad(loadedProfile) &&
+            loadedProfile.story.pipPadRecovered &&
+            loadedProfile.firstPlayableRoute.accessCardRecovered &&
+            bunker::HasInventoryItem(loadedProfile, "bunker_access_card") &&
+            loadedProfile.continuityAnchorSeeded &&
+            loadedProfile.selectedWorld == profile.selectedWorld,
+            "loaded_profile_and_world_after_pippad_pickup expected picked profile/world to reload")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    auto objectById = [&](const std::string& registryId) {
+        return loadedWorld.FindObjectByRegistryId(registryId);
+    };
+
+    bunker::HandleInteraction(objectById("[%bluelink_module_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pippad_expansion_bay_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%archive_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%garage_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    if (!Check(bunker::IsBlueLinkInstalled(loadedProfile) &&
+            bunker::CanUsePipPadMediaIndex(loadedProfile) &&
+            loadedProfile.story.archiveRecovered &&
+            loadedProfile.firstPlayableRoute.bt72HullInspected &&
+            loadedProfile.firstPlayableRoute.bt72CoreRecovered &&
+            loadedProfile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            bunker::HasInventoryItem(loadedProfile, "power_cell") &&
+            bunker::HasInventoryItem(loadedProfile, "old_plate") &&
+            bunker::HasInventoryItem(loadedProfile, "repair_patch"),
+            "loaded_profile_and_world_after_pippad_pickup expected route knowledge and materials after loaded continuation")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%hangar_power_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_control_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_path_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_hook_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_lift_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    if (!Check(loadedProfile.bt72HullLockedInRestorationCradle,
+            "loaded_profile_and_world_after_pippad_pickup expected restoration cradle after loaded continuation")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    if (!Check(loadedProfile.firstPlayableRoute.bt72Restored &&
+            loadedProfile.partnerTank.secondSeatUnlocked &&
+            !loadedProfile.story.tankLinked &&
+            !player.insideTank,
+            "loaded_profile_and_world_after_pippad_pickup expected BT-72 restore before loaded profile link")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+    if (!Check(player.insideTank &&
+            loadedProfile.story.tankLinked &&
+            loadedProfile.partnerTank.deployed &&
+            player.viewMode == bunker::ViewMode::Cockpit &&
+            bunker::CurrentStoryObjectivePreview(loadedProfile).find("Restore BT-72") == std::string::npos,
+            "loaded_profile_and_world_after_pippad_pickup expected BT-72 cockpit link after loaded profile continuation")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const auto finalSaveStatus = bunker::SaveProfileAtomically(loadedProfile, profilePath);
+    if (!Check(finalSaveStatus.ok, "loaded_profile_and_world_after_pippad_pickup failed to save final profile: " + finalSaveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile finalProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, finalProfile),
+            "loaded_profile_and_world_after_pippad_pickup failed to load final profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(finalProfile.story.pipPadRecovered &&
+            finalProfile.story.tankLinked &&
+            finalProfile.firstPlayableRoute.bt72Restored &&
+            finalProfile.bt72HullLockedInRestorationCradle &&
+            bunker::IsBlueLinkInstalled(finalProfile),
+            "loaded_profile_and_world_after_pippad_pickup expected final route state to persist");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunPipDeviceSelectionStationPersistsAfterPickupSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    const int selectedDeviceCount = CountInventoryItem(profile, "#%it_pippad");
+    if (!Check(world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            bunker::HasPipPad(profile) &&
+            profile.story.pipPadRecovered &&
+            profile.activePipDeviceId == "#%it_pippad" &&
+            selectedDeviceCount == 1,
+            "pip_device_selection_station_persists_after_pickup expected persistent station and default active device")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    return Check(world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            CountInventoryItem(profile, "#%it_pippad") == selectedDeviceCount &&
+            profile.pipDeviceReselectPending &&
+            gameState.lastEvent.find("returned to the rack") != std::string::npos,
+            "pip_device_selection_station_persists_after_pickup expected repeated interaction to start reselect flow without duplicate device");
+}
+
+bool RunPipDeviceSelectionStationRoundtripSmoke() {
+    const fs::path tempRoot = fs::current_path() / "pip_device_selection_station_roundtrip_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "pip_device_selection_station_roundtrip failed to create temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+
+    const fs::path worldPath = tempRoot / "pip_station_world.bwld";
+    const fs::path profilePath = tempRoot / "profile.txt";
+    if (!Check(world.Save(worldPath.string()),
+            "pip_device_selection_station_roundtrip failed to save world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "pip_device_selection_station_roundtrip failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    bunker::SessionProfile loadedProfile;
+    if (!Check(loadedWorld.Load(worldPath.string()) &&
+            bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "pip_device_selection_station_roundtrip failed to load world/profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+    const int selectedDeviceCount = CountInventoryItem(loadedProfile, "#%it_pippad");
+    bunker::HandleInteraction(loadedWorld.FindObjectByRegistryId("[%pip_0001]"), loadedWorld, player, loadedProfile, staticEraser, gameState);
+
+    const bool ok = Check(loadedWorld.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            bunker::HasPipPad(loadedProfile) &&
+            loadedProfile.activePipDeviceId == "#%it_pippad" &&
+            CountInventoryItem(loadedProfile, "#%it_pippad") == selectedDeviceCount &&
+            loadedProfile.pipDeviceReselectPending,
+            "pip_device_selection_station_roundtrip expected persistent station and no duplicate selected device");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunPipDeviceReselectFlowSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    auto objectById = [&](const std::string& registryId) {
+        return world.FindObjectByRegistryId(registryId);
+    };
+
+    bunker::HandleInteraction(objectById("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.activePipDeviceId == "#%it_pippad" &&
+            bunker::HasPipPad(profile) &&
+            objectById("[%pip_0001]") != nullptr,
+            "pip_device_reselect_flow expected first interaction to select default device")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.pipDeviceReselectPending &&
+            bunker::HasPipPad(profile) &&
+            objectById("[%pip_0001]") != nullptr,
+            "pip_device_reselect_flow expected second interaction to mark return-to-rack flow")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%bluelink_module_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pippad_expansion_bay_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%archive_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%garage_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%hangar_power_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_control_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_path_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_hook_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_lift_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), world, player, profile, staticEraser, gameState);
+
+    return Check(bunker::IsBlueLinkInstalled(profile) &&
+            profile.story.archiveRecovered &&
+            profile.bt72HullLockedInRestorationCradle &&
+            profile.firstPlayableRoute.bt72Restored,
+            "pip_device_reselect_flow expected route to continue through BlueLink/archive/BT-72 after reselect flow");
+}
+
+bool RunPipDeviceSelectionStationRetiresAfterBunkerExitSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    auto objectById = [&](const std::string& registryId) {
+        return world.FindObjectByRegistryId(registryId);
+    };
+
+    if (!Check(!bunker::IsPipDeviceSelectionStationRetired(profile),
+            "pip_device_station_retired_after_exit expected fresh profile to keep station active")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.activePipDeviceId == "#%it_pippad" &&
+            bunker::HasActivePipDevice(profile) &&
+            bunker::PlayerHasPipPadAccess(profile) &&
+            world.FindObjectByRegistryId("[%pip_0001]") != nullptr,
+            "pip_device_station_retired_after_exit expected station to select default device before bunker exit")) {
+        return false;
+    }
+
+    const std::string activeBeforeRetiredInteraction = profile.activePipDeviceId;
+    const int pipPadCountBeforeRetiredInteraction = CountInventoryItem(profile, "#%it_pippad");
+    profile.story.exitedBunker = true;
+    profile.pipDeviceReselectPending = false;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(profile),
+            "pip_device_station_retired_after_exit expected story exit to retire station")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            profile.activePipDeviceId == activeBeforeRetiredInteraction &&
+            CountInventoryItem(profile, "#%it_pippad") == pipPadCountBeforeRetiredInteraction &&
+            !profile.pipDeviceReselectPending &&
+            bunker::HasActivePipDevice(profile) &&
+            bunker::PlayerHasPipPadAccess(profile) &&
+            gameState.lastEvent.find("display-only") != std::string::npos,
+            "pip_device_station_retired_after_exit expected retired station to remain visual-only without profile mutation")) {
+        return false;
+    }
+
+    bunker::SessionProfile surfaceProfile = bunker::MakeDefaultSessionProfile();
+    surfaceProfile.firstPlayableRoute.surfaceArrivalReached = true;
+    bunker::SessionProfile lateRouteProfile = bunker::MakeDefaultSessionProfile();
+    lateRouteProfile.story.outerRoadCleared = true;
+    bunker::SessionProfile relayProfile = bunker::MakeDefaultSessionProfile();
+    relayProfile.story.relayRecovered = true;
+    bunker::SessionProfile returnedProfile = bunker::MakeDefaultSessionProfile();
+    returnedProfile.story.returnedToBase = true;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(surfaceProfile) &&
+            bunker::IsPipDeviceSelectionStationRetired(lateRouteProfile) &&
+            bunker::IsPipDeviceSelectionStationRetired(relayProfile) &&
+            bunker::IsPipDeviceSelectionStationRetired(returnedProfile),
+            "pip_device_station_retired_after_exit expected surface and later route flags to retire station")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "pip_device_station_retired_after_exit_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "pip_device_station_retired_after_exit failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "pip_device_station_retired_after_exit failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "pip_device_station_retired_after_exit failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(bunker::IsPipDeviceSelectionStationRetired(loadedProfile) &&
+            loadedProfile.activePipDeviceId == activeBeforeRetiredInteraction &&
+            bunker::HasActivePipDevice(loadedProfile) &&
+            bunker::PlayerHasPipPadAccess(loadedProfile),
+            "pip_device_station_retired_after_exit expected retirement and active device access to persist after save/load");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunActivePipDeviceUsableAfterStationRetirementSmoke() {
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::SessionProfile pippadProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pippadProfile, "#%it_pippad");
+    pippadProfile.story.exitedBunker = true;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(pippadProfile) &&
+            bunker::PlayerHasPipPadAccess(pippadProfile) &&
+            bunker::HasActivePipDevice(pippadProfile),
+            "active_pip_device_after_station_retirement expected retired station with active Pip-Pad access")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, pippadProfile, staticEraser, gameState);
+    if (!Check(world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            pippadProfile.activePipDeviceId == "#%it_pippad" &&
+            !pippadProfile.pipDeviceReselectPending &&
+            gameState.lastEvent.find("display-only") != std::string::npos,
+            "active_pip_device_after_station_retirement expected station to stay display-only before UI toggle")) {
+        return false;
+    }
+
+    if (!Check(bunker::TryTogglePipPadUi(player, pippadProfile, gameState) &&
+            player.uiVisible &&
+            gameState.lastEvent.find("Pip-Pad 3500") != std::string::npos &&
+            gameState.lastEvent.find("Full field workspace") != std::string::npos,
+            "active_pip_device_after_station_retirement expected Pip-Pad UI to open with full workspace messaging")) {
+        return false;
+    }
+    if (!Check(bunker::TryTogglePipPadUi(player, pippadProfile, gameState) &&
+            !player.uiVisible &&
+            gameState.lastEvent.find("Pip-Pad 3500 closed") != std::string::npos,
+            "active_pip_device_after_station_retirement expected Pip-Pad UI to close after retirement")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy10Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy10Profile, "#%it_pipboy_1_0");
+    pipBoy10Profile.story.exitedBunker = true;
+    if (!Check(bunker::TryTogglePipPadUi(player, pipBoy10Profile, gameState) &&
+            player.uiVisible &&
+            gameState.lastEvent.find("Pip-Boy 1.0") != std::string::npos &&
+            gameState.lastEvent.find("Physical-navigation") != std::string::npos &&
+            gameState.lastEvent.find("Full field workspace") == std::string::npos,
+            "active_pip_device_after_station_retirement expected Pip-Boy 1.0 UI to avoid full workspace/media promise")) {
+        return false;
+    }
+    bunker::TryTogglePipPadUi(player, pipBoy10Profile, gameState);
+
+    bunker::SessionProfile pipBoy3000Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy3000Profile, "#%it_pipboy_3000");
+    pipBoy3000Profile.story.exitedBunker = true;
+    if (!Check(bunker::TryTogglePipPadUi(player, pipBoy3000Profile, gameState) &&
+            player.uiVisible &&
+            gameState.lastEvent.find("Pip-Boy 3000 / Mark IV") != std::string::npos &&
+            gameState.lastEvent.find("Map and media-capable") != std::string::npos &&
+            gameState.lastEvent.find("Full field workspace") == std::string::npos,
+            "active_pip_device_after_station_retirement expected Pip-Boy 3000 UI to reflect map/media without full workspace")) {
+        return false;
+    }
+    bunker::TryTogglePipPadUi(player, pipBoy3000Profile, gameState);
+
+    bunker::SessionProfile noDeviceProfile = bunker::MakeDefaultSessionProfile();
+    noDeviceProfile.story.exitedBunker = true;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(noDeviceProfile),
+            "active_pip_device_after_station_retirement expected no-device exited profile to retire station")) {
+        return false;
+    }
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, noDeviceProfile, staticEraser, gameState);
+    if (!Check(world.FindObjectByRegistryId("[%pip_0001]") != nullptr &&
+            noDeviceProfile.activePipDeviceId.empty() &&
+            !noDeviceProfile.story.pipPadRecovered &&
+            !noDeviceProfile.pipDeviceReselectPending &&
+            gameState.lastEvent.find("display-only") != std::string::npos,
+            "active_pip_device_after_station_retirement expected retired station not to recover device for no-device profile")) {
+        return false;
+    }
+    player.uiVisible = true;
+    return Check(!bunker::TryTogglePipPadUi(player, noDeviceProfile, gameState) &&
+            !player.uiVisible &&
+            gameState.lastEvent.find("No active Pip device") != std::string::npos,
+            "active_pip_device_after_station_retirement expected no-device UI toggle to fail safely");
+}
+
+bool RunActivePipDeviceUiCompatibilityWrapperSmoke() {
+    auto equivalentToggleBehavior = [](const bunker::SessionProfile& profile) {
+        bunker::PlayerState activePlayer;
+        bunker::PlayerState wrapperPlayer;
+        bunker::GameState activeGameState;
+        bunker::GameState wrapperGameState;
+
+        const bool activeOpen = bunker::TryToggleActivePipDeviceUi(activePlayer, profile, activeGameState);
+        const bool wrapperOpen = bunker::TryTogglePipPadUi(wrapperPlayer, profile, wrapperGameState);
+        if (activeOpen != wrapperOpen ||
+            activePlayer.uiVisible != wrapperPlayer.uiVisible ||
+            activeGameState.lastEvent != wrapperGameState.lastEvent) {
+            return false;
+        }
+
+        const bool activeClose = bunker::TryToggleActivePipDeviceUi(activePlayer, profile, activeGameState);
+        const bool wrapperClose = bunker::TryTogglePipPadUi(wrapperPlayer, profile, wrapperGameState);
+        return activeClose == wrapperClose &&
+            activePlayer.uiVisible == wrapperPlayer.uiVisible &&
+            activeGameState.lastEvent == wrapperGameState.lastEvent;
+    };
+
+    bunker::SessionProfile pippadProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pippadProfile, "#%it_pippad");
+    pippadProfile.story.exitedBunker = true;
+    if (!Check(equivalentToggleBehavior(pippadProfile),
+            "active_pip_device_ui_wrapper_pippad expected legacy wrapper to match active-device helper")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy10Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy10Profile, "#%it_pipboy_1_0");
+    pipBoy10Profile.story.exitedBunker = true;
+    if (!Check(equivalentToggleBehavior(pipBoy10Profile),
+            "active_pip_device_ui_wrapper_pipboy_1_0 expected legacy wrapper to match active-device helper")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy3000Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy3000Profile, "#%it_pipboy_3000");
+    pipBoy3000Profile.story.exitedBunker = true;
+    if (!Check(equivalentToggleBehavior(pipBoy3000Profile),
+            "active_pip_device_ui_wrapper_pipboy_3000 expected legacy wrapper to match active-device helper")) {
+        return false;
+    }
+
+    bunker::SessionProfile noDeviceProfile = bunker::MakeDefaultSessionProfile();
+    noDeviceProfile.story.exitedBunker = true;
+    bunker::PlayerState activePlayer;
+    bunker::PlayerState wrapperPlayer;
+    activePlayer.uiVisible = true;
+    wrapperPlayer.uiVisible = true;
+    bunker::GameState activeGameState;
+    bunker::GameState wrapperGameState;
+    const bool activeResult = bunker::TryToggleActivePipDeviceUi(activePlayer, noDeviceProfile, activeGameState);
+    const bool wrapperResult = bunker::TryTogglePipPadUi(wrapperPlayer, noDeviceProfile, wrapperGameState);
+    return Check(!activeResult &&
+            !wrapperResult &&
+            !activePlayer.uiVisible &&
+            !wrapperPlayer.uiVisible &&
+            activeGameState.lastEvent == wrapperGameState.lastEvent &&
+            activeGameState.lastEvent.find("No active Pip device") != std::string::npos,
+            "active_pip_device_ui_wrapper_no_device expected matching safe rejection");
+}
+
+bool RunActivePipDeviceAccessCompatibilityWrapperSmoke() {
+    bunker::SessionProfile freshProfile = bunker::MakeDefaultSessionProfile();
+    if (!Check(!bunker::PlayerHasActivePipDeviceAccess(freshProfile) &&
+            !bunker::PlayerHasPipPadAccess(freshProfile),
+            "active_pip_device_access_wrapper_fresh_profile expected no active device access")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipPadProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipPadProfile, "#%it_pippad");
+    if (!Check(bunker::PlayerHasActivePipDeviceAccess(pipPadProfile) &&
+            bunker::PlayerHasPipPadAccess(pipPadProfile),
+            "active_pip_device_access_wrapper_pippad expected active Pip-Pad access")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy10Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy10Profile, "#%it_pipboy_1_0");
+    if (!Check(bunker::PlayerHasActivePipDeviceAccess(pipBoy10Profile) &&
+            bunker::PlayerHasPipPadAccess(pipBoy10Profile),
+            "active_pip_device_access_wrapper_pipboy_1_0 expected legacy wrapper to include Pip-Boy 1.0")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy3000Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy3000Profile, "#%it_pipboy_3000");
+    if (!Check(bunker::PlayerHasActivePipDeviceAccess(pipBoy3000Profile) &&
+            bunker::PlayerHasPipPadAccess(pipBoy3000Profile),
+            "active_pip_device_access_wrapper_pipboy_3000 expected legacy wrapper to include Pip-Boy 3000")) {
+        return false;
+    }
+
+    pipBoy3000Profile.story.exitedBunker = true;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(pipBoy3000Profile) &&
+            bunker::PlayerHasActivePipDeviceAccess(pipBoy3000Profile) &&
+            bunker::PlayerHasPipPadAccess(pipBoy3000Profile),
+            "active_pip_device_access_wrapper_retired_station expected station retirement not to block active device access")) {
+        return false;
+    }
+
+    bunker::SessionProfile invalidProfile = bunker::MakeDefaultSessionProfile();
+    invalidProfile.activePipDeviceId = "#%it_consumer_tablet";
+    bunker::NormalizeSessionProfile(invalidProfile);
+    return Check(invalidProfile.activePipDeviceId.empty() &&
+            !bunker::PlayerHasActivePipDeviceAccess(invalidProfile) &&
+            !bunker::PlayerHasPipPadAccess(invalidProfile),
+            "active_pip_device_access_wrapper_invalid_id expected normalized invalid device to deny access");
+}
+
+bool RunActivePipDeviceCustomizationStateSmoke() {
+    bunker::SessionProfile defaultProfile = bunker::MakeDefaultSessionProfile();
+    bunker::NormalizeSessionProfile(defaultProfile);
+    if (!Check(defaultProfile.pipDeviceThemeId == "classic_green" &&
+            defaultProfile.pipDeviceDisplayMode == "standard" &&
+            defaultProfile.pipDeviceCarryMode == "auto" &&
+            bunker::ActivePipDeviceCustomizationSummary(defaultProfile).find("classic green theme") != std::string::npos,
+            "active_pip_device_customization_defaults expected safe default config after normalization")) {
+        return false;
+    }
+
+    bunker::SessionProfile invalidProfile = bunker::MakeDefaultSessionProfile();
+    invalidProfile.pipDeviceThemeId = "consumer_rgb";
+    invalidProfile.pipDeviceDisplayMode = "cinematic";
+    invalidProfile.pipDeviceCarryMode = "drone";
+    bunker::NormalizePipDeviceCustomization(invalidProfile);
+    if (!Check(invalidProfile.pipDeviceThemeId == "classic_green" &&
+            invalidProfile.pipDeviceDisplayMode == "standard" &&
+            invalidProfile.pipDeviceCarryMode == "auto",
+            "active_pip_device_customization_invalid_values_normalize_to_defaults expected invalid config to reset")) {
+        return false;
+    }
+
+    bunker::SessionProfile configuredProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(configuredProfile, "#%it_pipboy_3000");
+    if (!Check(bunker::SetActivePipDeviceCustomization(configuredProfile, "amber", "readable", "wrist") &&
+            configuredProfile.pipDeviceThemeId == "amber" &&
+            configuredProfile.pipDeviceDisplayMode == "readable" &&
+            configuredProfile.pipDeviceCarryMode == "wrist",
+            "active_pip_device_customization_set_valid expected valid customization to apply")) {
+        return false;
+    }
+    if (!Check(!bunker::SetActivePipDeviceCustomization(configuredProfile, "consumer_rgb", "readable", "wrist") &&
+            configuredProfile.pipDeviceThemeId == "amber" &&
+            configuredProfile.pipDeviceDisplayMode == "readable" &&
+            configuredProfile.pipDeviceCarryMode == "wrist",
+            "active_pip_device_customization_reject_invalid expected invalid customization not to mutate profile")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "active_pip_device_customization_state_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "active_pip_device_customization_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(configuredProfile, profilePath);
+    if (!Check(saveStatus.ok, "active_pip_device_customization_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "active_pip_device_customization_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(loadedProfile.activePipDeviceId == "#%it_pipboy_3000" &&
+            loadedProfile.pipDeviceThemeId == "amber" &&
+            loadedProfile.pipDeviceDisplayMode == "readable" &&
+            loadedProfile.pipDeviceCarryMode == "wrist",
+            "active_pip_device_customization_save_load expected customization to persist")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    loadedProfile.story.exitedBunker = true;
+    const std::string themeBeforeStation = loadedProfile.pipDeviceThemeId;
+    const std::string displayBeforeStation = loadedProfile.pipDeviceDisplayMode;
+    const std::string carryBeforeStation = loadedProfile.pipDeviceCarryMode;
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, loadedProfile, staticEraser, gameState);
+    if (!Check(loadedProfile.pipDeviceThemeId == themeBeforeStation &&
+            loadedProfile.pipDeviceDisplayMode == displayBeforeStation &&
+            loadedProfile.pipDeviceCarryMode == carryBeforeStation &&
+            gameState.lastEvent.find("display-only") != std::string::npos,
+            "active_pip_device_customization_station_retired_no_mutation expected retired station not to change customization")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    if (!Check(bunker::TryToggleActivePipDeviceUi(player, loadedProfile, gameState) &&
+            player.uiVisible &&
+            gameState.lastEvent.find("Pip-Boy 3000 / Mark IV") != std::string::npos &&
+            gameState.lastEvent.find("Active config: amber theme, readable display, wrist mode.") != std::string::npos,
+            "active_pip_device_customization_ui_summary expected active config summary after station retirement")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    fs::remove_all(tempRoot, ec);
+    return true;
+}
+
+bool RunActivePipDeviceCustomizationCommandSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(profile, "#%it_pippad");
+    bunker::NormalizeSessionProfile(profile);
+    bunker::GameState gameState;
+
+    if (!Check(profile.pipDeviceThemeId == "classic_green" &&
+            profile.pipDeviceDisplayMode == "standard" &&
+            profile.pipDeviceCarryMode == "auto",
+            "active_pip_device_customization_commands expected fresh normalized defaults")) {
+        return false;
+    }
+
+    if (!Check(bunker::CycleActivePipDeviceCustomization(profile, bunker::PipDeviceCustomizationSlot::Theme, &gameState) &&
+            profile.pipDeviceThemeId == "amber" &&
+            gameState.lastEvent.find("amber theme") != std::string::npos &&
+            bunker::CycleActivePipDeviceCustomization(profile, bunker::PipDeviceCustomizationSlot::Theme) &&
+            profile.pipDeviceThemeId == "monochrome" &&
+            bunker::CycleActivePipDeviceCustomization(profile, bunker::PipDeviceCustomizationSlot::Theme) &&
+            profile.pipDeviceThemeId == "high_contrast" &&
+            bunker::CycleActivePipDeviceCustomization(profile, bunker::PipDeviceCustomizationSlot::Theme) &&
+            profile.pipDeviceThemeId == "classic_green",
+            "active_pip_device_customization_commands_cycle_theme expected full theme cycle")) {
+        return false;
+    }
+
+    if (!Check(bunker::ApplyActivePipDeviceCustomizationCommand(profile, "display_next", &gameState) &&
+            profile.pipDeviceDisplayMode == "readable" &&
+            gameState.lastEvent.find("readable display") != std::string::npos &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(profile, "display_next") &&
+            profile.pipDeviceDisplayMode == "compact" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(profile, "display_next") &&
+            profile.pipDeviceDisplayMode == "standard",
+            "active_pip_device_customization_commands_cycle_display expected full display cycle")) {
+        return false;
+    }
+
+    if (!Check(bunker::ApplyActivePipDeviceCustomizationCommand(profile, "carry_next", &gameState) &&
+            profile.pipDeviceCarryMode == "wrist" &&
+            gameState.lastEvent.find("wrist mode") != std::string::npos &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(profile, "carry_next") &&
+            profile.pipDeviceCarryMode == "handheld" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(profile, "carry_next") &&
+            profile.pipDeviceCarryMode == "auto",
+            "active_pip_device_customization_commands_cycle_carry expected full carry cycle")) {
+        return false;
+    }
+
+    const std::string themeBeforeInvalid = profile.pipDeviceThemeId;
+    const std::string displayBeforeInvalid = profile.pipDeviceDisplayMode;
+    const std::string carryBeforeInvalid = profile.pipDeviceCarryMode;
+    if (!Check(!bunker::ApplyActivePipDeviceCustomizationCommand(profile, "rgb_party", &gameState) &&
+            profile.pipDeviceThemeId == themeBeforeInvalid &&
+            profile.pipDeviceDisplayMode == displayBeforeInvalid &&
+            profile.pipDeviceCarryMode == carryBeforeInvalid,
+            "active_pip_device_customization_commands_reject_unknown expected unknown command not to mutate profile")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::SelectPipDevice(profile, "#%it_pippad");
+    profile.story.exitedBunker = true;
+    bunker::HandleInteraction(world.FindObjectByRegistryId("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.pipDeviceThemeId == themeBeforeInvalid &&
+            profile.pipDeviceDisplayMode == displayBeforeInvalid &&
+            profile.pipDeviceCarryMode == carryBeforeInvalid &&
+            gameState.lastEvent.find("display-only") != std::string::npos,
+            "active_pip_device_customization_commands_retired_station_no_mutation expected retired station not to change customization")) {
+        return false;
+    }
+
+    if (!Check(bunker::ApplyActivePipDeviceCustomizationCommand(profile, "theme_next", &gameState) &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(profile, "display_next", &gameState) &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(profile, "carry_next", &gameState) &&
+            profile.pipDeviceThemeId == "amber" &&
+            profile.pipDeviceDisplayMode == "readable" &&
+            profile.pipDeviceCarryMode == "wrist",
+            "active_pip_device_customization_commands_after_retirement expected active device commands after station retirement")) {
+        return false;
+    }
+    if (!Check(bunker::TryToggleActivePipDeviceUi(player, profile, gameState) &&
+            gameState.lastEvent.find("Active config: amber theme, readable display, wrist mode.") != std::string::npos,
+            "active_pip_device_customization_commands_ui_summary expected cycled config in active device UI")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "active_pip_device_customization_command_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "active_pip_device_customization_commands_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "active_pip_device_customization_commands_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "active_pip_device_customization_commands_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(loadedProfile.pipDeviceThemeId == "amber" &&
+            loadedProfile.pipDeviceDisplayMode == "readable" &&
+            loadedProfile.pipDeviceCarryMode == "wrist",
+            "active_pip_device_customization_commands_save_load expected cycled config to persist");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunActivePipDeviceCustomizationCapabilityRulesSmoke() {
+    bunker::SessionProfile pipPadProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipPadProfile, "#%it_pippad");
+    if (!Check(bunker::SetActivePipDeviceCustomization(pipPadProfile, "high_contrast", "compact", "handheld") &&
+            pipPadProfile.pipDeviceThemeId == "high_contrast" &&
+            pipPadProfile.pipDeviceDisplayMode == "compact" &&
+            pipPadProfile.pipDeviceCarryMode == "handheld" &&
+            bunker::ActivePipDeviceCustomizationSummary(pipPadProfile).find("high-contrast theme") != std::string::npos,
+            "active_pip_device_customization_capabilities_pippad_expected_full_customization")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy3000Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy3000Profile, "#%it_pipboy_3000");
+    if (!Check(!bunker::SetActivePipDeviceCustomization(pipBoy3000Profile, "high_contrast", "standard", "auto") &&
+            pipBoy3000Profile.pipDeviceThemeId == "classic_green" &&
+            !bunker::SetActivePipDeviceCustomization(pipBoy3000Profile, "amber", "readable", "handheld") &&
+            pipBoy3000Profile.pipDeviceThemeId == "classic_green" &&
+            pipBoy3000Profile.pipDeviceDisplayMode == "standard" &&
+            pipBoy3000Profile.pipDeviceCarryMode == "auto",
+            "active_pip_device_customization_capabilities_pipboy_3000_rejects_pippad_only_values")) {
+        return false;
+    }
+    if (!Check(bunker::SetActivePipDeviceCustomization(pipBoy3000Profile, "amber", "readable", "wrist") &&
+            pipBoy3000Profile.pipDeviceThemeId == "amber" &&
+            pipBoy3000Profile.pipDeviceDisplayMode == "readable" &&
+            pipBoy3000Profile.pipDeviceCarryMode == "wrist",
+            "active_pip_device_customization_capabilities_pipboy_3000_accepts_wrist_map_device_values")) {
+        return false;
+    }
+    bunker::SetActivePipDeviceCustomization(pipBoy3000Profile, "classic_green", "standard", "auto");
+    if (!Check(bunker::CycleActivePipDeviceCustomization(pipBoy3000Profile, bunker::PipDeviceCustomizationSlot::CarryMode) &&
+            pipBoy3000Profile.pipDeviceCarryMode == "wrist" &&
+            bunker::CycleActivePipDeviceCustomization(pipBoy3000Profile, bunker::PipDeviceCustomizationSlot::CarryMode) &&
+            pipBoy3000Profile.pipDeviceCarryMode == "auto",
+            "active_pip_device_customization_capabilities_pipboy_3000_carry_cycle_expected_auto_wrist_only")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy10Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy10Profile, "#%it_pipboy_1_0");
+    if (!Check(!bunker::SetActivePipDeviceCustomization(pipBoy10Profile, "amber", "standard", "auto") &&
+            !bunker::SetActivePipDeviceCustomization(pipBoy10Profile, "classic_green", "readable", "auto") &&
+            !bunker::SetActivePipDeviceCustomization(pipBoy10Profile, "classic_green", "standard", "handheld") &&
+            bunker::SetActivePipDeviceCustomization(pipBoy10Profile, "monochrome", "standard", "wrist") &&
+            pipBoy10Profile.pipDeviceThemeId == "monochrome" &&
+            pipBoy10Profile.pipDeviceDisplayMode == "standard" &&
+            pipBoy10Profile.pipDeviceCarryMode == "wrist",
+            "active_pip_device_customization_capabilities_pipboy_1_0_expected_old_physical_limits")) {
+        return false;
+    }
+    bunker::SetActivePipDeviceCustomization(pipBoy10Profile, "classic_green", "standard", "auto");
+    if (!Check(bunker::CycleActivePipDeviceCustomization(pipBoy10Profile, bunker::PipDeviceCustomizationSlot::Theme) &&
+            pipBoy10Profile.pipDeviceThemeId == "monochrome" &&
+            bunker::CycleActivePipDeviceCustomization(pipBoy10Profile, bunker::PipDeviceCustomizationSlot::Theme) &&
+            pipBoy10Profile.pipDeviceThemeId == "classic_green" &&
+            bunker::CycleActivePipDeviceCustomization(pipBoy10Profile, bunker::PipDeviceCustomizationSlot::DisplayMode) &&
+            pipBoy10Profile.pipDeviceDisplayMode == "standard",
+            "active_pip_device_customization_capabilities_pipboy_1_0_cycle_expected_supported_values_only")) {
+        return false;
+    }
+
+    bunker::SessionProfile noDeviceProfile = bunker::MakeDefaultSessionProfile();
+    bunker::GameState gameState;
+    if (!Check(!bunker::SetActivePipDeviceCustomization(noDeviceProfile, "amber", "readable", "handheld") &&
+            !bunker::ApplyActivePipDeviceCustomizationCommand(noDeviceProfile, "rgb_party", &gameState) &&
+            noDeviceProfile.pipDeviceThemeId == "classic_green" &&
+            noDeviceProfile.pipDeviceDisplayMode == "standard" &&
+            noDeviceProfile.pipDeviceCarryMode == "auto",
+            "active_pip_device_customization_capabilities_no_active_device_expected_safe_rejection")) {
+        return false;
+    }
+
+    bunker::SetActivePipDeviceCustomization(pipBoy3000Profile, "amber", "readable", "wrist");
+    const fs::path tempRoot = fs::current_path() / "active_pip_device_customization_capability_rules_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "active_pip_device_customization_capabilities_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(pipBoy3000Profile, profilePath);
+    if (!Check(saveStatus.ok, "active_pip_device_customization_capabilities_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "active_pip_device_customization_capabilities_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(loadedProfile.activePipDeviceId == "#%it_pipboy_3000" &&
+            loadedProfile.pipDeviceThemeId == "amber" &&
+            loadedProfile.pipDeviceDisplayMode == "readable" &&
+            loadedProfile.pipDeviceCarryMode == "wrist" &&
+            !bunker::SetActivePipDeviceCustomization(loadedProfile, "high_contrast", "readable", "wrist"),
+            "active_pip_device_customization_capabilities_save_load expected supported config to persist and unsupported mutation to fail");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunActivePipDeviceCustomizationCommandGateSmoke() {
+    bunker::SessionProfile noDeviceProfile = bunker::MakeDefaultSessionProfile();
+    bunker::NormalizeSessionProfile(noDeviceProfile);
+    bunker::GameState gameState;
+    const std::string themeBeforeNoDevice = noDeviceProfile.pipDeviceThemeId;
+    const std::string displayBeforeNoDevice = noDeviceProfile.pipDeviceDisplayMode;
+    const std::string carryBeforeNoDevice = noDeviceProfile.pipDeviceCarryMode;
+    if (!Check(!bunker::CanCustomizeActivePipDevice(noDeviceProfile) &&
+            !bunker::SetActivePipDeviceCustomization(noDeviceProfile, "classic_green", "standard", "auto") &&
+            !bunker::ApplyActivePipDeviceCustomizationCommand(noDeviceProfile, "theme_next", &gameState) &&
+            gameState.lastEvent.find("No active Pip device") != std::string::npos &&
+            !bunker::ApplyActivePipDeviceCustomizationCommand(noDeviceProfile, "display_next", &gameState) &&
+            gameState.lastEvent.find("No active Pip device") != std::string::npos &&
+            !bunker::ApplyActivePipDeviceCustomizationCommand(noDeviceProfile, "carry_next", &gameState) &&
+            gameState.lastEvent.find("No active Pip device") != std::string::npos &&
+            noDeviceProfile.pipDeviceThemeId == themeBeforeNoDevice &&
+            noDeviceProfile.pipDeviceDisplayMode == displayBeforeNoDevice &&
+            noDeviceProfile.pipDeviceCarryMode == carryBeforeNoDevice,
+            "active_pip_device_customization_command_gate_no_device expected known commands to require active device")) {
+        return false;
+    }
+
+    bunker::SessionProfile pippadProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pippadProfile, "#%it_pippad");
+    if (!Check(bunker::CanCustomizeActivePipDevice(pippadProfile) &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "theme_next", &gameState) &&
+            pippadProfile.pipDeviceThemeId == "amber" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "display_next", &gameState) &&
+            pippadProfile.pipDeviceDisplayMode == "readable" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "carry_next", &gameState) &&
+            pippadProfile.pipDeviceCarryMode == "wrist" &&
+            bunker::SetActivePipDeviceCustomization(pippadProfile, "high_contrast", "compact", "handheld"),
+            "active_pip_device_customization_command_gate_pippad expected active Pip-Pad customization commands")) {
+        return false;
+    }
+
+    pippadProfile.story.exitedBunker = true;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(pippadProfile) &&
+            bunker::CanCustomizeActivePipDevice(pippadProfile) &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "theme_next", &gameState) &&
+            pippadProfile.pipDeviceThemeId == "classic_green",
+            "active_pip_device_customization_command_gate_retired_station expected active device commands after station retirement")) {
+        return false;
+    }
+
+    bunker::SessionProfile invalidActiveProfile = bunker::MakeDefaultSessionProfile();
+    invalidActiveProfile.activePipDeviceId = "#%it_consumer_tablet";
+    invalidActiveProfile.pipDeviceThemeId = "amber";
+    invalidActiveProfile.pipDeviceDisplayMode = "readable";
+    invalidActiveProfile.pipDeviceCarryMode = "handheld";
+    bunker::NormalizeSessionProfile(invalidActiveProfile);
+    const std::string invalidThemeBeforeCommand = invalidActiveProfile.pipDeviceThemeId;
+    const std::string invalidDisplayBeforeCommand = invalidActiveProfile.pipDeviceDisplayMode;
+    const std::string invalidCarryBeforeCommand = invalidActiveProfile.pipDeviceCarryMode;
+    return Check(invalidActiveProfile.activePipDeviceId.empty() &&
+            !bunker::CanCustomizeActivePipDevice(invalidActiveProfile) &&
+            !bunker::ApplyActivePipDeviceCustomizationCommand(invalidActiveProfile, "theme_next", &gameState) &&
+            gameState.lastEvent.find("No active Pip device") != std::string::npos &&
+            invalidActiveProfile.pipDeviceThemeId == invalidThemeBeforeCommand &&
+            invalidActiveProfile.pipDeviceDisplayMode == invalidDisplayBeforeCommand &&
+            invalidActiveProfile.pipDeviceCarryMode == invalidCarryBeforeCommand,
+            "active_pip_device_customization_command_gate_invalid_active_id expected normalized invalid id to reject commands");
+}
+
+bool RunActivePipDeviceCustomizationRuntimeBindingSmoke() {
+    bunker::GameState gameState;
+    bunker::SessionProfile noDeviceProfile = bunker::MakeDefaultSessionProfile();
+    const std::string noDeviceTheme = noDeviceProfile.pipDeviceThemeId;
+    const std::string noDeviceDisplay = noDeviceProfile.pipDeviceDisplayMode;
+    const std::string noDeviceCarry = noDeviceProfile.pipDeviceCarryMode;
+    if (!Check(!bunker::ApplyActivePipDeviceCustomizationCommand(noDeviceProfile, "theme_next", &gameState) &&
+            !bunker::ApplyActivePipDeviceCustomizationCommand(noDeviceProfile, "display_next", &gameState) &&
+            !bunker::ApplyActivePipDeviceCustomizationCommand(noDeviceProfile, "carry_next", &gameState) &&
+            noDeviceProfile.pipDeviceThemeId == noDeviceTheme &&
+            noDeviceProfile.pipDeviceDisplayMode == noDeviceDisplay &&
+            noDeviceProfile.pipDeviceCarryMode == noDeviceCarry &&
+            gameState.lastEvent.find("No active Pip device") != std::string::npos,
+            "active_pip_device_customization_runtime_binding_no_device expected F6/F7/F8 commands to fail safely")) {
+        return false;
+    }
+
+    bunker::SessionProfile pippadProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pippadProfile, "#%it_pippad");
+    if (!Check(bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "theme_next", &gameState) &&
+            pippadProfile.pipDeviceThemeId == "amber" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "display_next", &gameState) &&
+            pippadProfile.pipDeviceDisplayMode == "readable" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "carry_next", &gameState) &&
+            pippadProfile.pipDeviceCarryMode == "wrist",
+            "active_pip_device_customization_runtime_binding_pippad expected F6/F7/F8 command sequence")) {
+        return false;
+    }
+    bunker::PlayerState player;
+    if (!Check(bunker::TryToggleActivePipDeviceUi(player, pippadProfile, gameState) &&
+            gameState.lastEvent.find("Active config: amber theme, readable display, wrist mode.") != std::string::npos,
+            "active_pip_device_customization_runtime_binding_pippad expected active UI summary after commands")) {
+        return false;
+    }
+
+    pippadProfile.story.exitedBunker = true;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(pippadProfile) &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "theme_next", &gameState) &&
+            pippadProfile.pipDeviceThemeId == "monochrome" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "display_next", &gameState) &&
+            pippadProfile.pipDeviceDisplayMode == "compact" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pippadProfile, "carry_next", &gameState) &&
+            pippadProfile.pipDeviceCarryMode == "handheld",
+            "active_pip_device_customization_runtime_binding_after_retirement expected commands through active device")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "active_pip_device_customization_runtime_binding_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "active_pip_device_customization_runtime_binding_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(pippadProfile, profilePath);
+    if (!Check(saveStatus.ok, "active_pip_device_customization_runtime_binding_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "active_pip_device_customization_runtime_binding_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(loadedProfile.pipDeviceThemeId == "monochrome" &&
+            loadedProfile.pipDeviceDisplayMode == "compact" &&
+            loadedProfile.pipDeviceCarryMode == "handheld",
+            "active_pip_device_customization_runtime_binding_save_load expected F6/F7/F8 state to persist")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy10Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy10Profile, "#%it_pipboy_1_0");
+    if (!Check(bunker::ApplyActivePipDeviceCustomizationCommand(pipBoy10Profile, "display_next", &gameState) &&
+            pipBoy10Profile.pipDeviceDisplayMode == "standard" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pipBoy10Profile, "carry_next", &gameState) &&
+            pipBoy10Profile.pipDeviceCarryMode == "wrist" &&
+            bunker::ApplyActivePipDeviceCustomizationCommand(pipBoy10Profile, "carry_next", &gameState) &&
+            pipBoy10Profile.pipDeviceCarryMode == "auto" &&
+            !bunker::SetActivePipDeviceCustomization(pipBoy10Profile, "classic_green", "readable", "handheld"),
+            "active_pip_device_customization_runtime_binding_pipboy_1_0 expected old model limits")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    fs::remove_all(tempRoot, ec);
+    return true;
+}
+
+bool RunExistingFieldGameplayLoopSmoke() {
+    auto configureFieldLoopState = [](bunker::SessionProfile& profile) -> bunker::WorldFieldState* {
+        profile.selectedWorld = "existing_field_gameplay_loop_smoke.bwld";
+        profile.fieldCheckpointKnown = true;
+        profile.fieldCheckpointWorld = profile.selectedWorld;
+        profile.fieldCheckpointLabel = "Surface Foothold";
+        profile.fieldCheckpointX = 18.0f;
+        profile.fieldCheckpointY = 2.0f;
+        profile.rescuedSpecialists.push_back({"engineer_01", "Shelter Engineer", "engineer", "scavenger_support", true});
+        auto* worldState = bunker::FindWorldFieldState(profile, profile.selectedWorld, true);
+        if (worldState != nullptr) {
+            worldState->regionalGridOnline = true;
+            worldState->localRelayAvailable = true;
+            worldState->towerSyncRecovered = false;
+            worldState->caravanRouteActive = true;
+            worldState->etherErosion = 12.0f;
+            worldState->infrastructureDecay = 6.0f;
+        }
+        return worldState;
+    };
+
+    bunker::SessionProfile lockedProfile = bunker::MakeDefaultSessionProfile();
+    auto* lockedWorldState = configureFieldLoopState(lockedProfile);
+    if (!Check(lockedWorldState != nullptr, "existing_field_loop_smoke expected locked world field state")) {
+        return false;
+    }
+    bunker::GameState lockedState;
+    lockedState.scavengerTimer = 0.0f;
+    lockedState.caravanTimer = 0.0f;
+    const int lockedSteelBefore = CountInventoryItem(lockedProfile, "steel_scrap");
+    bunker::UpdateScavengerTeams(lockedProfile, lockedState, 1.0f);
+    bunker::UpdateCaravanRoute(lockedProfile, lockedState, 1.0f);
+    if (!Check(lockedProfile.scavengerRunsCompleted == 0 &&
+            lockedWorldState->caravanRunsCompleted == 0 &&
+            CountInventoryItem(lockedProfile, "steel_scrap") == lockedSteelBefore,
+            "existing_field_loop_locked_before_surface expected no scavenger/caravan rewards before outer route")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    const auto* workshop = world.FindObjectByRegistryId("[%workshop_0001]");
+    const auto* serviceHub = world.FindObjectByScriptTag("lanline_service_hub");
+    if (!Check(workshop != nullptr && serviceHub != nullptr,
+            "existing_field_loop_smoke expected authored workshop and Lanline service hub")) {
+        return false;
+    }
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    auto* worldState = configureFieldLoopState(profile);
+    if (!Check(worldState != nullptr, "existing_field_loop_smoke expected playable world field state")) {
+        return false;
+    }
+    profile.story.awakenedFromCryo = true;
+    if (!Check(bunker::SelectPipDevice(profile, "#%it_pippad"),
+            "existing_field_loop_active_pip_device expected selectable Pip-Pad device")) {
+        return false;
+    }
+    profile.story.archiveRecovered = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.story.tankLinked = true;
+    profile.partnerTank.deployed = true;
+    profile.firstPlayableRoute.clearanceBlueprintRecovered = true;
+    profile.firstPlayableRoute.clearanceMaterialsRecovered = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.exitedBunker = true;
+    profile.firstPlayableRoute.surfaceArrivalReached = true;
+    profile.story.outerRoadCleared = true;
+    profile.firstPlayableRoute.firstTankCombatResolved = true;
+
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+    gameState.scavengerTimer = 0.0f;
+    gameState.caravanTimer = 0.0f;
+    if (!Check(bunker::IsPipDeviceSelectionStationRetired(profile) &&
+            bunker::TryToggleActivePipDeviceUi(player, profile, gameState) &&
+            player.uiVisible,
+            "existing_field_loop_active_pip_device_after_station_retirement expected active device UI")) {
+        return false;
+    }
+    if (!Check(bunker::HasActiveFieldCheckpoint(profile) &&
+            bunker::HasRegionalGridOnline(profile) &&
+            bunker::HasAwakenedSpecialistRole(profile, "engineer") &&
+            profile.story.outerRoadCleared,
+            "existing_field_loop_scavenger_ready expected checkpoint grid and engineer gates")) {
+        return false;
+    }
+
+    const int caravanSteelBefore = CountInventoryItem(profile, "steel_scrap");
+    gameState.caravanTimer = 0.0f;
+    bunker::UpdateCaravanRoute(profile, gameState, 1.0f);
+    if (!Check(worldState->caravanRunsCompleted == 1 &&
+            CountInventoryItem(profile, "steel_scrap") > caravanSteelBefore &&
+            CountInventoryItem(profile, "old_plate") >= 1,
+            "existing_field_loop_caravan_rewards expected existing caravan inventory and world counter")) {
+        return false;
+    }
+
+    bunker::AddInventoryItem(profile, "#%it_field_ration", 1, 0.3f);
+    const int rationCountBefore = CountInventoryItem(profile, "#%it_field_ration");
+    if (!Check(bunker::TryConsumeFieldRation(profile, gameState) &&
+            gameState.rationEffectTimer > 0.0f &&
+            CountInventoryItem(profile, "#%it_field_ration") == rationCountBefore - 1,
+            "existing_field_loop_medicine_state expected field ration effect and inventory consumption")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(serviceHub, world, player, profile, staticEraser, gameState);
+    if (!Check(!profile.lanlineServices.serviceHubKnown &&
+            gameState.lastEvent.find("Lanline Services stay locked") != std::string::npos,
+            "existing_field_loop_lanline_locked_before_tower_sync expected authored service hub refusal")) {
+        return false;
+    }
+    worldState->towerSyncRecovered = true;
+    bunker::HandleInteraction(serviceHub, world, player, profile, staticEraser, gameState);
+    if (!Check(profile.lanlineServices.serviceHubKnown &&
+            gameState.lanlineServicesVisible &&
+            gameState.lastEvent.find("Lanline service hub handshake") != std::string::npos,
+            "existing_field_loop_lanline_unlocks_after_tower_sync expected service hub handshake")) {
+        return false;
+    }
+
+    profile.partnerTank.worldPositionKnown = true;
+    profile.partnerTank.worldX = workshop->x;
+    profile.partnerTank.worldY = workshop->y;
+    profile.partnerTank.damage.hull = 72.0f;
+    profile.partnerTank.damage.bucket = 76.0f;
+    profile.partnerTank.energyReserve = 100.0f;
+    profile.partnerTank.ammoReserve = 86.0f;
+    bunker::AddInventoryItem(profile, "repair_patch", 1, 0.2f);
+    player.insideTank = false;
+    bunker::HandleInteraction(workshop, world, player, profile, staticEraser, gameState);
+    if (!Check(profile.firstPlayableRoute.firstServicePerformed &&
+            gameState.lastEvent.find("First service halt logged") != std::string::npos,
+            "existing_field_loop_service_state expected existing BT-72 workshop service handoff")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "existing_field_gameplay_loop_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "existing_field_loop_smoke failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "existing_field_loop_persistence failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "existing_field_loop_persistence failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    const auto* loadedWorldState = bunker::FindWorldFieldState(loadedProfile, profile.selectedWorld);
+    const bool ok = Check(loadedWorldState != nullptr,
+            "existing_field_loop_persists_after_save_load expected world field state") &&
+        Check(loadedWorldState == nullptr || loadedWorldState->caravanRunsCompleted == 1,
+            "existing_field_loop_persists_after_save_load expected caravan counter") &&
+        Check(loadedWorldState == nullptr || loadedWorldState->towerSyncRecovered,
+            "existing_field_loop_persists_after_save_load expected tower sync state") &&
+        Check(loadedProfile.lanlineServices.serviceHubKnown,
+            "existing_field_loop_persists_after_save_load expected Lanline hub state") &&
+        Check(loadedProfile.firstPlayableRoute.firstServicePerformed,
+            "existing_field_loop_persists_after_save_load expected first service state") &&
+        Check(bunker::HasActivePipDevice(loadedProfile),
+            "existing_field_loop_persists_after_save_load expected active Pip device") &&
+        Check(bunker::IsPipDeviceSelectionStationRetired(loadedProfile),
+            "existing_field_loop_persists_after_save_load expected retired station derived after load");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunPipDeviceSelectionHelperContractSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    if (!Check(!bunker::HasActivePipDevice(profile) &&
+            bunker::ActivePipDeviceIdOrDefault(profile) == "#%it_pippad" &&
+            !bunker::SelectPipDevice(profile, "#%it_invalid_pip") &&
+            profile.activePipDeviceId.empty(),
+            "pip_device_helpers_reject_invalid_device expected invalid device to leave profile unchanged")) {
+        return false;
+    }
+
+    if (!Check(bunker::SelectPipDevice(profile, "#%it_pippad") &&
+            bunker::HasActivePipDevice(profile) &&
+            bunker::HasPipPad(profile) &&
+            profile.activePipDeviceId == "#%it_pippad" &&
+            bunker::ActivePipDeviceDisplayName(profile) == "Pip-Pad 3500" &&
+            CountInventoryItem(profile, "#%it_pippad") == 1,
+            "pip_device_helpers_select_default_device expected default Pip-Pad selection")) {
+        return false;
+    }
+    if (!Check(!bunker::SelectPipDevice(profile, "#%it_pippad") &&
+            CountInventoryItem(profile, "#%it_pippad") == 1,
+            "pip_device_helpers_select_default_device expected repeated default selection not to duplicate")) {
+        return false;
+    }
+    if (!Check(bunker::BeginPipDeviceReselect(profile) &&
+            profile.pipDeviceReselectPending,
+            "pip_device_helpers_begin_reselect expected active device to enter reselect flow")) {
+        return false;
+    }
+    if (!Check(bunker::SelectPipDevice(profile, "#%it_pipboy_1_0") &&
+            profile.activePipDeviceId == "#%it_pipboy_1_0" &&
+            !profile.pipDeviceReselectPending &&
+            CountInventoryItem(profile, "#%it_pipboy_1_0") == 1 &&
+            bunker::ActivePipDeviceDisplayName(profile) == "Pip-Boy 1.0",
+            "pip_device_helpers_select_pipboy_1_0 expected alternate Pip-Boy 1.0 selection")) {
+        return false;
+    }
+    if (!Check(bunker::SelectPipDevice(profile, "#%it_pipboy_3000") &&
+            profile.activePipDeviceId == "#%it_pipboy_3000" &&
+            CountInventoryItem(profile, "#%it_pipboy_3000") == 1 &&
+            bunker::ActivePipDeviceDisplayName(profile).find("Pip-Boy 3000") != std::string::npos,
+            "pip_device_helpers_select_pipboy_3000 expected alternate Pip-Boy 3000 selection")) {
+        return false;
+    }
+    const std::string activeBeforeInvalid = profile.activePipDeviceId;
+    if (!Check(!bunker::SelectPipDevice(profile, "#%it_consumer_tablet") &&
+            profile.activePipDeviceId == activeBeforeInvalid,
+            "pip_device_helpers_reject_invalid_device expected invalid device not to replace active device")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "pip_device_selection_helper_contract_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "pip_device_helpers_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "pip_device_helpers_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "pip_device_helpers_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(loadedProfile.activePipDeviceId == "#%it_pipboy_3000" &&
+            bunker::HasActivePipDevice(loadedProfile) &&
+            bunker::HasPipPad(loadedProfile),
+            "pip_device_helpers_save_load expected active device id to persist") &&
+        Check(!bunker::CanUsePipPadMediaIndex(loadedProfile) &&
+                loadedProfile.pipPadExpansionCoverPresent &&
+                bunker::InstallBlueLinkModule(loadedProfile) == false,
+            "pip_device_helpers_media_index_requires_bluelink expected active device alone not to unlock media");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunPipDeviceItemRegistryAndStationOptionsSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    const auto options = bunker::BuildPipDeviceSelectionOptions(profile);
+    auto findOption = [&](const std::string& itemId) -> const bunker::PipDeviceSelectionOption* {
+        const auto found = std::find_if(options.begin(), options.end(), [&](const auto& option) {
+            return option.itemId == itemId;
+        });
+        return found == options.end() ? nullptr : &(*found);
+    };
+    auto mapsTo = [](std::string_view itemId, bunker::PipDeviceModel expectedModel) {
+        bunker::PipDeviceModel model = bunker::PipDeviceModel::PipPad3500;
+        return bunker::TryGetPipDeviceModelForId(itemId, model) && model == expectedModel;
+    };
+
+    if (!Check(options.size() == 6 &&
+            findOption("#%it_pipboy_0_1") != nullptr &&
+            findOption("#%it_pipboy_1_0") != nullptr &&
+            findOption("#%it_pipboy_2000_classic") != nullptr &&
+            findOption("#%it_pipboy_2000_mark_vi") != nullptr &&
+            findOption("#%it_pipboy_3000") != nullptr &&
+            findOption("#%it_pippad") != nullptr &&
+            std::none_of(options.begin(), options.end(), [](const auto& option) {
+                return option.model == bunker::PipDeviceModel::PipBoy3000MarkV;
+            }),
+            "pip_device_registry_options_include_all_selectable_models expected six selectable station options without prop-only Mark V")) {
+        return false;
+    }
+
+    if (!Check(bunker::IsKnownPipDeviceId("#%it_pipboy_0_1") &&
+            bunker::IsKnownPipDeviceId("#%it_pipboy_1_0") &&
+            bunker::IsKnownPipDeviceId("#%it_pipboy_2000_classic") &&
+            bunker::IsKnownPipDeviceId("#%it_pipboy_2000_mark_vi") &&
+            bunker::IsKnownPipDeviceId("#%it_pipboy_3000") &&
+            bunker::IsKnownPipDeviceId("#%it_pippad") &&
+            !bunker::IsKnownPipDeviceId("#%it_pipboy_3000_mark_v") &&
+            !bunker::IsKnownPipDeviceId("#%it_consumer_tablet"),
+            "pip_device_registry_known_ids expected only canonical selectable device ids")) {
+        return false;
+    }
+
+    if (!Check(mapsTo("#%it_pipboy_0_1", bunker::PipDeviceModel::PipBoy01) &&
+            mapsTo("#%it_pipboy_1_0", bunker::PipDeviceModel::PipBoy10) &&
+            mapsTo("#%it_pipboy_2000_classic", bunker::PipDeviceModel::PipBoy2000Classic) &&
+            mapsTo("#%it_pipboy_2000_mark_vi", bunker::PipDeviceModel::PipBoy2000MarkVI) &&
+            mapsTo("#%it_pipboy_3000", bunker::PipDeviceModel::PipBoy3000MarkIV) &&
+            mapsTo("#%it_pippad", bunker::PipDeviceModel::PipPad3500),
+            "pip_device_registry_model_mapping expected every canonical id to map to its model")) {
+        return false;
+    }
+
+    if (!Check(bunker::SelectPipDevice(profile, "#%it_pipboy_2000_classic") &&
+            profile.activePipDeviceId == "#%it_pipboy_2000_classic" &&
+            CountInventoryItem(profile, "#%it_pipboy_2000_classic") == 1 &&
+            bunker::ActivePipDeviceDisplayName(profile) == "Pip-Boy 2000 Classic",
+            "pip_device_registry_selects_pipboy_2000_classic expected registry-backed selection")) {
+        return false;
+    }
+    if (!Check(bunker::SelectPipDevice(profile, "#%it_pipboy_2000_mark_vi") &&
+            profile.activePipDeviceId == "#%it_pipboy_2000_mark_vi" &&
+            CountInventoryItem(profile, "#%it_pipboy_2000_mark_vi") == 1 &&
+            bunker::ActivePipDeviceDisplayName(profile).find("Mark VI") != std::string::npos,
+            "pip_device_registry_selects_pipboy_2000_mark_vi expected registry-backed selection")) {
+        return false;
+    }
+
+    bunker::SessionProfile capabilitiesProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(capabilitiesProfile, "#%it_pipboy_0_1");
+    if (!Check(bunker::ActivePipDeviceUsesPhysicalNavigation(capabilitiesProfile) &&
+            !bunker::ActivePipDeviceHasDigitalMap(capabilitiesProfile) &&
+            !bunker::ActivePipDeviceSupportsMediaIndex(capabilitiesProfile),
+            "pip_device_registry_capabilities_pipboy_0_1 expected physical navigation only")) {
+        return false;
+    }
+    bunker::SelectPipDevice(capabilitiesProfile, "#%it_pipboy_1_0");
+    if (!Check(bunker::ActivePipDeviceUsesPhysicalNavigation(capabilitiesProfile) &&
+            !bunker::ActivePipDeviceHasDigitalMap(capabilitiesProfile) &&
+            !bunker::ActivePipDeviceSupportsMediaIndex(capabilitiesProfile),
+            "pip_device_registry_capabilities_pipboy_1_0 expected physical navigation only")) {
+        return false;
+    }
+    bunker::SelectPipDevice(capabilitiesProfile, "#%it_pipboy_2000_classic");
+    if (!Check(bunker::ActivePipDeviceHasDigitalMap(capabilitiesProfile) &&
+            !bunker::ActivePipDeviceSupportsFullWorkspace(capabilitiesProfile),
+            "pip_device_registry_capabilities_pipboy_2000_classic expected digital map without full workspace")) {
+        return false;
+    }
+    bunker::SelectPipDevice(capabilitiesProfile, "#%it_pipboy_2000_mark_vi");
+    if (!Check(bunker::ActivePipDeviceUsesPhysicalNavigation(capabilitiesProfile) &&
+            bunker::ActivePipDeviceSupportsMediaIndex(capabilitiesProfile),
+            "pip_device_registry_capabilities_pipboy_2000_mark_vi expected physical navigation and media support")) {
+        return false;
+    }
+    bunker::SelectPipDevice(capabilitiesProfile, "#%it_pipboy_3000");
+    if (!Check(bunker::ActivePipDeviceHasDigitalMap(capabilitiesProfile) &&
+            bunker::ActivePipDeviceSupportsMediaIndex(capabilitiesProfile) &&
+            !bunker::ActivePipDeviceSupportsFullWorkspace(capabilitiesProfile),
+            "pip_device_registry_capabilities_pipboy_3000 expected digital map and media without full workspace")) {
+        return false;
+    }
+    bunker::SelectPipDevice(capabilitiesProfile, "#%it_pippad");
+    if (!Check(bunker::ActivePipDeviceHasDigitalMap(capabilitiesProfile) &&
+            bunker::ActivePipDeviceSupportsMediaIndex(capabilitiesProfile) &&
+            bunker::ActivePipDeviceSupportsFullWorkspace(capabilitiesProfile),
+            "pip_device_registry_capabilities_pippad expected full workspace device")) {
+        return false;
+    }
+
+    bunker::SessionProfile reselectProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(reselectProfile, "#%it_pippad");
+    if (!Check(!bunker::CompletePipDeviceReselect(reselectProfile, "#%it_pipboy_2000_mark_vi") &&
+            reselectProfile.activePipDeviceId == "#%it_pippad",
+            "pip_device_reselect_requires_pending expected active device switch to require reselect flow")) {
+        return false;
+    }
+    if (!Check(bunker::BeginPipDeviceReselect(reselectProfile) &&
+            bunker::CompletePipDeviceReselect(reselectProfile, "#%it_pipboy_2000_mark_vi") &&
+            reselectProfile.activePipDeviceId == "#%it_pipboy_2000_mark_vi" &&
+            !reselectProfile.pipDeviceReselectPending &&
+            CountInventoryItem(reselectProfile, "#%it_pipboy_2000_mark_vi") == 1,
+            "pip_device_reselect_completes_to_mark_vi expected pending reselect to switch active device")) {
+        return false;
+    }
+    bunker::BeginPipDeviceReselect(reselectProfile);
+    const std::string activeBeforeInvalid = reselectProfile.activePipDeviceId;
+    const int markViCountBeforeInvalid = CountInventoryItem(reselectProfile, "#%it_pipboy_2000_mark_vi");
+    if (!Check(!bunker::CompletePipDeviceReselect(reselectProfile, "#%it_pipboy_3000_mark_v") &&
+            reselectProfile.activePipDeviceId == activeBeforeInvalid &&
+            reselectProfile.pipDeviceReselectPending &&
+            CountInventoryItem(reselectProfile, "#%it_pipboy_2000_mark_vi") == markViCountBeforeInvalid,
+            "pip_device_reselect_rejects_invalid expected invalid reselect to preserve active device and inventory")) {
+        return false;
+    }
+    if (!Check(bunker::CompletePipDeviceReselect(reselectProfile, "#%it_pipboy_2000_mark_vi") &&
+            CountInventoryItem(reselectProfile, "#%it_pipboy_2000_mark_vi") == markViCountBeforeInvalid,
+            "pip_device_reselect_same_device_no_duplicate expected same-device reselect not to duplicate inventory")) {
+        return false;
+    }
+
+    bunker::SessionProfile classicProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(classicProfile, "#%it_pipboy_2000_classic");
+    bunker::SessionProfile markViProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(markViProfile, "#%it_pipboy_2000_mark_vi");
+
+    const fs::path tempRoot = fs::current_path() / "pip_device_item_registry_station_options_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "pip_device_registry_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path classicPath = tempRoot / "classic_profile.txt";
+    const fs::path markViPath = tempRoot / "mark_vi_profile.txt";
+    auto classicSaveStatus = bunker::SaveProfileAtomically(classicProfile, classicPath);
+    auto markViSaveStatus = bunker::SaveProfileAtomically(markViProfile, markViPath);
+    if (!Check(classicSaveStatus.ok && markViSaveStatus.ok,
+            "pip_device_registry_save_load failed to save registry profiles")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedClassicProfile;
+    bunker::SessionProfile loadedMarkViProfile;
+    if (!Check(bunker::LoadSessionProfile(classicPath, loadedClassicProfile) &&
+            bunker::LoadSessionProfile(markViPath, loadedMarkViProfile),
+            "pip_device_registry_save_load failed to load registry profiles")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(loadedClassicProfile.activePipDeviceId == "#%it_pipboy_2000_classic" &&
+            bunker::ActivePipDeviceDisplayName(loadedClassicProfile) == "Pip-Boy 2000 Classic" &&
+            loadedMarkViProfile.activePipDeviceId == "#%it_pipboy_2000_mark_vi" &&
+            bunker::ActivePipDeviceSupportsMediaIndex(loadedMarkViProfile),
+            "pip_device_registry_save_load_preserves_2000_models expected profile normalization to keep Pip-Boy 2000 choices");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunPipDeviceProfileNormalizationRegistrySmoke() {
+    for (const auto itemId : bunker::kCanonicalPipDeviceItemIds) {
+        bunker::SessionProfile activeProfile = bunker::MakeDefaultSessionProfile();
+        activeProfile.activePipDeviceId = std::string(itemId);
+        bunker::NormalizeSessionProfile(activeProfile);
+        if (!Check(activeProfile.activePipDeviceId == itemId &&
+                activeProfile.story.pipPadRecovered,
+                "pip_device_profile_normalization_accepts_canonical_active_ids expected canonical active Pip device id to survive")) {
+            return false;
+        }
+
+        bunker::SessionProfile inventoryProfile = bunker::MakeDefaultSessionProfile();
+        inventoryProfile.character.inventory.push_back({std::string(itemId), 1, 1.0f});
+        bunker::NormalizeSessionProfile(inventoryProfile);
+        if (!Check(inventoryProfile.activePipDeviceId == itemId &&
+                inventoryProfile.story.pipPadRecovered,
+                "pip_device_profile_normalization_uses_canonical_inventory_ids expected inventory Pip device id to become active")) {
+            return false;
+        }
+    }
+
+    bunker::SessionProfile propOnlyProfile = bunker::MakeDefaultSessionProfile();
+    propOnlyProfile.activePipDeviceId = "#%it_pipboy_3000_mark_v";
+    bunker::NormalizeSessionProfile(propOnlyProfile);
+    if (!Check(propOnlyProfile.activePipDeviceId.empty() &&
+            !propOnlyProfile.story.pipPadRecovered,
+            "pip_device_profile_normalization_rejects_prop_only_mark_v expected prop-only model to clear")) {
+        return false;
+    }
+
+    bunker::SessionProfile invalidProfile = bunker::MakeDefaultSessionProfile();
+    invalidProfile.activePipDeviceId = "#%it_consumer_tablet";
+    bunker::NormalizeSessionProfile(invalidProfile);
+    if (!Check(invalidProfile.activePipDeviceId.empty() &&
+            !invalidProfile.story.pipPadRecovered,
+            "pip_device_profile_normalization_rejects_invalid_device expected invalid model to clear")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "pip_device_profile_normalization_registry_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "pip_device_profile_normalization_save_load failed to create temp directory")) {
+        return false;
+    }
+
+    bool ok = true;
+    int index = 0;
+    for (const auto itemId : bunker::kCanonicalPipDeviceItemIds) {
+        bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+        profile.activePipDeviceId = std::string(itemId);
+        profile.story.pipPadRecovered = true;
+        const fs::path profilePath = tempRoot / ("profile_" + std::to_string(index++) + ".txt");
+        const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+        if (!Check(saveStatus.ok, "pip_device_profile_normalization_save_load failed to save profile: " + saveStatus.message)) {
+            fs::remove_all(tempRoot, ec);
+            return false;
+        }
+        bunker::SessionProfile loadedProfile;
+        if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+                "pip_device_profile_normalization_save_load failed to load profile")) {
+            fs::remove_all(tempRoot, ec);
+            return false;
+        }
+        ok = Check(loadedProfile.activePipDeviceId == itemId &&
+                bunker::IsKnownPipDeviceId(loadedProfile.activePipDeviceId),
+                "pip_device_profile_normalization_save_load expected canonical id to persist") &&
+            ok;
+    }
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunActivePipDeviceCapabilityRulesSmoke() {
+    bunker::SessionProfile defaultProfile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(defaultProfile, "#%it_pippad");
+    defaultProfile.blueLinkModuleRecovered = true;
+    if (!Check(bunker::InstallBlueLinkModule(defaultProfile) &&
+            bunker::CanUsePipPadMediaIndex(defaultProfile) &&
+            bunker::ActivePipDeviceSupportsMediaIndex(defaultProfile) &&
+            bunker::ActivePipDeviceSupportsFullWorkspace(defaultProfile) &&
+            bunker::ActivePipDeviceHasDigitalMap(defaultProfile),
+            "active_pip_device_capabilities_default_pippad_expected_media_workspace_and_map")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy10Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy10Profile, "#%it_pipboy_1_0");
+    pipBoy10Profile.blueLinkModuleRecovered = true;
+    if (!Check(bunker::InstallBlueLinkModule(pipBoy10Profile) &&
+            bunker::IsBlueLinkInstalled(pipBoy10Profile) &&
+            !bunker::CanUsePipPadMediaIndex(pipBoy10Profile) &&
+            !bunker::ActivePipDeviceSupportsMediaIndex(pipBoy10Profile) &&
+            !bunker::ActivePipDeviceHasDigitalMap(pipBoy10Profile) &&
+            bunker::ActivePipDeviceUsesPhysicalNavigation(pipBoy10Profile),
+            "active_pip_device_capabilities_pipboy_1_0_expected_no_media_index")) {
+        return false;
+    }
+
+    bunker::SessionProfile pipBoy3000Profile = bunker::MakeDefaultSessionProfile();
+    bunker::SelectPipDevice(pipBoy3000Profile, "#%it_pipboy_3000");
+    pipBoy3000Profile.blueLinkModuleRecovered = true;
+    if (!Check(bunker::InstallBlueLinkModule(pipBoy3000Profile) &&
+            bunker::CanUsePipPadMediaIndex(pipBoy3000Profile) &&
+            bunker::ActivePipDeviceSupportsMediaIndex(pipBoy3000Profile) &&
+            bunker::ActivePipDeviceHasDigitalMap(pipBoy3000Profile) &&
+            !bunker::ActivePipDeviceSupportsFullWorkspace(pipBoy3000Profile),
+            "active_pip_device_capabilities_pipboy_3000_expected_media_and_map_without_full_workspace")) {
+        return false;
+    }
+
+    bunker::SessionProfile invalidProfile = bunker::MakeDefaultSessionProfile();
+    invalidProfile.story.pipPadRecovered = true;
+    invalidProfile.activePipDeviceId = "#%it_consumer_tablet";
+    invalidProfile.blueLinkModuleRecovered = true;
+    invalidProfile.blueLinkModuleInstalled = true;
+    invalidProfile.pipPadExpansionCoverPresent = false;
+    if (!Check(!bunker::ActivePipDeviceSupportsMediaIndex(invalidProfile) &&
+            !bunker::ActivePipDeviceHasDigitalMap(invalidProfile) &&
+            !bunker::CanUsePipPadMediaIndex(invalidProfile),
+            "active_pip_device_capabilities_invalid_id_expected_safe_empty_capabilities")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "active_pip_device_capability_rules_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "active_pip_device_capabilities_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(pipBoy3000Profile, profilePath);
+    if (!Check(saveStatus.ok, "active_pip_device_capabilities_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "active_pip_device_capabilities_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    const bool ok = Check(loadedProfile.activePipDeviceId == "#%it_pipboy_3000" &&
+            bunker::CanUsePipPadMediaIndex(loadedProfile) &&
+            bunker::ActivePipDeviceHasDigitalMap(loadedProfile) &&
+            !bunker::ActivePipDeviceSupportsFullWorkspace(loadedProfile),
+            "active_pip_device_capabilities_save_load expected active device capability behavior to persist");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() {
+    bunker::World legacyWorld;
+    legacyWorld.GeneratePrototypeZone();
+    for (const auto& registryId : V940StarterRouteRuntimeObjectIds()) {
+        legacyWorld.RemoveObject(registryId);
+    }
+
+    if (!Check(legacyWorld.IsStarterScenarioWorld() &&
+            !HasV940StarterRouteRuntimeObjects(legacyWorld),
+            "legacy_starter_world_missing_v940_objects_before_upgrade expected removed v9.40 route objects")) {
+        return false;
+    }
+
+    legacyWorld.EnsureStarterInfrastructure();
+    if (!Check(HasV940StarterRouteRuntimeObjects(legacyWorld),
+            "legacy_starter_world_gets_v940_route_infrastructure expected EnsureStarterInfrastructure to restore v9.40 objects")) {
+        return false;
+    }
+
+    const auto objectCountAfterUpgrade = legacyWorld.objects.size();
+    legacyWorld.EnsureStarterInfrastructure();
+    return Check(legacyWorld.objects.size() == objectCountAfterUpgrade,
+            "starter_infrastructure_upgrade_is_idempotent expected second infrastructure pass not to duplicate objects");
+}
+
+bool RunStarterRuntimeObjectSpecDriftSmoke() {
+    bunker::World freshWorld;
+    freshWorld.GeneratePrototypeZone();
+    freshWorld.EnsureStarterInfrastructure();
+
+    bunker::World legacyUpgradedWorld;
+    legacyUpgradedWorld.GeneratePrototypeZone();
+    for (const auto& registryId : V940StarterRouteRuntimeObjectIds()) {
+        legacyUpgradedWorld.RemoveObject(registryId);
+    }
+    legacyUpgradedWorld.EnsureStarterInfrastructure();
+
+    const auto nearlyEqual = [](float lhs, float rhs) {
+        return std::abs(lhs - rhs) < 0.001f;
+    };
+    const auto specsMatch = [&](const bunker::MapObject& fresh, const bunker::MapObject& upgraded) {
+        return fresh.displayName == upgraded.displayName &&
+            fresh.interaction == upgraded.interaction &&
+            fresh.category == upgraded.category &&
+            nearlyEqual(fresh.x, upgraded.x) &&
+            nearlyEqual(fresh.y, upgraded.y) &&
+            nearlyEqual(fresh.z, upgraded.z) &&
+            nearlyEqual(fresh.width, upgraded.width) &&
+            nearlyEqual(fresh.depth, upgraded.depth) &&
+            nearlyEqual(fresh.height, upgraded.height) &&
+            nearlyEqual(fresh.health, upgraded.health) &&
+            fresh.blocksMovement == upgraded.blocksMovement &&
+            fresh.discovered == upgraded.discovered &&
+            fresh.manualLoot == upgraded.manualLoot &&
+            fresh.scriptTag == upgraded.scriptTag &&
+            fresh.linkTarget == upgraded.linkTarget;
+    };
+
+    for (const auto& registryId : V940StarterRouteRuntimeObjectIds()) {
+        const auto* freshObject = freshWorld.FindObjectByRegistryId(registryId);
+        const auto* upgradedObject = legacyUpgradedWorld.FindObjectByRegistryId(registryId);
+        if (!Check(freshObject != nullptr && upgradedObject != nullptr &&
+                specsMatch(*freshObject, *upgradedObject),
+                "starter_runtime_object_specs_match_between_fresh_and_legacy_upgrade expected matching object spec for " + registryId)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool RunStarterWorldRegistryIdentityRoundtripSmoke() {
+    const fs::path tempRoot = fs::current_path() / "starter_world_registry_identity_roundtrip_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "starter_world_registry_identity_persists_after_save_load failed to create temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    const fs::path worldPath = tempRoot / "starter_registry_identity.bwld";
+    if (!Check(world.Save(worldPath.string()),
+            "starter_world_registry_identity_persists_after_save_load failed to save starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(worldPath.string()),
+            "starter_world_registry_identity_persists_after_save_load failed to load starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+    const auto countAfterFirstEnsure = loadedWorld.objects.size();
+    loadedWorld.EnsureStarterInfrastructure();
+
+    std::string duplicateId;
+    const bool ok = Check(loadedWorld.objects.size() == countAfterFirstEnsure &&
+            !HasDuplicateRegistryIds(loadedWorld, &duplicateId) &&
+            HasRequiredFirstRouteRuntimeObjects(loadedWorld) &&
+            StarterRouteRuntimeObjectTypesMatch(loadedWorld),
+            "starter_world_registry_identity_persists_after_save_load expected stable unique loaded starter IDs");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunLoadedStarterWorldFirstPlayableRouteSmoke() {
+    const fs::path tempRoot = fs::current_path() / "loaded_starter_world_route_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "loaded_starter_world_route_remains_playable_after_save_load failed to create temp directory")) {
+        return false;
+    }
+
+    bunker::World world;
+    world.GeneratePrototypeZone();
+    world.EnsureStarterInfrastructure();
+    const fs::path worldPath = tempRoot / "starter_route_playable.bwld";
+    if (!Check(world.Save(worldPath.string()),
+            "loaded_starter_world_route_remains_playable_after_save_load failed to save starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    bunker::World loadedWorld;
+    if (!Check(loadedWorld.Load(worldPath.string()),
+            "loaded_starter_world_route_remains_playable_after_save_load failed to load starter world")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    loadedWorld.EnsureStarterInfrastructure();
+    if (!Check(loadedWorld.IsStarterScenarioWorld() &&
+            HasRequiredFirstRouteRuntimeObjects(loadedWorld),
+            "loaded_starter_world_route_remains_playable_after_save_load expected loaded starter route objects")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+
+    auto objectById = [&](const std::string& registryId) {
+        return loadedWorld.FindObjectByRegistryId(registryId);
+    };
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(objectById("[%cryo_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pip_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bluelink_module_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%pippad_expansion_bay_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%archive_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%garage_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    if (!Check(profile.story.archiveRecovered &&
+            profile.firstPlayableRoute.bt72HullInspected &&
+            profile.firstPlayableRoute.bt72CoreRecovered &&
+            profile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            bunker::HasInventoryItem(profile, "power_cell") &&
+            bunker::HasInventoryItem(profile, "old_plate") &&
+            bunker::HasInventoryItem(profile, "repair_patch"),
+            "loaded_starter_world_route_remains_playable_after_save_load expected archive, BT-72 knowledge, and materials before restore")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::HandleInteraction(objectById("[%hangar_power_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_control_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_path_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_hook_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_lift_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), loadedWorld, player, profile, staticEraser, gameState);
+
+    const bool ok = Check(bunker::HasPipPad(profile) &&
+            bunker::IsBlueLinkInstalled(profile) &&
+            bunker::CanUsePipPadMediaIndex(profile),
+            "loaded_starter_world_route_remains_playable_after_save_load expected Pip-Pad and BlueLink after load") &&
+        Check(profile.story.archiveRecovered,
+            "loaded_starter_world_route_remains_playable_after_save_load expected archive after load") &&
+        Check(profile.firstPlayableRoute.bt72HullInspected &&
+                profile.firstPlayableRoute.bt72CoreRecovered &&
+                profile.firstPlayableRoute.bt72ServiceNotesRecovered,
+            "loaded_starter_world_route_remains_playable_after_save_load expected BT-72 knowledge after load") &&
+        Check(profile.bt72HullLockedInRestorationCradle,
+            "loaded_starter_world_route_remains_playable_after_save_load expected cradle after load") &&
+        Check(profile.firstPlayableRoute.bt72Restored,
+            "loaded_starter_world_route_remains_playable_after_save_load expected BT-72 restore after load") &&
+        Check(player.insideTank &&
+                profile.story.tankLinked &&
+                bunker::CurrentStoryObjectivePreview(profile).find("Restore BT-72") == std::string::npos,
+            "loaded_starter_world_route_remains_playable_after_save_load expected cockpit link and advanced objective after load");
+
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
+bool RunFirstPlayableRouteEndToEndSmoke() {
+    bunker::World world;
+    auto addObject = [&](const std::string& registryId,
+                         const std::string& displayName,
+                         bunker::InteractionType interaction,
+                         bunker::ObjectCategory category) {
+        bunker::MapObject object;
+        object.registryId = registryId;
+        object.displayName = displayName;
+        object.interaction = interaction;
+        object.category = category;
+        world.AddObject(object);
+    };
+
+    addObject("[%cryo_0001]", "Cryo Bay", bunker::InteractionType::Static, bunker::ObjectCategory::Structure);
+    addObject("[%core_0001]", "Core Rack", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%pip_0001]", "Pip-Pad Locker", bunker::InteractionType::Container, bunker::ObjectCategory::Container);
+    addObject("[%bluelink_module_0001]", "BlueLink Media Module", bunker::InteractionType::Container, bunker::ObjectCategory::Container);
+    addObject("[%pippad_expansion_bay_0001]", "Pip-Pad Expansion Bay", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%archive_0001]", "Archive Terminal", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%garage_0001]", "BT-72 Garage Lift", bunker::InteractionType::Terminal, bunker::ObjectCategory::Hangar);
+    addObject("[%hangar_power_0001]", "Hangar Power Bus", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%bt72_crane_control_0001]", "BT-72 Crane Control", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%bt72_crane_path_0001]", "BT-72 Crane Path", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%bt72_crane_hook_0001]", "BT-72 Crane Hook", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%bt72_service_lift_0001]", "BT-72 Service Lift", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%bt72_service_notes_0001]", "BT-72 Service Notes", bunker::InteractionType::Terminal, bunker::ObjectCategory::Terminal);
+    addObject("[%bt72_repair_patch_0001]", "BT-72 Repair Patch Locker", bunker::InteractionType::Container, bunker::ObjectCategory::Container);
+    addObject("[#tr_hull_0001]", "BT-72 Hull", bunker::InteractionType::VehicleAnchor, bunker::ObjectCategory::Vehicle);
+
+    auto objectById = [&](const std::string& registryId) {
+        return world.FindObjectByRegistryId(registryId);
+    };
+
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    bunker::PlayerState player;
+    bunker::StaticEraser staticEraser;
+    bunker::GameState gameState;
+
+    bunker::HandleInteraction(objectById("[%cryo_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.story.awakenedFromCryo &&
+            profile.continuityAnchorSeeded &&
+            !bunker::HasPipPad(profile) &&
+            !player.uiVisible,
+            "first_route_e2e_cryo_seeds_continuity expected cryo wake without Pip-Pad UI")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.firstPlayableRoute.accessCardRecovered &&
+            bunker::HasInventoryItem(profile, "bunker_access_card") &&
+            profile.firstPlayableRoute.prePipPadClueCount >= 2,
+            "first_route_e2e_pippad_recovered_before_ui expected access card and pre-Pip-Pad trail")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%pip_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(bunker::HasPipPad(profile) &&
+            profile.story.pipPadRecovered &&
+            bunker::HasInventoryItem(profile, "#%it_pippad") &&
+            bunker::TryTogglePipPadUi(player, profile, gameState) &&
+            player.uiVisible &&
+            bunker::TryTogglePipPadUi(player, profile, gameState) &&
+            !player.uiVisible,
+            "first_route_e2e_pippad_recovered expected Pip-Pad pickup before UI access")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%bluelink_module_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.blueLinkModuleRecovered &&
+            !bunker::CanUsePipPadMediaIndex(profile),
+            "first_route_e2e_bluelink_media_ready expected BlueLink pickup without media unlock")) {
+        return false;
+    }
+    bunker::HandleInteraction(objectById("[%pippad_expansion_bay_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(bunker::IsBlueLinkInstalled(profile) &&
+            bunker::CanUsePipPadMediaIndex(profile) &&
+            !profile.pipPadExpansionCoverPresent &&
+            !profile.story.archiveRecovered &&
+            !profile.story.relayRecovered &&
+            !profile.story.returnedToBase,
+            "first_route_e2e_bluelink_media_ready expected BlueLink media only, no story/map unlock")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%archive_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.story.archiveRecovered &&
+            bunker::HasCollectedTapeId(profile, "archive_missing_personnel") &&
+            (bunker::CurrentStoryObjectivePreview(profile).find("BT-72") != std::string::npos ||
+                bunker::CurrentFirstPlayableRouteBeat(profile).label.find("BT-72") != std::string::npos),
+            "first_route_e2e_archive_synced expected archive sync to point toward BT-72")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%garage_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%core_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_notes_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_repair_patch_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.firstPlayableRoute.bt72HullInspected &&
+            bunker::HasInventoryItem(profile, "old_plate") &&
+            profile.firstPlayableRoute.bt72CoreRecovered &&
+            bunker::HasInventoryItem(profile, "power_cell") &&
+            profile.firstPlayableRoute.bt72ServiceNotesRecovered &&
+            bunker::HasInventoryItem(profile, "repair_patch"),
+            "first_route_e2e_bt72_crane_cradle_locked expected hull, core, notes, and materials staged")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[%hangar_power_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_control_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_path_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_crane_hook_0001]"), world, player, profile, staticEraser, gameState);
+    bunker::HandleInteraction(objectById("[%bt72_service_lift_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.hangarPowerRestored &&
+            profile.bt72CraneControlOnline &&
+            profile.bt72CranePathClear &&
+            !profile.bt72HullAttachedToCrane &&
+            profile.bt72HullMovedToServiceLift &&
+            profile.bt72HullLockedInRestorationCradle,
+            "first_route_e2e_bt72_crane_cradle_locked expected crane chain to lock cradle")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), world, player, profile, staticEraser, gameState);
+    if (!Check(profile.firstPlayableRoute.bt72Restored &&
+            profile.partnerTank.secondSeatUnlocked &&
+            !profile.story.tankLinked &&
+            !player.insideTank,
+            "first_route_e2e_bt72_restored expected restore before cockpit link")) {
+        return false;
+    }
+
+    bunker::HandleInteraction(objectById("[#tr_hull_0001]"), world, player, profile, staticEraser, gameState);
+    const std::string previewAfterLink = bunker::CurrentStoryObjectivePreview(profile);
+    const std::string objectiveAfterLink = bunker::CurrentStoryObjective(profile, staticEraser);
+    if (!Check(player.insideTank &&
+            profile.story.tankLinked &&
+            profile.partnerTank.deployed &&
+            player.viewMode == bunker::ViewMode::Cockpit &&
+            previewAfterLink.find("Restore BT-72") == std::string::npos &&
+            objectiveAfterLink.find("Restore BT-72") == std::string::npos,
+            "first_route_e2e_bt72_link_established expected cockpit link and next objective")) {
+        return false;
+    }
+
+    const fs::path tempRoot = fs::current_path() / "first_playable_route_e2e_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "first_route_e2e_profile_persists_final_state failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "first_route_e2e_profile_persists_final_state failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "first_route_e2e_profile_persists_final_state failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    const bool ok = Check(loadedProfile.story.pipPadRecovered &&
+            loadedProfile.blueLinkModuleInstalled &&
+            loadedProfile.bt72HullLockedInRestorationCradle &&
+            loadedProfile.firstPlayableRoute.bt72Restored &&
+            loadedProfile.story.tankLinked &&
+            loadedProfile.continuityAnchorSeeded,
+            "first_route_e2e_profile_persists_final_state expected final profile state to persist");
+    fs::remove_all(tempRoot, ec);
+    return ok;
+}
+
 bool RunPipPadAccessGatingSmoke() {
     bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
     bunker::PlayerState player;
@@ -5094,17 +8536,20 @@ bool RunPipPadAccessGatingSmoke() {
     if (!Check(!player.uiVisible, "pip-pad gating smoke expected default UI to start hidden")) {
         return false;
     }
-    if (!Check(!bunker::PlayerHasPipPadAccess(profile), "pip-pad gating smoke expected no access before pickup")) {
+    if (!Check(!profile.story.pipPadRecovered &&
+            !bunker::HasPipPad(profile) &&
+            !bunker::PlayerHasPipPadAccess(profile),
+            "pip_pad_not_available_at_cryo_wake expected no Pip-Pad access before pickup")) {
         return false;
     }
     player.uiVisible = true;
     if (!Check(!bunker::TryTogglePipPadUi(player, profile, gameState),
-            "pip-pad gating smoke expected TAB helper to reject missing Pip-Pad")) {
+            "pip_pad_not_available_at_cryo_wake expected TAB helper to reject missing Pip-Pad")) {
         return false;
     }
     if (!Check(!player.uiVisible &&
             gameState.lastEvent.find("No Pip-Pad linked yet") != std::string::npos,
-            "pip-pad gating smoke expected missing Pip-Pad feedback and hidden UI")) {
+            "pip_pad_not_available_at_cryo_wake expected missing Pip-Pad feedback and hidden UI")) {
         return false;
     }
 
@@ -5123,8 +8568,11 @@ bool RunPipPadAccessGatingSmoke() {
     const auto* locker = world.FindObjectByRegistryId("[%pip_0001]");
     bunker::HandleInteraction(locker, world, player, profile, staticEraser, gameState);
 
-    if (!Check(profile.story.pipPadRecovered && bunker::HasInventoryItem(profile, "#%it_pippad"),
-            "pip-pad gating smoke expected pickup to set story flag and inventory access")) {
+    if (!Check(profile.story.pipPadRecovered &&
+            bunker::HasPipPad(profile) &&
+            bunker::PlayerHasPipPadAccess(profile) &&
+            bunker::HasInventoryItem(profile, "#%it_pippad"),
+            "pip_pad_recovered_after_route_pickup expected pickup to set story flag and inventory access")) {
         return false;
     }
     if (!Check(!player.uiVisible,
@@ -5135,6 +8583,34 @@ bool RunPipPadAccessGatingSmoke() {
             "pip-pad gating smoke expected pickup feedback to mention TAB")) {
         return false;
     }
+
+    const fs::path tempRoot = fs::current_path() / "pip_pad_access_gating_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    if (!Check(!ec, "pip_pad_recovery_persists_after_save_load failed to create temp directory")) {
+        return false;
+    }
+    const fs::path profilePath = tempRoot / "profile.txt";
+    const auto saveStatus = bunker::SaveProfileAtomically(profile, profilePath);
+    if (!Check(saveStatus.ok, "pip_pad_recovery_persists_after_save_load failed to save profile: " + saveStatus.message)) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    bunker::SessionProfile loadedProfile;
+    if (!Check(bunker::LoadSessionProfile(profilePath, loadedProfile),
+            "pip_pad_recovery_persists_after_save_load failed to load profile")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    if (!Check(loadedProfile.story.pipPadRecovered &&
+            bunker::HasPipPad(loadedProfile) &&
+            bunker::PlayerHasPipPadAccess(loadedProfile),
+            "pip_pad_recovery_persists_after_save_load expected recovered Pip-Pad access")) {
+        fs::remove_all(tempRoot, ec);
+        return false;
+    }
+    fs::remove_all(tempRoot, ec);
 
     return Check(bunker::TryTogglePipPadUi(player, profile, gameState) && player.uiVisible,
             "pip-pad gating smoke expected TAB helper to open after pickup") &&
@@ -5160,9 +8636,12 @@ int main() {
     const bool ok = RunWorldRoundtrip() &&
         RunEditorWorldFileHelpersSmoke() &&
         RunProfileRoundtrip() &&
+        RunProfileMigrationContractSmoke() &&
+        RunContinuityAnchorContractSmoke() &&
         RunFirstPlayableRouteStorySmoke() &&
         RunRouteBeatPresentationSmoke() &&
         RunFirstPlayableRouteReadoutSmoke() &&
+        RunBt72RestorationObjectiveReadoutSmoke() &&
         RunSurfaceArrivalWorldEventSmoke() &&
         RunFirstCombatWorldEventSmoke() &&
         RunFirstCombatResolutionHandoffSmoke() &&
@@ -5224,6 +8703,42 @@ int main() {
         RunGameExecutionScriptBridgeSmoke() &&
         RunPlayerSweepCollisionSmoke() &&
         RunRuntimeCameraSmoke() &&
+        RunPipDeviceCapabilityContractSmoke() &&
+        RunBlueLinkExpansionModuleContractSmoke() &&
+        RunBlueLinkRuntimeInteractionSmoke() &&
+        RunBt72CraneRestorationContractSmoke() &&
+        RunBt72CraneRuntimeInteractionSmoke() &&
+        RunBt72ServiceNotesAndPatchRuntimeSmoke() &&
+        RunStarterWorldFirstRouteObjectAvailabilitySmoke() &&
+        RunStarterWorldFirstPlayableRouteSmoke() &&
+        RunStarterWorldRegistryIdentitySmoke() &&
+        RunStarterScenarioIdentitySurvivesPipPadPickupSmoke() &&
+        RunStarterScenarioIdentitySurvivesPipPadPickupRoundtripSmoke() &&
+        RunLoadedStarterWorldContinuesRouteAfterPipPadPickupSmoke() &&
+        RunLoadedProfileAndWorldContinueAfterPipPadPickupSmoke() &&
+        RunPipDeviceSelectionStationPersistsAfterPickupSmoke() &&
+        RunPipDeviceSelectionStationRoundtripSmoke() &&
+        RunPipDeviceReselectFlowSmoke() &&
+        RunPipDeviceSelectionStationRetiresAfterBunkerExitSmoke() &&
+        RunActivePipDeviceUsableAfterStationRetirementSmoke() &&
+        RunActivePipDeviceUiCompatibilityWrapperSmoke() &&
+        RunActivePipDeviceAccessCompatibilityWrapperSmoke() &&
+        RunActivePipDeviceCustomizationStateSmoke() &&
+        RunActivePipDeviceCustomizationCommandSmoke() &&
+        RunActivePipDeviceCustomizationCapabilityRulesSmoke() &&
+        RunActivePipDeviceCustomizationCommandGateSmoke() &&
+        RunActivePipDeviceCustomizationRuntimeBindingSmoke() &&
+        RunExistingFieldGameplayLoopSmoke() &&
+        RunPipDeviceSelectionHelperContractSmoke() &&
+        RunPipDeviceItemRegistryAndStationOptionsSmoke() &&
+        RunPipDeviceProfileNormalizationRegistrySmoke() &&
+        RunActivePipDeviceCapabilityRulesSmoke() &&
+        RunStarterWorldRouteObjectsPersistAfterSaveLoadSmoke() &&
+        RunLegacyStarterWorldGetsV940RouteInfrastructureSmoke() &&
+        RunStarterRuntimeObjectSpecDriftSmoke() &&
+        RunStarterWorldRegistryIdentityRoundtripSmoke() &&
+        RunLoadedStarterWorldFirstPlayableRouteSmoke() &&
+        RunFirstPlayableRouteEndToEndSmoke() &&
         RunPipPadAccessGatingSmoke();
 
     fs::remove_all(sandboxRoot, ec);

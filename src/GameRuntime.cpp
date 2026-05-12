@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <initializer_list>
 #include <string_view>
 
 #include "GameRuntimePipPad.hpp"
@@ -1965,7 +1966,8 @@ int CountBt72RestorationMilestones(const SessionProfile& profile) {
 }
 
 bool HasBt72RestorationPrerequisites(const SessionProfile& profile) {
-    return CountBt72RestorationMilestones(profile) == 3;
+    return CountBt72RestorationMilestones(profile) == 3 &&
+        CanCompleteBt72StagedRestoration(profile);
 }
 
 bool HasBt72RestorationMaterials(const SessionProfile& profile) {
@@ -2000,6 +2002,9 @@ std::string DescribeBt72RestorationNeeds(const SessionProfile& profile) {
     }
     if (!profile.firstPlayableRoute.bt72ServiceNotesRecovered) {
         missing.push_back("service notes");
+    }
+    if (!profile.bt72HullLockedInRestorationCradle) {
+        missing.push_back("crane lift cradle");
     }
     if (!missing.empty()) {
         return "BT-72 restoration is missing: " + JoinMissingRouteLabels(missing) + ".";
@@ -3046,19 +3051,583 @@ bool TryConsumeFieldRation(SessionProfile& profile, GameState& gameState) {
     return true;
 }
 
-bool PlayerHasPipPadAccess(const SessionProfile& profile) {
-    return profile.story.pipPadRecovered || HasInventoryItem(profile, "#%it_pippad");
+bool CanAttachBt72HullToCrane(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.bt72HullInspected &&
+        profile.hangarPowerRestored &&
+        profile.bt72CraneControlOnline &&
+        profile.bt72CranePathClear &&
+        !profile.bt72HullMovedToServiceLift &&
+        !profile.bt72HullLockedInRestorationCradle;
 }
 
-bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState) {
-    if (!PlayerHasPipPadAccess(profile)) {
+bool AttachBt72HullToCrane(SessionProfile& profile) {
+    if (!CanAttachBt72HullToCrane(profile)) {
+        return false;
+    }
+    profile.bt72HullAttachedToCrane = true;
+    return true;
+}
+
+bool CanMoveBt72HullToServiceLift(const SessionProfile& profile) {
+    return profile.bt72HullAttachedToCrane &&
+        profile.hangarPowerRestored &&
+        profile.bt72CraneControlOnline &&
+        profile.bt72CranePathClear &&
+        !profile.bt72HullMovedToServiceLift &&
+        !profile.bt72HullLockedInRestorationCradle;
+}
+
+bool MoveBt72HullToServiceLift(SessionProfile& profile) {
+    if (!CanMoveBt72HullToServiceLift(profile)) {
+        return false;
+    }
+    profile.bt72HullAttachedToCrane = false;
+    profile.bt72HullMovedToServiceLift = true;
+    profile.bt72HullLockedInRestorationCradle = true;
+    return true;
+}
+
+bool CanInstallBt72Core(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.bt72CoreRecovered &&
+        profile.bt72HullMovedToServiceLift &&
+        profile.bt72HullLockedInRestorationCradle;
+}
+
+bool CanCompleteBt72StagedRestoration(const SessionProfile& profile) {
+    return profile.firstPlayableRoute.bt72HullInspected &&
+        CanInstallBt72Core(profile) &&
+        profile.firstPlayableRoute.bt72ServiceNotesRecovered;
+}
+
+PipDeviceCapabilities GetPipDeviceCapabilities(PipDeviceModel model) {
+    switch (model) {
+        case PipDeviceModel::PipBoy01:
+            return {"Pip-Boy 0.1", true, false, false, true, false, false, false, false};
+        case PipDeviceModel::PipBoy10:
+            return {"Pip-Boy 1.0", true, false, false, true, false, false, false, false};
+        case PipDeviceModel::PipBoy2000Classic:
+            return {"Pip-Boy 2000 Classic", true, false, true, false, false, false, false, false};
+        case PipDeviceModel::PipBoy2000MarkVI:
+            return {"Pip-Boy 2000 Mark VI / FO76-style", true, false, false, true, true, false, false, true};
+        case PipDeviceModel::PipBoy3000MarkIV:
+            return {"Pip-Boy 3000 / Mark IV", true, false, true, false, true, false, false, false};
+        case PipDeviceModel::PipBoy3000MarkV:
+            return {"Pip-Boy 3000 Mark V", false, true, false, false, false, false, false, false};
+        case PipDeviceModel::PipPad3500:
+            return {"Pip-Pad 3500", true, false, true, false, true, true, true, false};
+    }
+    return {};
+}
+
+const char* DeviceDisplayName(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).displayName;
+}
+
+namespace {
+
+struct PipDeviceItemSpec {
+    std::string_view itemId;
+    PipDeviceModel model;
+    float inventoryWeight;
+};
+
+constexpr std::array<PipDeviceItemSpec, kCanonicalPipDeviceItemIds.size()> kPipDeviceItemSpecs{{
+    {kCanonicalPipDeviceItemIds[0], PipDeviceModel::PipBoy01, 1.0f},
+    {kCanonicalPipDeviceItemIds[1], PipDeviceModel::PipBoy10, 1.0f},
+    {kCanonicalPipDeviceItemIds[2], PipDeviceModel::PipBoy2000Classic, 1.2f},
+    {kCanonicalPipDeviceItemIds[3], PipDeviceModel::PipBoy2000MarkVI, 1.25f},
+    {kCanonicalPipDeviceItemIds[4], PipDeviceModel::PipBoy3000MarkIV, 1.1f},
+    {kCanonicalPipDeviceItemIds[5], PipDeviceModel::PipPad3500, 0.8f},
+}};
+
+const PipDeviceItemSpec* FindPipDeviceItemSpec(std::string_view deviceId) {
+    const auto found = std::find_if(kPipDeviceItemSpecs.begin(), kPipDeviceItemSpecs.end(), [&](const auto& spec) {
+        return spec.itemId == deviceId;
+    });
+    return found == kPipDeviceItemSpecs.end() ? nullptr : &(*found);
+}
+
+bool IsSelectablePipDeviceSpec(const PipDeviceItemSpec& spec) {
+    const auto capabilities = GetPipDeviceCapabilities(spec.model);
+    return capabilities.selectable && !capabilities.propOnly;
+}
+
+}  // namespace
+
+bool IsKnownPipDeviceId(std::string_view deviceId) {
+    const auto* spec = FindPipDeviceItemSpec(deviceId);
+    return spec != nullptr && IsSelectablePipDeviceSpec(*spec);
+}
+
+bool TryGetPipDeviceModelForId(std::string_view deviceId, PipDeviceModel& outModel) {
+    const auto* spec = FindPipDeviceItemSpec(deviceId);
+    if (spec == nullptr || !IsSelectablePipDeviceSpec(*spec)) {
+        return false;
+    }
+    outModel = spec->model;
+    return true;
+}
+
+PipDeviceCapabilities ActivePipDeviceCapabilities(const SessionProfile& profile) {
+    PipDeviceModel model = PipDeviceModel::PipPad3500;
+    if (!TryGetPipDeviceModelForId(profile.activePipDeviceId, model)) {
+        return {};
+    }
+    return GetPipDeviceCapabilities(model);
+}
+
+bool ActivePipDeviceSupportsMediaIndex(const SessionProfile& profile) {
+    return ActivePipDeviceCapabilities(profile).supportsMediaIndex;
+}
+
+bool ActivePipDeviceSupportsFullWorkspace(const SessionProfile& profile) {
+    return ActivePipDeviceCapabilities(profile).supportsFullPipPadWorkspace;
+}
+
+bool ActivePipDeviceHasDigitalMap(const SessionProfile& profile) {
+    return ActivePipDeviceCapabilities(profile).hasDigitalMap;
+}
+
+bool ActivePipDeviceUsesPhysicalNavigation(const SessionProfile& profile) {
+    return ActivePipDeviceCapabilities(profile).physicalNavigationOnly;
+}
+
+std::string ActivePipDeviceIdOrDefault(const SessionProfile& profile) {
+    if (IsKnownPipDeviceId(profile.activePipDeviceId)) {
+        return profile.activePipDeviceId;
+    }
+    for (const auto& spec : kPipDeviceItemSpecs) {
+        if (IsSelectablePipDeviceSpec(spec) && HasInventoryItem(profile, std::string(spec.itemId))) {
+            return std::string(spec.itemId);
+        }
+    }
+    return "#%it_pippad";
+}
+
+bool HasActivePipDevice(const SessionProfile& profile) {
+    if (IsKnownPipDeviceId(profile.activePipDeviceId) || profile.story.pipPadRecovered) {
+        return true;
+    }
+    return std::any_of(kPipDeviceItemSpecs.begin(), kPipDeviceItemSpecs.end(), [&](const auto& spec) {
+        return IsSelectablePipDeviceSpec(spec) && HasInventoryItem(profile, std::string(spec.itemId));
+    });
+}
+
+bool SelectPipDevice(SessionProfile& profile, std::string_view deviceId) {
+    const auto* spec = FindPipDeviceItemSpec(deviceId);
+    if (spec == nullptr || !IsSelectablePipDeviceSpec(*spec)) {
+        return false;
+    }
+    const std::string selectedDeviceId(spec->itemId);
+    const bool changed = profile.activePipDeviceId != selectedDeviceId || !profile.story.pipPadRecovered;
+    profile.activePipDeviceId = selectedDeviceId;
+    if (!HasInventoryItem(profile, selectedDeviceId)) {
+        AddInventoryItem(profile, selectedDeviceId, 1, spec->inventoryWeight);
+    }
+    profile.story.pipPadRecovered = true;
+    profile.pipDeviceReselectPending = false;
+    return changed;
+}
+
+bool BeginPipDeviceReselect(SessionProfile& profile) {
+    if (!HasActivePipDevice(profile)) {
+        return false;
+    }
+    profile.pipDeviceReselectPending = true;
+    return true;
+}
+
+std::string ActivePipDeviceDisplayName(const SessionProfile& profile) {
+    PipDeviceModel model = PipDeviceModel::PipPad3500;
+    if (TryGetPipDeviceModelForId(ActivePipDeviceIdOrDefault(profile), model)) {
+        return DeviceDisplayName(model);
+    }
+    return "Pip-Pad 3500";
+}
+
+std::vector<PipDeviceSelectionOption> BuildPipDeviceSelectionOptions(const SessionProfile& profile) {
+    std::vector<PipDeviceSelectionOption> options;
+    options.reserve(kPipDeviceItemSpecs.size());
+    for (const auto& spec : kPipDeviceItemSpecs) {
+        if (!IsSelectablePipDeviceSpec(spec)) {
+            continue;
+        }
+        const auto capabilities = GetPipDeviceCapabilities(spec.model);
+        options.push_back({
+            std::string(spec.itemId),
+            spec.model,
+            capabilities.displayName,
+            std::string_view(profile.activePipDeviceId) == spec.itemId,
+            capabilities.supportsMediaIndex,
+            capabilities.supportsFullPipPadWorkspace,
+            capabilities.hasDigitalMap,
+            capabilities.physicalNavigationOnly,
+            capabilities.userPreferredComfortShell});
+    }
+    return options;
+}
+
+bool CompletePipDeviceReselect(SessionProfile& profile, std::string_view deviceId) {
+    const auto* spec = FindPipDeviceItemSpec(deviceId);
+    if (spec == nullptr || !IsSelectablePipDeviceSpec(*spec)) {
+        return false;
+    }
+    if (HasActivePipDevice(profile) && !profile.pipDeviceReselectPending) {
+        return false;
+    }
+    SelectPipDevice(profile, spec->itemId);
+    return true;
+}
+
+bool IsPipDeviceSelectionStationRetired(const SessionProfile& profile) {
+    return profile.story.exitedBunker ||
+        profile.firstPlayableRoute.surfaceArrivalReached ||
+        profile.story.outerRoadCleared ||
+        profile.story.relayRecovered ||
+        profile.story.returnedToBase;
+}
+
+std::string ActivePipDeviceCustomizationSummary(const SessionProfile& profile) {
+    auto themeLabel = [](std::string_view themeId) {
+        if (themeId == "amber") return "amber theme";
+        if (themeId == "monochrome") return "monochrome theme";
+        if (themeId == "high_contrast") return "high-contrast theme";
+        return "classic green theme";
+    };
+    auto displayLabel = [](std::string_view displayMode) {
+        if (displayMode == "readable") return "readable display";
+        if (displayMode == "compact") return "compact display";
+        return "standard display";
+    };
+    auto carryLabel = [](std::string_view carryMode) {
+        if (carryMode == "wrist") return "wrist mode";
+        if (carryMode == "handheld") return "handheld mode";
+        return "auto carry mode";
+    };
+
+    return std::string("Active config: ") +
+        themeLabel(profile.pipDeviceThemeId) + ", " +
+        displayLabel(profile.pipDeviceDisplayMode) + ", " +
+        carryLabel(profile.pipDeviceCarryMode) + ".";
+}
+
+bool ActivePipDeviceSupportsTheme(const SessionProfile& profile, std::string_view themeId) {
+    PipDeviceModel model = PipDeviceModel::PipPad3500;
+    if (!TryGetPipDeviceModelForId(profile.activePipDeviceId, model)) {
+        return themeId == "classic_green";
+    }
+    switch (model) {
+        case PipDeviceModel::PipPad3500:
+            return themeId == "classic_green" || themeId == "amber" ||
+                themeId == "monochrome" || themeId == "high_contrast";
+        case PipDeviceModel::PipBoy3000MarkIV:
+        case PipDeviceModel::PipBoy2000Classic:
+        case PipDeviceModel::PipBoy2000MarkVI:
+            return themeId == "classic_green" || themeId == "amber" || themeId == "monochrome";
+        case PipDeviceModel::PipBoy01:
+        case PipDeviceModel::PipBoy10:
+            return themeId == "classic_green" || themeId == "monochrome";
+        case PipDeviceModel::PipBoy3000MarkV:
+            return false;
+    }
+    return false;
+}
+
+bool ActivePipDeviceSupportsDisplayMode(const SessionProfile& profile, std::string_view displayMode) {
+    PipDeviceModel model = PipDeviceModel::PipPad3500;
+    if (!TryGetPipDeviceModelForId(profile.activePipDeviceId, model)) {
+        return displayMode == "standard";
+    }
+    switch (model) {
+        case PipDeviceModel::PipPad3500:
+            return displayMode == "standard" || displayMode == "readable" || displayMode == "compact";
+        case PipDeviceModel::PipBoy3000MarkIV:
+        case PipDeviceModel::PipBoy2000Classic:
+        case PipDeviceModel::PipBoy2000MarkVI:
+            return displayMode == "standard" || displayMode == "readable";
+        case PipDeviceModel::PipBoy01:
+        case PipDeviceModel::PipBoy10:
+            return displayMode == "standard";
+        case PipDeviceModel::PipBoy3000MarkV:
+            return false;
+    }
+    return false;
+}
+
+bool ActivePipDeviceSupportsCarryMode(const SessionProfile& profile, std::string_view carryMode) {
+    PipDeviceModel model = PipDeviceModel::PipPad3500;
+    if (!TryGetPipDeviceModelForId(profile.activePipDeviceId, model)) {
+        return carryMode == "auto";
+    }
+    switch (model) {
+        case PipDeviceModel::PipPad3500:
+            return carryMode == "auto" || carryMode == "wrist" || carryMode == "handheld";
+        case PipDeviceModel::PipBoy01:
+        case PipDeviceModel::PipBoy10:
+        case PipDeviceModel::PipBoy2000Classic:
+        case PipDeviceModel::PipBoy2000MarkVI:
+        case PipDeviceModel::PipBoy3000MarkIV:
+            return carryMode == "auto" || carryMode == "wrist";
+        case PipDeviceModel::PipBoy3000MarkV:
+            return false;
+    }
+    return false;
+}
+
+bool ActivePipDeviceSupportsCustomization(const SessionProfile& profile,
+    std::string_view themeId,
+    std::string_view displayMode,
+    std::string_view carryMode) {
+    return ActivePipDeviceSupportsTheme(profile, themeId) &&
+        ActivePipDeviceSupportsDisplayMode(profile, displayMode) &&
+        ActivePipDeviceSupportsCarryMode(profile, carryMode);
+}
+
+bool CanCustomizeActivePipDevice(const SessionProfile& profile) {
+    return HasActivePipDevice(profile) && IsKnownPipDeviceId(profile.activePipDeviceId);
+}
+
+bool SetActivePipDeviceCustomization(SessionProfile& profile,
+    std::string_view themeId,
+    std::string_view displayMode,
+    std::string_view carryMode) {
+    if (!CanCustomizeActivePipDevice(profile)) {
+        return false;
+    }
+    SessionProfile normalizedProfile = profile;
+    normalizedProfile.pipDeviceThemeId = std::string(themeId);
+    normalizedProfile.pipDeviceDisplayMode = std::string(displayMode);
+    normalizedProfile.pipDeviceCarryMode = std::string(carryMode);
+    NormalizePipDeviceCustomization(normalizedProfile);
+    if (normalizedProfile.pipDeviceThemeId != std::string(themeId) ||
+        normalizedProfile.pipDeviceDisplayMode != std::string(displayMode) ||
+        normalizedProfile.pipDeviceCarryMode != std::string(carryMode)) {
+        return false;
+    }
+    if (!ActivePipDeviceSupportsCustomization(
+            profile,
+            normalizedProfile.pipDeviceThemeId,
+            normalizedProfile.pipDeviceDisplayMode,
+            normalizedProfile.pipDeviceCarryMode)) {
+        return false;
+    }
+
+    profile.pipDeviceThemeId = normalizedProfile.pipDeviceThemeId;
+    profile.pipDeviceDisplayMode = normalizedProfile.pipDeviceDisplayMode;
+    profile.pipDeviceCarryMode = normalizedProfile.pipDeviceCarryMode;
+    return true;
+}
+
+std::string_view NextPipCustomizationValue(std::string_view current, std::initializer_list<std::string_view> values) {
+    auto it = std::find(values.begin(), values.end(), current);
+    if (it == values.end()) {
+        return *values.begin();
+    }
+    ++it;
+    return it == values.end() ? *values.begin() : *it;
+}
+
+std::string_view NextSupportedPipCustomizationValue(
+    const SessionProfile& profile,
+    PipDeviceCustomizationSlot slot,
+    std::string_view current,
+    std::initializer_list<std::string_view> values) {
+    auto supportsValue = [&](std::string_view value) {
+        switch (slot) {
+            case PipDeviceCustomizationSlot::Theme: return ActivePipDeviceSupportsTheme(profile, value);
+            case PipDeviceCustomizationSlot::DisplayMode: return ActivePipDeviceSupportsDisplayMode(profile, value);
+            case PipDeviceCustomizationSlot::CarryMode: return ActivePipDeviceSupportsCarryMode(profile, value);
+        }
+        return false;
+    };
+    std::string_view candidate = NextPipCustomizationValue(current, values);
+    for (std::size_t attempts = 0; attempts < values.size(); ++attempts) {
+        if (supportsValue(candidate)) {
+            return candidate;
+        }
+        candidate = NextPipCustomizationValue(candidate, values);
+    }
+    return current;
+}
+
+std::string PipCustomizationSlotLabel(PipDeviceCustomizationSlot slot) {
+    switch (slot) {
+        case PipDeviceCustomizationSlot::Theme: return "theme";
+        case PipDeviceCustomizationSlot::DisplayMode: return "display mode";
+        case PipDeviceCustomizationSlot::CarryMode: return "carry mode";
+    }
+    return "customization";
+}
+
+bool CycleActivePipDeviceCustomization(SessionProfile& profile,
+    PipDeviceCustomizationSlot slot,
+    GameState* gameState) {
+    if (!CanCustomizeActivePipDevice(profile)) {
+        if (gameState != nullptr) {
+            gameState->lastEvent = "No active Pip device available for customization.";
+        }
+        return false;
+    }
+    std::string nextTheme = profile.pipDeviceThemeId;
+    std::string nextDisplayMode = profile.pipDeviceDisplayMode;
+    std::string nextCarryMode = profile.pipDeviceCarryMode;
+    switch (slot) {
+        case PipDeviceCustomizationSlot::Theme:
+            nextTheme = std::string(NextSupportedPipCustomizationValue(
+                profile,
+                slot,
+                profile.pipDeviceThemeId,
+                {"classic_green", "amber", "monochrome", "high_contrast"}));
+            break;
+        case PipDeviceCustomizationSlot::DisplayMode:
+            nextDisplayMode = std::string(NextSupportedPipCustomizationValue(
+                profile,
+                slot,
+                profile.pipDeviceDisplayMode,
+                {"standard", "readable", "compact"}));
+            break;
+        case PipDeviceCustomizationSlot::CarryMode:
+            nextCarryMode = std::string(NextSupportedPipCustomizationValue(
+                profile,
+                slot,
+                profile.pipDeviceCarryMode,
+                {"auto", "wrist", "handheld"}));
+            break;
+    }
+    if (!SetActivePipDeviceCustomization(profile, nextTheme, nextDisplayMode, nextCarryMode)) {
+        return false;
+    }
+    if (gameState != nullptr) {
+        gameState->lastEvent = "Pip device " + PipCustomizationSlotLabel(slot) + " set. " +
+            ActivePipDeviceCustomizationSummary(profile);
+    }
+    return true;
+}
+
+bool ApplyActivePipDeviceCustomizationCommand(SessionProfile& profile,
+    std::string_view command,
+    GameState* gameState) {
+    if (command == "theme_next") {
+        return CycleActivePipDeviceCustomization(profile, PipDeviceCustomizationSlot::Theme, gameState);
+    }
+    if (command == "display_next") {
+        return CycleActivePipDeviceCustomization(profile, PipDeviceCustomizationSlot::DisplayMode, gameState);
+    }
+    if (command == "carry_next") {
+        return CycleActivePipDeviceCustomization(profile, PipDeviceCustomizationSlot::CarryMode, gameState);
+    }
+    if (gameState != nullptr) {
+        gameState->lastEvent = "Pip device customization command not recognized. " +
+            ActivePipDeviceCustomizationSummary(profile);
+    }
+    return false;
+}
+
+bool IsSelectablePipDevice(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).selectable;
+}
+
+bool IsPropOnlyPipDevice(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).propOnly;
+}
+
+bool HasDigitalMap(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).hasDigitalMap;
+}
+
+bool UsesPhysicalNavigation(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).physicalNavigationOnly;
+}
+
+bool SupportsMediaIndex(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).supportsMediaIndex;
+}
+
+bool SupportsFullPipPadWorkspace(PipDeviceModel model) {
+    return GetPipDeviceCapabilities(model).supportsFullPipPadWorkspace;
+}
+
+bool HasPipPad(const SessionProfile& profile) {
+    return HasActivePipDevice(profile);
+}
+
+bool RecoverPipPad(SessionProfile& profile) {
+    return SelectPipDevice(profile, ActivePipDeviceIdOrDefault(profile));
+}
+
+bool HasBlueLinkModule(const SessionProfile& profile) {
+    return profile.blueLinkModuleRecovered || profile.blueLinkModuleInstalled;
+}
+
+bool IsBlueLinkInstalled(const SessionProfile& profile) {
+    return HasPipPad(profile) &&
+        profile.blueLinkModuleInstalled &&
+        !profile.pipPadExpansionCoverPresent;
+}
+
+bool InstallBlueLinkModule(SessionProfile& profile) {
+    if (!HasPipPad(profile) || !HasBlueLinkModule(profile)) {
+        return false;
+    }
+    const bool alreadyInstalled = IsBlueLinkInstalled(profile);
+    profile.blueLinkModuleRecovered = true;
+    profile.blueLinkModuleInstalled = true;
+    profile.pipPadExpansionCoverPresent = false;
+    return !alreadyInstalled;
+}
+
+bool CanUsePipPadMediaIndex(const SessionProfile& profile) {
+    return IsBlueLinkInstalled(profile) &&
+        ActivePipDeviceSupportsMediaIndex(profile);
+}
+
+bool PlayerHasActivePipDeviceAccess(const SessionProfile& profile) {
+    return HasPipPad(profile);
+}
+
+bool PlayerHasPipPadAccess(const SessionProfile& profile) {
+    return PlayerHasActivePipDeviceAccess(profile);
+}
+
+std::string ActivePipDeviceUiCapabilitySummary(const SessionProfile& profile) {
+    if (ActivePipDeviceSupportsFullWorkspace(profile)) {
+        return "Full field workspace online.";
+    }
+    if (ActivePipDeviceSupportsMediaIndex(profile) && ActivePipDeviceHasDigitalMap(profile)) {
+        return "Map and media-capable field interface online.";
+    }
+    if (ActivePipDeviceSupportsMediaIndex(profile)) {
+        return "Media-capable physical-navigation interface online.";
+    }
+    if (ActivePipDeviceHasDigitalMap(profile)) {
+        return "Digital map interface online.";
+    }
+    if (ActivePipDeviceUsesPhysicalNavigation(profile)) {
+        return "Physical-navigation interface online.";
+    }
+    return "Field interface online.";
+}
+
+bool TryToggleActivePipDeviceUi(PlayerState& player, const SessionProfile& profile, GameState& gameState) {
+    if (!HasPipPad(profile)) {
         player.uiVisible = false;
-        gameState.lastEvent = "No Pip-Pad linked yet. Recover the Pip-Pad first.";
+        gameState.lastEvent = "No Pip-Pad linked yet. No active Pip device assigned; recover a Pip-Boy or Pip-Pad first.";
         return false;
     }
 
     player.uiVisible = !player.uiVisible;
+    if (player.uiVisible) {
+        gameState.lastEvent = ActivePipDeviceDisplayName(profile) + " opened. " +
+            ActivePipDeviceUiCapabilitySummary(profile) + " " +
+            ActivePipDeviceCustomizationSummary(profile);
+    } else {
+        gameState.lastEvent = ActivePipDeviceDisplayName(profile) + " closed.";
+    }
     return true;
+}
+
+bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState) {
+    return TryToggleActivePipDeviceUi(player, profile, gameState);
 }
 
 void AdvanceViewMode(PlayerState& player) {
@@ -3180,7 +3749,10 @@ void SyncStoryFlagsFromWorld(SessionProfile& profile, const StaticEraser& static
     profile.story.bucketRecovered =
         profile.story.bucketRecovered || profile.firstPlayableRoute.clearanceModuleInstalled || staticEraser.IsErased("#%it_bucket_0001");
     profile.story.outerRoadCleared = profile.story.outerRoadCleared || staticEraser.IsErased("#%res_scrap_0001");
-    profile.story.pipPadRecovered = profile.story.pipPadRecovered || HasInventoryItem(profile, "#%it_pippad");
+    profile.story.pipPadRecovered = profile.story.pipPadRecovered || HasPipPad(profile);
+    if (profile.story.pipPadRecovered && profile.activePipDeviceId.empty()) {
+        profile.activePipDeviceId = "#%it_pippad";
+    }
     profile.story.tankLinked = profile.story.tankLinked || profile.partnerTank.deployed;
     profile.partnerTank.secondSeatUnlocked = profile.partnerTank.secondSeatUnlocked || profile.story.tankLinked;
     profile.partnerTank.secondSeatPolicy = NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy);
@@ -5389,12 +5961,17 @@ void HandleInteraction(const MapObject* nearest,
         profile.firstPlayableRoute.introSeen = true;
         profile.story.awakenedFromCryo = true;
         profile.firstPlayableRoute.prePipPadClueCount = std::max(profile.firstPlayableRoute.prePipPadClueCount, 1);
+        std::string continuityDiagnostic;
+        SeedContinuityAnchorAfterBunkerAnomaly(profile, &continuityDiagnostic);
         if (!HasEmergencyMeleeTool(profile)) {
             AddInventoryItem(profile, "#%it_emergency_baton", 1, 1.2f);
             profile.firstPlayableRoute.emergencyMeleeRecovered = true;
             gameState.lastEvent = "Cryostasis terminated. Adjacent pods are split open, several berths stand empty, and an emergency baton plus stained service sketch were recovered from the capsule tray.";
         } else {
             gameState.lastEvent = "Cryostasis terminated across the shared cryo tier. Memory loss remains, but movement is stable.";
+        }
+        if (!continuityDiagnostic.empty()) {
+            gameState.lastEvent += " " + continuityDiagnostic;
         }
         return;
     }
@@ -5441,25 +6018,139 @@ void HandleInteraction(const MapObject* nearest,
         return;
     }
 
+    if (nearest->registryId == "[%hangar_power_0001]") {
+        if (profile.hangarPowerRestored) {
+            gameState.lastEvent = "Hangar power bus already restored. Crane controls still require a separate online cycle.";
+            return;
+        }
+        profile.hangarPowerRestored = true;
+        gameState.lastEvent = "Hangar power bus restored. Crane control can now be brought online.";
+        return;
+    }
+
+    if (nearest->registryId == "[%bt72_crane_control_0001]") {
+        if (!profile.hangarPowerRestored) {
+            gameState.lastEvent = "BT-72 crane control is dark. Restore hangar power first.";
+            return;
+        }
+        if (profile.bt72CraneControlOnline) {
+            gameState.lastEvent = "BT-72 crane control is already online.";
+            return;
+        }
+        profile.bt72CraneControlOnline = true;
+        gameState.lastEvent = "BT-72 crane control online. Clear the crane path before attaching the hull.";
+        return;
+    }
+
+    if (nearest->registryId == "[%bt72_crane_path_0001]") {
+        if (!profile.hangarPowerRestored || !profile.bt72CraneControlOnline) {
+            gameState.lastEvent = "BT-72 crane path cannot be cleared until hangar power and crane control are online.";
+            return;
+        }
+        if (profile.bt72CranePathClear) {
+            gameState.lastEvent = "BT-72 crane path is already clear.";
+            return;
+        }
+        profile.bt72CranePathClear = true;
+        gameState.lastEvent = "BT-72 crane path cleared. Hook can now attach the surveyed hull.";
+        return;
+    }
+
+    if (nearest->registryId == "[%bt72_crane_hook_0001]") {
+        if (!profile.firstPlayableRoute.bt72HullInspected) {
+            gameState.lastEvent = "BT-72 crane hook has no verified lift points. Inspect the hull berth first.";
+            return;
+        }
+        if (!profile.hangarPowerRestored) {
+            gameState.lastEvent = "BT-72 crane hook is unpowered. Restore hangar power first.";
+            return;
+        }
+        if (!profile.bt72CraneControlOnline) {
+            gameState.lastEvent = "BT-72 crane hook is locked out. Bring crane control online first.";
+            return;
+        }
+        if (!profile.bt72CranePathClear) {
+            gameState.lastEvent = "BT-72 crane hook path is blocked. Clear the crane path first.";
+            return;
+        }
+        if (!AttachBt72HullToCrane(profile)) {
+            gameState.lastEvent = profile.bt72HullLockedInRestorationCradle
+                ? "BT-72 hull is already locked in the restoration cradle."
+                : "BT-72 crane hook failed to attach the hull.";
+            return;
+        }
+        gameState.lastEvent = "BT-72 hull attached to the hangar crane hook. Move it to the service lift cradle.";
+        return;
+    }
+
+    if (nearest->registryId == "[%bt72_service_lift_0001]") {
+        if (!profile.bt72HullAttachedToCrane) {
+            gameState.lastEvent = "BT-72 service lift is waiting for a crane-attached hull.";
+            return;
+        }
+        if (!MoveBt72HullToServiceLift(profile)) {
+            gameState.lastEvent = "BT-72 service lift could not receive the hull. Check crane power, control, and path state.";
+            return;
+        }
+        gameState.lastEvent = "BT-72 hull moved to the service lift and locked in the restoration cradle.";
+        return;
+    }
+
     if (nearest->registryId == "[%pip_0001]") {
+        if (IsPipDeviceSelectionStationRetired(profile)) {
+            gameState.lastEvent = "Pip-Boy/Pip-Pad cradle is now display-only. Field configuration is handled through your active Pip device.";
+            return;
+        }
         if (profile.story.pipPadRecovered) {
-            gameState.lastEvent = "Pip-Pad locker already cleared.";
+            BeginPipDeviceReselect(profile);
+            gameState.lastEvent = "Pip-Boy cradle opened. Current device is being returned to the rack; choose another model when the swap cycle completes.";
             return;
         }
         if (!profile.firstPlayableRoute.accessCardRecovered) {
-            gameState.lastEvent = "The recovery locker is still under mechanical card-lock. Pull a bunker access card from the core service racks first.";
+            gameState.lastEvent = "The Pip-Boy/Pip-Pad selection station is still under mechanical card-lock. Pull a bunker access card from the core service racks first.";
             return;
         }
 
-        AddInventoryItem(profile, "#%it_pippad", 1, 0.8f);
+        SelectPipDevice(profile, "#%it_pippad");
         AddInventoryItem(profile, "cryo_medkit", 1, 0.5f);
-        profile.story.pipPadRecovered = true;
-        staticEraser.Erase(nearest->registryId);
-        staticEraser.Save(profile.selectedWorld);
-        world.RemoveObject(nearest->registryId);
         gameState.lastEvent = profile.firstPlayableRoute.prePipPadClueCount >= 2
-            ? "Pip-Pad recovered. Press TAB to open the Pip-Pad; the bunker paper trail now makes sense."
-            : "Pip-Pad recovered. Press TAB to open the Pip-Pad; the bunker paper trail is still incomplete.";
+            ? "Pip-Boy/Pip-Pad station selected the default Pip-Pad 3500. Press TAB to open the Pip-Pad; the bunker paper trail now makes sense."
+            : "Pip-Boy/Pip-Pad station selected the default Pip-Pad 3500. Press TAB to open the Pip-Pad; the bunker paper trail is still incomplete.";
+        return;
+    }
+
+    if (nearest->registryId == "[%bluelink_module_0001]") {
+        if (!HasPipPad(profile)) {
+            gameState.lastEvent = "BlueLink module handshake rejected. Recover the Pip-Pad before collecting field media modules.";
+            return;
+        }
+        if (profile.blueLinkModuleRecovered) {
+            gameState.lastEvent = "BlueLink Media Module already recovered. Install it through the Pip-Pad expansion bay.";
+            return;
+        }
+        profile.blueLinkModuleRecovered = true;
+        gameState.lastEvent = "BlueLink Media Module recovered. Pip-Pad media index remains locked until the expansion bay cover is removed and the module is installed.";
+        return;
+    }
+
+    if (nearest->registryId == "[%pippad_expansion_bay_0001]") {
+        if (!HasPipPad(profile)) {
+            gameState.lastEvent = "Pip-Pad expansion bay unavailable. Recover the Pip-Pad first.";
+            return;
+        }
+        if (!HasBlueLinkModule(profile)) {
+            gameState.lastEvent = "Pip-Pad expansion bay still has its dummy cover. Recover the BlueLink Media Module before installation.";
+            return;
+        }
+        if (IsBlueLinkInstalled(profile)) {
+            gameState.lastEvent = "BlueLink Media Module already installed. Media index is available.";
+            return;
+        }
+        if (InstallBlueLinkModule(profile)) {
+            gameState.lastEvent = "BlueLink Media Module installed. Media index, audio, transcript, and translation channels are now available for recovered media.";
+        } else {
+            gameState.lastEvent = "BlueLink installation failed. Check Pip-Pad recovery and module state.";
+        }
         return;
     }
 
@@ -5489,6 +6180,39 @@ void HandleInteraction(const MapObject* nearest,
         if (!skillEvent.empty()) {
             gameState.lastEvent += " " + skillEvent;
         }
+        return;
+    }
+
+    if (nearest->registryId == "[%bt72_service_notes_0001]") {
+        if (!HasPipPad(profile)) {
+            gameState.lastEvent = "BT-72 service notes require Pip-Pad recovery before holo-records can be mirrored.";
+            return;
+        }
+        if (!profile.story.archiveRecovered) {
+            gameState.lastEvent = "BT-72 service notes remain encrypted until archive personnel records are mirrored.";
+            return;
+        }
+        if (profile.firstPlayableRoute.bt72ServiceNotesRecovered) {
+            gameState.lastEvent = "BT-72 service notes already mirrored to Pip-Pad.";
+            return;
+        }
+        profile.firstPlayableRoute.bt72ServiceNotesRecovered = true;
+        AddCollectedTapeIfMissing(profile, "bt72_service_reel_001", "BT-72 Service Reel");
+        gameState.lastEvent = "BT-72 service notes and holo-records mirrored to Pip-Pad.";
+        return;
+    }
+
+    if (nearest->registryId == "[%bt72_repair_patch_0001]") {
+        if (!HasPipPad(profile)) {
+            gameState.lastEvent = "Repair patch locker requires Pip-Pad recovery before the restoration manifest can be checked.";
+            return;
+        }
+        if (HasInventoryItem(profile, "repair_patch")) {
+            gameState.lastEvent = "BT-72 repair patch already recovered for restoration.";
+            return;
+        }
+        AddInventoryItem(profile, "repair_patch", 1, 0.2f);
+        gameState.lastEvent = "Repair patch recovered for BT-72 restoration.";
         return;
     }
 
@@ -6331,7 +7055,7 @@ void DrawPipPad(const World& world,
     GameState& gameState) {
     static int activeTab = 0;
 
-    if (!PlayerHasPipPadAccess(profile)) {
+    if (!PlayerHasActivePipDeviceAccess(profile)) {
         player.uiVisible = false;
         return;
     }

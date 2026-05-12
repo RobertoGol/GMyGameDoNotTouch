@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <ctime>
 #include <fstream>
@@ -28,6 +29,20 @@ struct InventoryEntry {
     int count = 0;
     float unitWeight = 0.0f;
 };
+
+inline constexpr std::array<std::string_view, 6> kCanonicalPipDeviceItemIds{{
+    "#%it_pipboy_0_1",
+    "#%it_pipboy_1_0",
+    "#%it_pipboy_2000_classic",
+    "#%it_pipboy_2000_mark_vi",
+    "#%it_pipboy_3000",
+    "#%it_pippad",
+}};
+
+inline bool IsCanonicalPipDeviceItemId(std::string_view itemId) {
+    return std::find(kCanonicalPipDeviceItemIds.begin(), kCanonicalPipDeviceItemIds.end(), itemId) !=
+        kCanonicalPipDeviceItemIds.end();
+}
 
 struct TapeEntry {
     std::string tapeId;
@@ -410,9 +425,34 @@ struct SessionProfile {
     std::string fieldCheckpointWorld{};
     std::string fieldCheckpointLabel{};
     int scavengerRunsCompleted = 0;
+    bool continuityAnchorSeeded = false;
+    float continuityAnchorVariance = 0.0f;
+    std::string activePipDeviceId{};
+    bool pipDeviceReselectPending = false;
+    std::string pipDeviceThemeId = "classic_green";
+    std::string pipDeviceDisplayMode = "standard";
+    std::string pipDeviceCarryMode = "auto";
+    bool pipPadExpansionCoverPresent = true;
+    bool blueLinkModuleRecovered = false;
+    bool blueLinkModuleInstalled = false;
+    bool hangarPowerRestored = false;
+    bool bt72CraneControlOnline = false;
+    bool bt72CranePathClear = false;
+    bool bt72HullAttachedToCrane = false;
+    bool bt72HullMovedToServiceLift = false;
+    bool bt72HullLockedInRestorationCradle = false;
     FirstPlayableRouteProgress firstPlayableRoute{};
     StoryProgress story{};
 };
+
+// Legacy/internal alias: SoulLine / Линейка Сознания.
+inline bool SoulLineSeeded(const SessionProfile& profile) {
+    return profile.continuityAnchorSeeded;
+}
+
+inline float SoulLineVariance(const SessionProfile& profile) {
+    return profile.continuityAnchorVariance;
+}
 
 inline bool HasActiveFieldCheckpoint(const SessionProfile& profile) {
     return profile.fieldCheckpointKnown && !profile.fieldCheckpointWorld.empty() &&
@@ -762,7 +802,10 @@ inline std::string CurrentTankSyncMode(const PartnerTankProfile& tank) {
 
 SessionProfile MakeDefaultSessionProfile();
 void NormalizeWorldFieldState(WorldFieldState& state);
+void NormalizePipDeviceCustomization(SessionProfile& profile);
 void NormalizeSessionProfile(SessionProfile& profile);
+bool SeedContinuityAnchorAfterBunkerAnomaly(SessionProfile& profile, std::string* diagnosticText = nullptr);
+std::string ContinuityAnchorDiagnostic(const SessionProfile& profile);
 bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath);
 bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile);
 

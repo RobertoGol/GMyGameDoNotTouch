@@ -45,8 +45,18 @@ bool Bt72ServiceNotesRecovered(const SessionProfile& profile) {
         HasCollectedTapeId(profile, "bt72_service_reel_001");
 }
 
+bool Bt72HullLockedInRestorationCradle(const SessionProfile& profile) {
+    return profile.bt72HullLockedInRestorationCradle || profile.story.tankLinked || profile.story.bucketRecovered;
+}
+
 bool Bt72Restored(const SessionProfile& profile) {
     return profile.firstPlayableRoute.bt72Restored || profile.story.tankLinked || profile.story.bucketRecovered;
+}
+
+bool HasBt72RestorationKnowledge(const SessionProfile& profile) {
+    return Bt72HullInspected(profile) &&
+        Bt72CoreRecovered(profile) &&
+        Bt72ServiceNotesRecovered(profile);
 }
 
 bool ClearanceBlueprintRecovered(const SessionProfile& profile) {
@@ -102,7 +112,8 @@ bool DebriefSummaryViewed(const SessionProfile& profile) {
 }
 
 bool HasBt72RestorationPrerequisites(const SessionProfile& profile) {
-    return Bt72HullInspected(profile) && Bt72CoreRecovered(profile) && Bt72ServiceNotesRecovered(profile);
+    return HasBt72RestorationKnowledge(profile) &&
+        Bt72HullLockedInRestorationCradle(profile);
 }
 
 bool HasBt72RestorationMaterials(const SessionProfile& profile) {
@@ -498,8 +509,11 @@ std::string CurrentStoryObjectivePreviewForProfile(const SessionProfile& profile
             : "Clear the archive corridor and put down the first vermin nest.";
     }
     if (!Bt72Restored(profile)) {
-        if (!HasBt72RestorationPrerequisites(profile)) {
+        if (!HasBt72RestorationKnowledge(profile)) {
             return "Survey the BT-72 hull, recover the starter core, and decode the service notes.";
+        }
+        if (!Bt72HullLockedInRestorationCradle(profile)) {
+            return "Restore hangar power, clear the crane path, and move the BT-72 hull into the service lift cradle.";
         }
         if (!HasBt72RestorationMaterials(profile)) {
             return "Gather the salvage kit for BT-72 restoration: power cell, repair patch, and hull plate.";
@@ -577,8 +591,11 @@ std::string CurrentStoryObjective(const SessionProfile& profile, const StaticEra
         return "Read the archive terminal and reconstruct what happened in Shelter 17.";
     }
     if (!Bt72Restored(profile)) {
-        if (!HasBt72RestorationPrerequisites(profile)) {
+        if (!HasBt72RestorationKnowledge(profile)) {
             return "Survey the BT-72 hull, recover the starter core, and decode the service notes.";
+        }
+        if (!Bt72HullLockedInRestorationCradle(profile)) {
+            return "Power the hangar crane, clear the crane path, and lock BT-72 into the service lift cradle.";
         }
         if (!HasBt72RestorationMaterials(profile)) {
             return "Gather a power cell, repair patch, and hull plate before restoring BT-72.";
@@ -801,7 +818,7 @@ FirstPlayableRouteBeat CurrentFirstPlayableRouteBeatForProfile(const SessionProf
     if (!Bt72Restored(profile)) {
         return {
             "Hangar Recovery",
-            "Read the BT-72 hull, core, and service notes, then restore the chassis from bunker salvage.",
+            "Read the BT-72 hull, core, and service notes, move the hull through the crane and service lift cradle, then restore the chassis from bunker salvage.",
             "The slice shifts from bunker scavenging into mechanized recovery."
         };
     }
@@ -922,6 +939,7 @@ std::vector<StoryRouteEntry> BuildBt72RestorationRoute(const SessionProfile& pro
         {"Inspect the BT-72 hull berth.", Bt72HullInspected(profile)},
         {"Recover the starter core from the bunker rack.", Bt72CoreRecovered(profile)},
         {"Decode BT-72 service notes and holo-records.", Bt72ServiceNotesRecovered(profile)},
+        {"Lock the BT-72 hull in the service lift cradle.", Bt72HullLockedInRestorationCradle(profile)},
         {"Gather a power cell, repair patch, and hull plate.", Bt72Restored(profile) || HasBt72RestorationMaterials(profile)},
         {"Restore BT-72 to partial operating condition.", Bt72Restored(profile)},
         {"Complete the first cockpit sync link.", profile.story.tankLinked},

@@ -52,6 +52,9 @@ struct GameState {
     bool bucketPressed = false;
     bool seatSwapPressed = false;
     bool uiPressed = false;
+    bool pipThemePressed = false;
+    bool pipDisplayPressed = false;
+    bool pipCarryPressed = false;
     bool savePressed = false;
     bool healPressed = false;
     bool reloadPressed = false;
@@ -128,7 +131,104 @@ bool ConsumeInventoryItem(SessionProfile& profile, const std::string& itemId, in
 float CurrentInventoryWeight(const SessionProfile& profile);
 int EffectiveStatValue(const SessionProfile& profile, const GameState& gameState, char statCode);
 bool TryConsumeFieldRation(SessionProfile& profile, GameState& gameState);
+enum class PipDeviceModel {
+    PipBoy01,
+    PipBoy10,
+    PipBoy2000Classic,
+    PipBoy2000MarkVI,
+    PipBoy3000MarkIV,
+    PipBoy3000 = PipBoy3000MarkIV,
+    PipBoy3000MarkV,
+    PipPad3500
+};
+
+struct PipDeviceCapabilities {
+    const char* displayName = "";
+    bool selectable = false;
+    bool propOnly = false;
+    bool hasDigitalMap = false;
+    bool physicalNavigationOnly = false;
+    bool supportsMediaIndex = false;
+    bool supportsFullPipPadWorkspace = false;
+    bool ruggedMilitaryPipBoyDerived = false;
+    bool userPreferredComfortShell = false;
+};
+
+struct PipDeviceSelectionOption {
+    std::string itemId;
+    PipDeviceModel model = PipDeviceModel::PipPad3500;
+    std::string displayName;
+    bool currentlyActive = false;
+    bool supportsMediaIndex = false;
+    bool supportsFullWorkspace = false;
+    bool hasDigitalMap = false;
+    bool usesPhysicalNavigation = false;
+    bool userPreferredComfortShell = false;
+};
+
+enum class PipDeviceCustomizationSlot {
+    Theme,
+    DisplayMode,
+    CarryMode
+};
+
+PipDeviceCapabilities GetPipDeviceCapabilities(PipDeviceModel model);
+const char* DeviceDisplayName(PipDeviceModel model);
+bool IsKnownPipDeviceId(std::string_view deviceId);
+bool TryGetPipDeviceModelForId(std::string_view deviceId, PipDeviceModel& outModel);
+PipDeviceCapabilities ActivePipDeviceCapabilities(const SessionProfile& profile);
+bool ActivePipDeviceSupportsMediaIndex(const SessionProfile& profile);
+bool ActivePipDeviceSupportsFullWorkspace(const SessionProfile& profile);
+bool ActivePipDeviceHasDigitalMap(const SessionProfile& profile);
+bool ActivePipDeviceUsesPhysicalNavigation(const SessionProfile& profile);
+std::string ActivePipDeviceIdOrDefault(const SessionProfile& profile);
+bool HasActivePipDevice(const SessionProfile& profile);
+bool SelectPipDevice(SessionProfile& profile, std::string_view deviceId);
+bool BeginPipDeviceReselect(SessionProfile& profile);
+std::string ActivePipDeviceDisplayName(const SessionProfile& profile);
+std::vector<PipDeviceSelectionOption> BuildPipDeviceSelectionOptions(const SessionProfile& profile);
+bool CompletePipDeviceReselect(SessionProfile& profile, std::string_view deviceId);
+bool IsPipDeviceSelectionStationRetired(const SessionProfile& profile);
+std::string ActivePipDeviceCustomizationSummary(const SessionProfile& profile);
+bool ActivePipDeviceSupportsTheme(const SessionProfile& profile, std::string_view themeId);
+bool ActivePipDeviceSupportsDisplayMode(const SessionProfile& profile, std::string_view displayMode);
+bool ActivePipDeviceSupportsCarryMode(const SessionProfile& profile, std::string_view carryMode);
+bool ActivePipDeviceSupportsCustomization(const SessionProfile& profile,
+    std::string_view themeId,
+    std::string_view displayMode,
+    std::string_view carryMode);
+bool CanCustomizeActivePipDevice(const SessionProfile& profile);
+bool SetActivePipDeviceCustomization(SessionProfile& profile,
+    std::string_view themeId,
+    std::string_view displayMode,
+    std::string_view carryMode);
+bool CycleActivePipDeviceCustomization(SessionProfile& profile,
+    PipDeviceCustomizationSlot slot,
+    GameState* gameState = nullptr);
+bool ApplyActivePipDeviceCustomizationCommand(SessionProfile& profile,
+    std::string_view command,
+    GameState* gameState = nullptr);
+bool IsSelectablePipDevice(PipDeviceModel model);
+bool IsPropOnlyPipDevice(PipDeviceModel model);
+bool HasDigitalMap(PipDeviceModel model);
+bool UsesPhysicalNavigation(PipDeviceModel model);
+bool SupportsMediaIndex(PipDeviceModel model);
+bool SupportsFullPipPadWorkspace(PipDeviceModel model);
+bool HasPipPad(const SessionProfile& profile);
+bool RecoverPipPad(SessionProfile& profile);
+bool HasBlueLinkModule(const SessionProfile& profile);
+bool IsBlueLinkInstalled(const SessionProfile& profile);
+bool InstallBlueLinkModule(SessionProfile& profile);
+bool CanUsePipPadMediaIndex(const SessionProfile& profile);
+bool CanAttachBt72HullToCrane(const SessionProfile& profile);
+bool AttachBt72HullToCrane(SessionProfile& profile);
+bool CanMoveBt72HullToServiceLift(const SessionProfile& profile);
+bool MoveBt72HullToServiceLift(SessionProfile& profile);
+bool CanInstallBt72Core(const SessionProfile& profile);
+bool CanCompleteBt72StagedRestoration(const SessionProfile& profile);
+bool PlayerHasActivePipDeviceAccess(const SessionProfile& profile);
 bool PlayerHasPipPadAccess(const SessionProfile& profile);
+bool TryToggleActivePipDeviceUi(PlayerState& player, const SessionProfile& profile, GameState& gameState);
 bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState);
 void AdvanceViewMode(PlayerState& player);
 void TryToggleBt72CrewSeat(PlayerState& player, SessionProfile& profile, GameState& gameState);
