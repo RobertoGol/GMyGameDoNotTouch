@@ -124,6 +124,22 @@ struct GameState {
     };
 };
 
+struct Bt72CrewCombatReadout {
+    std::string seatLabel;
+    std::string primaryLoop;
+    std::string blockedAction;
+    std::string supportStatus;
+    std::string tacticalCue;
+};
+
+struct ExpeditionPressureReadout {
+    std::string riskBand;
+    std::string pressureSummary;
+    std::string recommendedAction;
+    std::string returnCue;
+    int riskScore = 0;
+};
+
 const char* RuntimeGamePhaseLabel(RuntimeGamePhase phase);
 void AddInventoryItem(SessionProfile& profile, const std::string& itemId, int count, float weight);
 bool HasInventoryItem(const SessionProfile& profile, const std::string& itemId);
@@ -231,6 +247,8 @@ bool PlayerHasPipPadAccess(const SessionProfile& profile);
 bool TryToggleActivePipDeviceUi(PlayerState& player, const SessionProfile& profile, GameState& gameState);
 bool TryTogglePipPadUi(PlayerState& player, const SessionProfile& profile, GameState& gameState);
 void AdvanceViewMode(PlayerState& player);
+Bt72CrewCombatReadout DescribeBt72CrewCombatReadout(const PlayerState& player, const SessionProfile& profile);
+ExpeditionPressureReadout BuildExpeditionPressureReadout(const SessionProfile& profile, const GameState& gameState);
 void TryToggleBt72CrewSeat(PlayerState& player, SessionProfile& profile, GameState& gameState);
 void ApplyStaticEraser(World& world, const StaticEraser& staticEraser);
 bool ShouldUseStarterStoryFlow(const World& world);

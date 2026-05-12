@@ -187,6 +187,23 @@ struct ExternalDataScanSummary {
     std::vector<ExternalDataFileRecord> files{};
 };
 
+struct AssetLibraryScanSummary {
+    std::filesystem::path folderPath{};
+    bool exists = false;
+    std::size_t foundFileCount = 0;
+    std::size_t recognizedFileCount = 0;
+    std::size_t unknownFileCount = 0;
+    std::size_t assetArchiveCount = 0;
+    std::size_t recordPluginCount = 0;
+    std::size_t scriptSourceCount = 0;
+    std::size_t textureSourceCount = 0;
+    std::size_t mediaFileCount = 0;
+    std::size_t packageFileCount = 0;
+    std::size_t executableDangerCount = 0;
+    std::size_t futureExtractorCandidateCount = 0;
+    std::vector<std::string> mountRoots{};
+};
+
 struct WorldExportResult {
     bool ok = false;
     bool blockedByValidation = false;
@@ -219,6 +236,8 @@ std::filesystem::path ResolveExportDataDirectory(const std::filesystem::path& st
 bool CreateExportDataDirectory(const std::filesystem::path& startPath, std::filesystem::path& createdPath);
 ExternalDataScanSummary ScanExportDataDirectory(const std::filesystem::path& startPath = {});
 std::string BuildExternalDataScanReport(const ExternalDataScanSummary& summary);
+AssetLibraryScanSummary ScanAssetLibraryDirectory(const std::filesystem::path& folderPath = "assets");
+std::string BuildAssetLibraryReadinessReport(const AssetLibraryScanSummary& summary);
 std::filesystem::path ValidationReportPathForWorld(const std::filesystem::path& worldPath);
 std::filesystem::path ExportAuditTrailPathForWorld(const std::filesystem::path& worldPath);
 std::filesystem::path ValidationSnapshotArchivePathForWorld(const std::filesystem::path& worldPath, std::string_view exportToken);

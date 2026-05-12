@@ -6,6 +6,7 @@ build_verify_ninja_fresh/
 out/
 CMakeFiles/
 profiles/
+assets/
 
 # IDE / editor
 .vscode/

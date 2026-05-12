@@ -591,6 +591,9 @@ void DrawPipPadDataTab(PlayerState& player, SessionProfile& profile, GameState& 
         profile.partnerTank.trustedGunnerHandle.empty() ? "none" : profile.partnerTank.trustedGunnerHandle.c_str());
     ImGui::BulletText("Assigned Gunner: %s",
         profile.partnerTank.assignedGunnerHandle.empty() ? "none" : profile.partnerTank.assignedGunnerHandle.c_str());
+    const auto crewReadout = DescribeBt72CrewCombatReadout(player, profile);
+    ImGui::BulletText("Crew Loop: %s", crewReadout.primaryLoop.c_str());
+    ImGui::TextWrapped("Crew Cue: %s", crewReadout.tacticalCue.c_str());
     ImGui::Text("Utility Module: %s", CurrentUtilityModuleLabel(profile));
     if (TankUsesTowCoupler(profile)) {
         ImGui::TextDisabled("Tow Coupler: +logistics, -mobility, +thermal load");
@@ -608,6 +611,13 @@ void DrawPipPadDataTab(PlayerState& player, SessionProfile& profile, GameState& 
     }
     ImGui::ProgressBar(profile.partnerTank.energyReserve / 100.0f, ImVec2(-1.0f, 18.0f), "Energy");
     ImGui::ProgressBar(profile.partnerTank.ammoReserve / 100.0f, ImVec2(-1.0f, 18.0f), "Ammo");
+    const auto pressureReadout = BuildExpeditionPressureReadout(profile, gameState);
+    ImGui::Separator();
+    ImGui::Text("Expedition Pressure");
+    ImGui::BulletText("Risk: %s", pressureReadout.riskBand.c_str());
+    ImGui::TextWrapped("%s", pressureReadout.pressureSummary.c_str());
+    ImGui::TextWrapped("%s", pressureReadout.recommendedAction.c_str());
+    ImGui::TextDisabled("%s", pressureReadout.returnCue.c_str());
     ImGui::Text("Workshop Log: %s", gameState.workshopServiceCooldown > 0.0f ? "Recent repair cycle complete" : "No recent workshop cycle");
     ImGui::BulletText("Workshop Engineer: %s", HasAssignedSpecialistRole(profile, "engineer", "workshop") ? "assigned" : "standard crew");
     ImGui::BulletText("Field Engineer: %s", HasAssignedSpecialistRole(profile, "engineer", "scavenger_support") ? "assigned" : "not assigned");

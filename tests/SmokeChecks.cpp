@@ -2619,6 +2619,108 @@ bool RunBt72SeatPolicySmoke() {
             "bt72 seat policy smoke expected open-crew readability copy");
 }
 
+bool RunBt72CrewCombatReadoutSmoke() {
+    bunker::SessionProfile profile = bunker::MakeDefaultSessionProfile();
+    profile.story.tankLinked = true;
+    profile.firstPlayableRoute.bt72Restored = true;
+    profile.firstPlayableRoute.clearanceModuleInstalled = true;
+    profile.story.bucketRecovered = true;
+    profile.partnerTank.secondSeatUnlocked = true;
+    profile.partnerTank.secondSeatPolicy = "trusted_only";
+    profile.partnerTank.trustedGunnerHandle = profile.character.displayName;
+
+    bunker::PlayerState player;
+    const auto footReadout = bunker::DescribeBt72CrewCombatReadout(player, profile);
+    if (!Check(footReadout.seatLabel == "On Foot" &&
+            footReadout.blockedAction.find("unavailable") != std::string::npos,
+            "bt72 crew readout smoke expected on-foot role to block vehicle actions")) {
+        return false;
+    }
+
+    player.insideTank = true;
+    const auto pilotReadout = bunker::DescribeBt72CrewCombatReadout(player, profile);
+    if (!Check(pilotReadout.seatLabel == "BT-72 Pilot" &&
+            pilotReadout.primaryLoop.find("Bucket Rig") != std::string::npos &&
+            pilotReadout.tacticalCue.find("debris") != std::string::npos,
+            "bt72 crew readout smoke expected pilot role to advertise clearance loop")) {
+        return false;
+    }
+
+    bunker::GameState gameState;
+    bunker::TryToggleBt72CrewSeat(player, profile, gameState);
+    const auto gunnerReadout = bunker::DescribeBt72CrewCombatReadout(player, profile);
+    return Check(player.bt72GunnerSeat &&
+            gunnerReadout.seatLabel == "BT-72 Gunner" &&
+            gunnerReadout.primaryLoop.find("weak-point") != std::string::npos,
+            "bt72 crew readout smoke expected gunner role to advertise weak-point support") &&
+        Check(gunnerReadout.blockedAction.find("heavy clearance") != std::string::npos,
+            "bt72 crew readout smoke expected gunner role to block heavy clearance") &&
+        Check(gameState.lastEvent.find("Role: support fire") != std::string::npos,
+            "bt72 crew readout smoke expected seat shift event to include role cue");
+}
+
+bool RunExpeditionPressureReadoutSmoke() {
+    bunker::SessionProfile stableProfile = bunker::MakeDefaultSessionProfile();
+    stableProfile.story.tankLinked = true;
+    stableProfile.story.exitedBunker = true;
+    stableProfile.partnerTank.energyReserve = 82.0f;
+    stableProfile.partnerTank.ammoReserve = 76.0f;
+    stableProfile.fieldCheckpointKnown = true;
+    stableProfile.fieldCheckpointWorld = stableProfile.selectedWorld;
+    stableProfile.fieldCheckpointLabel = "Outer Shell Camp";
+    bunker::GameState stableState;
+    stableState.tankThermalLoad = 24.0f;
+
+    const auto stableReadout = bunker::BuildExpeditionPressureReadout(stableProfile, stableState);
+    if (!Check(stableReadout.riskBand == "Stable" &&
+            stableReadout.recommendedAction.find("Continue") != std::string::npos &&
+            stableReadout.returnCue.find("Outer Shell Camp") != std::string::npos,
+            "expedition pressure smoke expected healthy prepared route to remain stable")) {
+        return false;
+    }
+
+    bunker::SessionProfile strainedProfile = stableProfile;
+    strainedProfile.partnerTank.energyReserve = 34.0f;
+    strainedProfile.partnerTank.damage.hull = 62.0f;
+    strainedProfile.fieldCheckpointKnown = false;
+    strainedProfile.fieldCheckpointWorld.clear();
+    auto* strainedWorld = bunker::FindWorldFieldState(strainedProfile, strainedProfile.selectedWorld, true);
+    strainedWorld->routeContamination = 24.0f;
+    bunker::AddInventoryItem(strainedProfile, "heavy_salvage_crate", 12, 1100.0f);
+    bunker::GameState strainedState;
+    strainedState.tankThermalLoad = 70.0f;
+
+    const auto strainedReadout = bunker::BuildExpeditionPressureReadout(strainedProfile, strainedState);
+    if (!Check(strainedReadout.riskBand == "Strained" &&
+            strainedReadout.recommendedAction.find("Service BT-72") != std::string::npos &&
+            strainedReadout.returnCue.find("no field checkpoint") != std::string::npos,
+            "expedition pressure smoke expected mixed pressure to recommend service or cargo trim")) {
+        return false;
+    }
+
+    bunker::SessionProfile criticalProfile = strainedProfile;
+    criticalProfile.character.hp = 20.0f;
+    criticalProfile.partnerTank.energyReserve = 12.0f;
+    criticalProfile.partnerTank.ammoReserve = 14.0f;
+    criticalProfile.partnerTank.damage.hull = 32.0f;
+    criticalProfile.partnerTank.damage.sensors = 38.0f;
+    auto* criticalWorld = bunker::FindWorldFieldState(criticalProfile, criticalProfile.selectedWorld, true);
+    criticalWorld->activeRouteEventType = "service_call";
+    criticalWorld->routeEventTimeRemaining = 120.0f;
+    criticalWorld->routeContamination = 58.0f;
+    bunker::GameState criticalState;
+    criticalState.tankThermalLoad = 92.0f;
+
+    const auto criticalReadout = bunker::BuildExpeditionPressureReadout(criticalProfile, criticalState);
+    return Check(criticalReadout.riskBand == "Critical" &&
+            criticalReadout.riskScore >= 6,
+            "expedition pressure smoke expected stacked danger to become critical") &&
+        Check(criticalReadout.recommendedAction.find("Return to Shelter 17") != std::string::npos,
+            "expedition pressure smoke expected critical route to recommend return") &&
+        Check(criticalReadout.pressureSummary.find("thermal") != std::string::npos,
+            "expedition pressure smoke expected summary to expose thermal pressure");
+}
+
 bool RunServiceChoiceWeightSmoke() {
     bunker::World world;
     world.GeneratePrototypeZone();
@@ -4000,6 +4102,52 @@ bool RunExportDataScanSmoke() {
         Check(unknown != summary.files.end() && !unknown->recognized &&
                 unknown->importMode == bunker::ExternalDataImportMode::UnknownReference,
             "export_data scan should treat unknown extensions as warning-only references");
+}
+
+bool RunAssetLibraryReadinessSmoke() {
+    const fs::path tempRoot = fs::temp_directory_path() / "bunker_asset_library_readiness_smoke";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "assets" / "bethesda_fallout4", ec);
+    fs::create_directories(tempRoot / "assets" / "bethesda_fallout76" / "scripts", ec);
+    if (!Check(!ec, "asset library readiness smoke failed to create temp roots")) {
+        return false;
+    }
+
+    const std::vector<fs::path> files = {
+        tempRoot / "assets" / "bethesda_fallout4" / "Fallout4 - Textures.ba2",
+        tempRoot / "assets" / "bethesda_fallout4" / "Fallout4.esm",
+        tempRoot / "assets" / "bethesda_fallout76" / "SeventySix.esl",
+        tempRoot / "assets" / "bethesda_fallout76" / "scripts" / "WorkshopObjectScript.psc",
+        tempRoot / "assets" / "bethesda_fallout76" / "preview.jpg",
+        tempRoot / "assets" / "bethesda_fallout76" / "video.bk2",
+        tempRoot / "assets" / "bethesda_fallout76" / "loose.pak",
+        tempRoot / "assets" / "bethesda_fallout76" / "native.dll",
+        tempRoot / "assets" / "bethesda_fallout76" / "unknown.flx",
+    };
+    for (const auto& filePath : files) {
+        std::ofstream file(filePath, std::ios::binary);
+        file << "asset smoke";
+    }
+
+    const auto summary = bunker::ScanAssetLibraryDirectory(tempRoot / "assets");
+    const auto report = bunker::BuildAssetLibraryReadinessReport(summary);
+    fs::remove_all(tempRoot, ec);
+
+    return Check(summary.exists, "asset library readiness smoke expected assets folder") &&
+        Check(summary.foundFileCount == files.size(), "asset library readiness smoke expected recursive file count") &&
+        Check(summary.assetArchiveCount == 1, "asset library readiness smoke expected one BA2 asset archive") &&
+        Check(summary.recordPluginCount == 2, "asset library readiness smoke expected esm/esl plugin refs") &&
+        Check(summary.scriptSourceCount == 1, "asset library readiness smoke expected PSC script source count") &&
+        Check(summary.textureSourceCount == 1, "asset library readiness smoke expected JPG texture/source count") &&
+        Check(summary.mediaFileCount == 1, "asset library readiness smoke expected BK2 media count") &&
+        Check(summary.packageFileCount == 1, "asset library readiness smoke expected PAK package count") &&
+        Check(summary.executableDangerCount == 1, "asset library readiness smoke expected DLL danger count") &&
+        Check(summary.unknownFileCount == 1, "asset library readiness smoke expected one unknown file") &&
+        Check(std::find(summary.mountRoots.begin(), summary.mountRoots.end(), "bethesda_fallout4") != summary.mountRoots.end(),
+            "asset library readiness smoke expected fallout4 mount root") &&
+        Check(report.find("blocked for automatic loading") != std::string::npos,
+            "asset library readiness smoke expected executable refs to block automatic loading");
 }
 
 bool RunStrictSemanticExportPolicySmoke() {
@@ -8666,6 +8814,8 @@ int main() {
         RunBt72CrewCoordinationWeightSmoke() &&
         RunBt72WeakPointComboSmoke() &&
         RunBt72SeatPolicySmoke() &&
+        RunBt72CrewCombatReadoutSmoke() &&
+        RunExpeditionPressureReadoutSmoke() &&
         RunServiceChoiceWeightSmoke() &&
         RunLauncherAnnouncementSmoke() &&
         RunLanlineServicesRoundtripSmoke() &&
@@ -8684,6 +8834,7 @@ int main() {
         RunPrefabUsageAndExportReportSmoke() &&
         RunSupportedFileFormatRegistrySmoke() &&
         RunExportDataScanSmoke() &&
+        RunAssetLibraryReadinessSmoke() &&
         RunStrictSemanticExportPolicySmoke() &&
         RunValidatedWorldExportArtifactSmoke() &&
         RunWorldExportAuditTrailSmoke() &&

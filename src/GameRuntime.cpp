@@ -2879,6 +2879,139 @@ const char* RuntimeGamePhaseLabel(RuntimeGamePhase phase) {
     return "Unknown";
 }
 
+Bt72CrewCombatReadout DescribeBt72CrewCombatReadout(const PlayerState& player, const SessionProfile& profile) {
+    Bt72CrewCombatReadout readout{};
+    const std::string seatAssignment = CurrentBt72SeatAssignment(player);
+    readout.seatLabel = Bt72SeatAssignmentLabel(seatAssignment);
+
+    if (!player.insideTank) {
+        readout.primaryLoop = "foot traversal / melee survival";
+        readout.blockedAction = "BT-72 ram, cannon, and crew routing unavailable";
+        readout.supportStatus = profile.partnerTank.worldPositionKnown
+            ? "BT-72 anchor known; re-link at the hull to resume vehicle support."
+            : "BT-72 anchor unknown; restore or locate the hull before vehicle support.";
+        readout.tacticalCue = "Use cover, access cards, and the Pip-Pad trail before committing to surface contact.";
+        return readout;
+    }
+
+    if (player.bt72GunnerSeat) {
+        readout.primaryLoop = "support fire / weak-point pressure";
+        readout.blockedAction = "heavy clearance and utility hardpoint retuning require pilot controls";
+        readout.supportStatus = std::string("Seat policy: ") +
+            Bt72SecondSeatPolicyLabel(profile.partnerTank.secondSeatPolicy) +
+            " // assigned gunner: " +
+            (profile.partnerTank.assignedGunnerHandle.empty() ? "none" : profile.partnerTank.assignedGunnerHandle);
+        readout.tacticalCue = "Hold range, spend ammo deliberately, and crack sensors or weapons before the pilot closes.";
+        return readout;
+    }
+
+    readout.primaryLoop = std::string("driver control / ") + CurrentUtilityModuleLabel(profile);
+    readout.blockedAction = Bt72SecondSeatUnlocked(profile)
+        ? "precision support fire is strongest from the gunner seat"
+        : "gunner seat locked until the first cockpit sync link stabilizes";
+    readout.supportStatus = std::string("Sync mode: ") + CurrentTankSyncMode(profile.partnerTank) +
+        " // defense: " + Bt72DefenseStatusLabel(profile);
+    readout.tacticalCue = TankUsesBucketRig(profile)
+        ? "Raise the bucket for debris work, then swap to gunner or cannon pressure for first contact."
+        : "Use the mounted utility module to shape the lane, then service BT-72 before recovery sync.";
+    return readout;
+}
+
+ExpeditionPressureReadout BuildExpeditionPressureReadout(const SessionProfile& profile, const GameState& gameState) {
+    ExpeditionPressureReadout readout{};
+    const float hpRatio = profile.character.maxHp > 0.0f
+        ? profile.character.hp / profile.character.maxHp
+        : 0.0f;
+    const float carryLimit = std::max(1.0f, profile.character.carryWeight);
+    const float carryRatio = CurrentInventoryWeight(profile) / carryLimit;
+    const auto& damage = profile.partnerTank.damage;
+    const float tankIntegrity = std::min({
+        damage.hull,
+        damage.turret,
+        damage.bucket,
+        damage.sensors,
+        damage.cockpit,
+        damage.powerCore
+    });
+    const float reserveFloor = std::min(profile.partnerTank.energyReserve, profile.partnerTank.ammoReserve);
+    const auto* worldState = FindWorldFieldState(profile, profile.selectedWorld);
+    const float routePressure = worldState != nullptr
+        ? std::max({
+              worldState->routeContamination,
+              worldState->infrastructureDecay,
+              worldState->etherErosion
+          })
+        : 0.0f;
+
+    if (hpRatio < 0.35f) {
+        readout.riskScore += 2;
+    } else if (hpRatio < 0.60f) {
+        readout.riskScore += 1;
+    }
+    if (tankIntegrity < 45.0f) {
+        readout.riskScore += 2;
+    } else if (tankIntegrity < 70.0f) {
+        readout.riskScore += 1;
+    }
+    if (reserveFloor < 20.0f) {
+        readout.riskScore += 2;
+    } else if (reserveFloor < 45.0f) {
+        readout.riskScore += 1;
+    }
+    if (carryRatio > 0.95f) {
+        readout.riskScore += 1;
+    }
+    if (gameState.tankThermalLoad > 82.0f) {
+        readout.riskScore += 1;
+    }
+    if (routePressure > 45.0f) {
+        readout.riskScore += 1;
+    }
+    if (worldState != nullptr && HasActiveRouteEvent(*worldState)) {
+        readout.riskScore += 1;
+    }
+    if (!HasActiveFieldCheckpoint(profile) && profile.story.exitedBunker) {
+        readout.riskScore += 1;
+    }
+
+    if (readout.riskScore >= 6) {
+        readout.riskBand = "Critical";
+        readout.recommendedAction = "Return to Shelter 17 or the nearest service point before pushing another objective.";
+    } else if (readout.riskScore >= 3) {
+        readout.riskBand = "Strained";
+        readout.recommendedAction = "Service BT-72, trim cargo, or resolve the active route pressure before going deeper.";
+    } else {
+        readout.riskBand = "Stable";
+        readout.recommendedAction = "Continue the expedition while reserves and route pressure remain readable.";
+    }
+
+    char summary[256];
+    std::snprintf(summary,
+        sizeof(summary),
+        "HP %.0f%% // cargo %.0f%% // BT-72 %.0f%% // reserves %.0f%% // thermal %.0f%% // route %.0f%%.",
+        std::clamp(hpRatio, 0.0f, 1.0f) * 100.0f,
+        std::max(0.0f, carryRatio) * 100.0f,
+        tankIntegrity,
+        reserveFloor,
+        gameState.tankThermalLoad,
+        routePressure);
+    readout.pressureSummary = summary;
+
+    if (HasActiveFieldCheckpoint(profile)) {
+        readout.returnCue = profile.fieldCheckpointLabel.empty()
+            ? "Return route: active field checkpoint is known."
+            : "Return route: " + profile.fieldCheckpointLabel + ".";
+    } else if (profile.story.relayRecovered) {
+        readout.returnCue = "Return route: relay packet recovered; Shelter 17 debrief is the clean exit.";
+    } else if (profile.story.exitedBunker) {
+        readout.returnCue = "Return route: no field checkpoint logged; use BT-72 condition as the abort trigger.";
+    } else {
+        readout.returnCue = "Return route: bunker-bound preparation phase.";
+    }
+
+    return readout;
+}
+
 const char* TankIntegrityBand(float integrity) {
     if (integrity >= 85.0f) {
         return "Ready";
@@ -3708,11 +3841,15 @@ void TryToggleBt72CrewSeat(PlayerState& player, SessionProfile& profile, GameSta
         player.bucketRaised = false;
         gameState.lastEvent = std::string("Crew station shifted to the BT-72 gunner seat. Driver assist holds the hull at crawl speed. Seat policy: ") +
             Bt72SecondSeatPolicyLabel(profile.partnerTank.secondSeatPolicy) + ".";
+        const auto readout = DescribeBt72CrewCombatReadout(player, profile);
+        gameState.lastEvent += " Role: " + readout.primaryLoop + ". Cue: " + readout.tacticalCue;
     } else {
         if (profile.partnerTank.assignedGunnerHandle == profile.character.displayName) {
             profile.partnerTank.assignedGunnerHandle.clear();
         }
         gameState.lastEvent = "Crew station shifted back to BT-72 pilot controls.";
+        const auto readout = DescribeBt72CrewCombatReadout(player, profile);
+        gameState.lastEvent += " Role: " + readout.primaryLoop + ". Cue: " + readout.tacticalCue;
     }
 }
 

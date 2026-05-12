@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <map>
 #include <sstream>
+#include <unordered_set>
 
 #include "../include/AtomicPersistence.hpp"
 #include "../include/PrefabLibrary.hpp"
@@ -443,6 +444,7 @@ const std::vector<SupportedFileFormat>& SupportedFileFormats() {
         {".wav", SupportedFileFormatLayer::AudioVoiceLip, "Wave audio", "Audio asset reference class.", false, false, false, true, false, false, true},
         {".ogg", SupportedFileFormatLayer::AudioVoiceLip, "Legacy audio", "Legacy audio/music reference class.", false, false, false, true, false, false, true},
         {".mp3", SupportedFileFormatLayer::AudioVoiceLip, "Music/audio source", "Audio source reference class.", false, false, false, true, false, false, false},
+        {".bk2", SupportedFileFormatLayer::AudioVoiceLip, "Bink video", "Video/media reference class.", false, false, false, true, false, false, true},
         {".dat", SupportedFileFormatLayer::AudioVoiceLip, "Legacy generated audio/lip data", "Generated audio/lip sidecar reference class.", false, false, false, true, false, false, true},
         {".strings", SupportedFileFormatLayer::Localization, "Localized strings", "Localization reference class.", false, false, false, true, false, false, true},
         {".dlstrings", SupportedFileFormatLayer::Localization, "Localized dialogue strings", "Localization reference class.", false, false, false, true, false, false, true},
@@ -471,6 +473,7 @@ const std::vector<SupportedFileFormat>& SupportedFileFormats() {
         {".zip", SupportedFileFormatLayer::ModPackage, "Archive package", "Compressed package reference only.", false, false, true, true, false, false, false},
         {".7z", SupportedFileFormatLayer::ModPackage, "Archive package", "Compressed package reference only.", false, false, true, true, false, false, false},
         {".rar", SupportedFileFormatLayer::ModPackage, "Archive package", "Compressed package reference only.", false, false, true, true, false, false, false},
+        {".pak", SupportedFileFormatLayer::ModPackage, "Packed asset package", "Packed asset/package reference only.", false, false, true, true, false, false, true},
         {".fomod", SupportedFileFormatLayer::ModPackage, "Mod installer metadata", "Mod installer/package reference class.", false, false, true, true, false, false, false},
         {".omod", SupportedFileFormatLayer::ModPackage, "Legacy mod package", "Legacy mod package reference class.", false, false, true, true, false, false, false},
     };
@@ -716,6 +719,108 @@ std::string BuildExternalDataScanReport(const ExternalDataScanSummary& summary) 
             }
             report << '\n';
         }
+    }
+    return report.str();
+}
+
+AssetLibraryScanSummary ScanAssetLibraryDirectory(const std::filesystem::path& folderPath) {
+    AssetLibraryScanSummary summary;
+    summary.folderPath = folderPath.empty() ? std::filesystem::path("assets") : folderPath;
+
+    std::error_code ec;
+    summary.exists = std::filesystem::exists(summary.folderPath, ec) && std::filesystem::is_directory(summary.folderPath, ec);
+    if (!summary.exists) {
+        return summary;
+    }
+
+    std::unordered_set<std::string> mountRoots;
+    for (const auto& rootEntry : std::filesystem::directory_iterator(summary.folderPath, ec)) {
+        if (ec) {
+            break;
+        }
+        if (rootEntry.is_directory()) {
+            mountRoots.insert(rootEntry.path().filename().string());
+        }
+    }
+
+    ec.clear();
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(summary.folderPath, ec)) {
+        if (ec || !entry.is_regular_file()) {
+            continue;
+        }
+
+        ++summary.foundFileCount;
+        const std::string extension = NormalizeFileExtension(entry.path().extension().string());
+        const auto* format = FindSupportedFileFormat(extension);
+        if (format == nullptr) {
+            ++summary.unknownFileCount;
+            continue;
+        }
+
+        ++summary.recognizedFileCount;
+        if (format->layer == SupportedFileFormatLayer::AssetArchive) {
+            ++summary.assetArchiveCount;
+        }
+        if (format->layer == SupportedFileFormatLayer::RecordPlugin) {
+            ++summary.recordPluginCount;
+        }
+        if (format->layer == SupportedFileFormatLayer::Script) {
+            ++summary.scriptSourceCount;
+        }
+        if (format->layer == SupportedFileFormatLayer::Texture) {
+            ++summary.textureSourceCount;
+        }
+        if (format->layer == SupportedFileFormatLayer::AudioVoiceLip ||
+            format->layer == SupportedFileFormatLayer::InterfaceUI) {
+            ++summary.mediaFileCount;
+        }
+        if (format->layer == SupportedFileFormatLayer::ModPackage ||
+            format->layer == SupportedFileFormatLayer::BunkerPackage) {
+            ++summary.packageFileCount;
+        }
+        if (format->executableDanger) {
+            ++summary.executableDangerCount;
+        }
+        if (format->futureExtractorCandidate) {
+            ++summary.futureExtractorCandidateCount;
+        }
+    }
+
+    summary.mountRoots.assign(mountRoots.begin(), mountRoots.end());
+    std::sort(summary.mountRoots.begin(), summary.mountRoots.end());
+    return summary;
+}
+
+std::string BuildAssetLibraryReadinessReport(const AssetLibraryScanSummary& summary) {
+    std::ostringstream report;
+    report << "Asset library folder: " << summary.folderPath.string() << '\n';
+    report << "Asset library exists: " << (summary.exists ? "yes" : "no") << '\n';
+    report << "Asset files: " << summary.foundFileCount << '\n';
+    report << "Recognized files: " << summary.recognizedFileCount << '\n';
+    report << "Unknown files: " << summary.unknownFileCount << '\n';
+    report << "Asset archives: " << summary.assetArchiveCount << '\n';
+    report << "Record plugins: " << summary.recordPluginCount << '\n';
+    report << "Script sources/compiled: " << summary.scriptSourceCount << '\n';
+    report << "Texture/source images: " << summary.textureSourceCount << '\n';
+    report << "Media/interface files: " << summary.mediaFileCount << '\n';
+    report << "Package files: " << summary.packageFileCount << '\n';
+    report << "Dangerous executable refs: " << summary.executableDangerCount << '\n';
+    report << "Future extractor candidates: " << summary.futureExtractorCandidateCount << '\n';
+    if (!summary.mountRoots.empty()) {
+        report << "Mount roots:";
+        for (const auto& mountRoot : summary.mountRoots) {
+            report << " " << mountRoot;
+        }
+        report << '\n';
+    }
+    if (!summary.exists) {
+        report << "Readiness: missing asset library; runtime must stay on project-native placeholders.\n";
+    } else if (summary.executableDangerCount > 0) {
+        report << "Readiness: blocked for automatic loading; executable/native plugin references are present.\n";
+    } else if (summary.assetArchiveCount > 0 || summary.recordPluginCount > 0) {
+        report << "Readiness: reference-only library detected; archive/plugin records can be mounted after explicit manifest mapping.\n";
+    } else {
+        report << "Readiness: loose/source asset library detected; no archive/plugin mount work yet.\n";
     }
     return report.str();
 }
