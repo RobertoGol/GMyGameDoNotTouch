@@ -13,7 +13,72 @@
 
 namespace bunker {
 
+std::vector<NetworkPlayerVisualSnapshot> g_ConnectedTeammates;
+
 namespace {
+
+LanlineVisualSnapshotBroadcast gVisualSnapshotBroadcast = nullptr;
+
+std::uint32_t HashVisualId(std::string_view value) {
+    std::uint32_t hash = 2166136261u;
+    for (const char ch : value) {
+        hash ^= static_cast<std::uint8_t>(ch);
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+std::uint8_t CompactVisualId(std::string_view value) {
+    return value.empty() ? 0 : static_cast<std::uint8_t>((HashVisualId(value) % 254u) + 1u);
+}
+
+std::uint64_t ParseNetworkPlayerId(std::string_view characterId) {
+    std::uint64_t id = 0;
+    for (const char ch : characterId) {
+        if (ch >= '0' && ch <= '9') {
+            id = (id * 10u) + static_cast<std::uint64_t>(ch - '0');
+        }
+    }
+    return id;
+}
+
+NetworkPlayerVisualSnapshot BuildVisualSnapshot(const SessionProfile& profile, float currentX, float currentZ, float rotation) {
+    NetworkPlayerVisualSnapshot snapshot{};
+    snapshot.networkPlayerId = ParseNetworkPlayerId(profile.character.characterId);
+    std::snprintf(snapshot.characterName, sizeof(snapshot.characterName), "%s", profile.character.displayName.c_str());
+
+    if (!profile.character.weaponMods.empty()) {
+        const auto& weapon = profile.character.weaponMods.front();
+        snapshot.equippedWeapon.weaponRegistryIdHash = HashVisualId(weapon.weaponItemId);
+        snapshot.equippedWeapon.receiverId = CompactVisualId(weapon.receiverId);
+        snapshot.equippedWeapon.barrelId = CompactVisualId(weapon.barrelId);
+        snapshot.equippedWeapon.magazineId = CompactVisualId(weapon.magazineId);
+        snapshot.equippedWeapon.muzzleId = CompactVisualId(weapon.muzzleId);
+        snapshot.equippedWeapon.paintJobId = 12;
+        snapshot.equippedWeapon.wearLevel = 45;
+        snapshot.equippedWeapon.metallicGloss = 180;
+    }
+
+    snapshot.apparel.undergarmentId = 1;
+    snapshot.apparel.armorPlatesId = 0;
+    snapshot.apparel.decalId = 76;
+    snapshot.apparel.decalPosition = 0;
+    snapshot.apparel.customColorHEX = 0x00ff44u;
+    snapshot.positionX = currentX;
+    snapshot.positionZ = currentZ;
+    snapshot.rotationY = rotation;
+    return snapshot;
+}
+
+void UpsertVisualSnapshot(const NetworkPlayerVisualSnapshot& snapshot) {
+    for (auto& teammate : g_ConnectedTeammates) {
+        if (teammate.networkPlayerId == snapshot.networkPlayerId) {
+            teammate = snapshot;
+            return;
+        }
+    }
+    g_ConnectedTeammates.push_back(snapshot);
+}
 
 const char* ToLabel(SupportCategory category) {
     switch (category) {
@@ -1111,6 +1176,70 @@ bool LoadLanlineServicesSave(const std::filesystem::path& path, LanlineServicesS
     outSave.relayCredits = std::max(0, outSave.relayCredits);
     NormalizeStringInventory(outSave.ownedCosmetics);
     return true;
+}
+
+void HandleIncomingPlayerSnapshot(const std::uint8_t* rawNetworkBuffer, std::size_t bufferSize) {
+    if (rawNetworkBuffer == nullptr || bufferSize < sizeof(NetworkPlayerVisualSnapshot)) {
+        return;
+    }
+
+    NetworkPlayerVisualSnapshot snapshot{};
+    std::memcpy(&snapshot, rawNetworkBuffer, sizeof(snapshot));
+    snapshot.characterName[sizeof(snapshot.characterName) - 1] = '\0';
+    if (snapshot.networkPlayerId == 0) {
+        return;
+    }
+    UpsertVisualSnapshot(snapshot);
+}
+
+void InjectOfflineDebugBot() {
+    NetworkPlayerVisualSnapshot debugBot{};
+    debugBot.networkPlayerId = 99999;
+    std::snprintf(debugBot.characterName, sizeof(debugBot.characterName), "%s", "Test_Scout_Clone");
+    debugBot.equippedWeapon.weaponRegistryIdHash = 0x00abc123u;
+    debugBot.equippedWeapon.receiverId = 2;
+    debugBot.equippedWeapon.barrelId = 1;
+    debugBot.equippedWeapon.magazineId = 1;
+    debugBot.equippedWeapon.muzzleId = 3;
+    debugBot.equippedWeapon.paintJobId = 5;
+    debugBot.equippedWeapon.wearLevel = 0;
+    debugBot.equippedWeapon.metallicGloss = 255;
+    debugBot.apparel.undergarmentId = 1;
+    debugBot.apparel.armorPlatesId = 4;
+    debugBot.apparel.decalId = 140;
+    debugBot.apparel.decalPosition = 0;
+    debugBot.apparel.customColorHEX = 0xff5555u;
+    debugBot.positionX = 5.0f;
+    debugBot.positionZ = 5.0f;
+    debugBot.rotationY = 1.57f;
+    UpsertVisualSnapshot(debugBot);
+}
+
+void InjectOfflineDebugBot(const SessionProfile& profile) {
+    InjectOfflineDebugBot();
+    if (!g_ConnectedTeammates.empty()) {
+        auto& debugBot = g_ConnectedTeammates.back();
+        debugBot.positionX = profile.partnerTank.worldPositionKnown ? profile.partnerTank.worldX + 5.0f : 5.0f;
+        debugBot.positionZ = profile.partnerTank.worldPositionKnown ? profile.partnerTank.worldY + 5.0f : 5.0f;
+    }
+}
+
+void SetLanlineVisualSnapshotBroadcast(LanlineVisualSnapshotBroadcast broadcast) {
+    gVisualSnapshotBroadcast = broadcast;
+}
+
+bool SendMyVisualSnapshotToNetwork(const SessionProfile& profile, float currentX, float currentZ, float rotation) {
+    const NetworkPlayerVisualSnapshot snapshot = BuildVisualSnapshot(profile, currentX, currentZ, rotation);
+    if (snapshot.networkPlayerId == 0) {
+        return false;
+    }
+
+    if (gVisualSnapshotBroadcast != nullptr) {
+        return gVisualSnapshotBroadcast(reinterpret_cast<const std::uint8_t*>(&snapshot), sizeof(snapshot));
+    }
+
+    UpsertVisualSnapshot(snapshot);
+    return false;
 }
 
 void DrawLanlineServicesPanel(LanlineServicesState& state,

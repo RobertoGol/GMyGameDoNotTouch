@@ -292,6 +292,24 @@ bool IsSpawnObject(const MapObject& object) {
         lowerDisplayName.find("spawn") != std::string::npos;
 }
 
+bool IsTerrainHeightSource(const MapObject& object) {
+    const std::string registryId = ToLowerCopy(object.registryId);
+    const std::string displayName = ToLowerCopy(object.displayName);
+    const std::string scriptTag = ToLowerCopy(object.scriptTag);
+    const std::string editorLayer = ToLowerCopy(object.editorLayer);
+    return object.category == ObjectCategory::ResourceNode ||
+        object.category == ObjectCategory::Landmark ||
+        editorLayer == "terrain" ||
+        registryId.find("terrain") != std::string::npos ||
+        registryId.find("hill") != std::string::npos ||
+        registryId.find("ridge") != std::string::npos ||
+        registryId.find("mountain") != std::string::npos ||
+        displayName.find("hill") != std::string::npos ||
+        displayName.find("ridge") != std::string::npos ||
+        displayName.find("mountain") != std::string::npos ||
+        scriptTag.find("terrain") != std::string::npos;
+}
+
 void AppendUniqueLayer(std::vector<std::string>& layers, std::string layerName) {
     if (layerName.empty()) {
         return;
@@ -2121,6 +2139,29 @@ int World::CountObjectsInEditorLayer(std::string_view layerName) const {
         }
     }
     return count;
+}
+
+float World::GetWorldHeightAt(float x, float y) const {
+    float height = 0.0f;
+    for (const auto& object : objects) {
+        if (!IsTerrainHeightSource(object)) {
+            continue;
+        }
+
+        const float radiusX = std::max(0.5f, object.width * 0.75f);
+        const float radiusY = std::max(0.5f, object.depth * 0.75f);
+        const float dx = (x - object.x) / radiusX;
+        const float dy = (y - object.y) / radiusY;
+        const float distanceSq = dx * dx + dy * dy;
+        if (distanceSq > 1.0f) {
+            continue;
+        }
+
+        const float influence = (1.0f - distanceSq) * (1.0f - distanceSq);
+        const float peak = std::max(object.z, object.height * 0.65f);
+        height += peak * influence;
+    }
+    return std::clamp(height, -18.0f, 42.0f);
 }
 
 bool World::HasIncomingObjectReferences(const std::string& registryId) const {

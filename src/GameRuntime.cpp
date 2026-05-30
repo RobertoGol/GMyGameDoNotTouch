@@ -260,6 +260,10 @@ float HostileFootDamage(HostileRole role, const SessionProfile& profile, const G
     }
 }
 
+int RobotControlCombatPhaseExperience(int baseExperience) {
+    return std::max(1, baseExperience / 20);
+}
+
 float HostileMaxHealthHint(HostileRole role) {
     switch (role) {
         case HostileRole::VerminRush: return 35.0f;
@@ -5840,8 +5844,14 @@ void HandleAttack(World& world,
             TriggerCombatFeedback(player, 0.0f, 0.0f, 0.24f, std::min(1.0f, 0.38f + momentum * 0.12f));
         }
         if (mutableObject->health <= 0.0f) {
+            const int baseExperience = player.insideTank ? 45 : 30;
             std::string progressionEvent;
-            AwardExperience(profile, player.insideTank ? 45 : 30, &progressionEvent);
+            AwardExperience(profile, baseExperience, &progressionEvent);
+            if (role == HostileRole::RobotControl) {
+                std::string robotXpEvent;
+                AwardExperience(profile, RobotControlCombatPhaseExperience(baseExperience), &robotXpEvent);
+                progressionEvent += " Robot control phase bonus applied.";
+            }
             std::string skillEvent;
             if (player.insideTank) RegisterTankAction(profile, &skillEvent);
             else RegisterFootKill(profile, &skillEvent);
@@ -6032,8 +6042,14 @@ void HandleSpecialAttack(World& world,
         }
         triggerSpecialFeedback();
         if (mutableObject->health <= 0.0f) {
+            const int baseExperience = player.insideTank ? 60 : 40;
             std::string progressionEvent;
-            AwardExperience(profile, player.insideTank ? 60 : 40, &progressionEvent);
+            AwardExperience(profile, baseExperience, &progressionEvent);
+            if (role == HostileRole::RobotControl) {
+                std::string robotXpEvent;
+                AwardExperience(profile, RobotControlCombatPhaseExperience(baseExperience), &robotXpEvent);
+                progressionEvent += " Robot control phase bonus applied.";
+            }
             std::string skillEvent;
             if (player.insideTank) RegisterTankAction(profile, &skillEvent);
             else RegisterFootKill(profile, &skillEvent);

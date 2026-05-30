@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <ctime>
 #include <filesystem>
 #include <string>
@@ -199,6 +200,39 @@ struct LanlineServicesSave {
     std::vector<std::string> ownedCosmetics{};
 };
 
+struct NetworkWeaponVisual {
+    std::uint32_t weaponRegistryIdHash = 0;
+    std::uint8_t receiverId = 0;
+    std::uint8_t barrelId = 0;
+    std::uint8_t magazineId = 0;
+    std::uint8_t muzzleId = 0;
+    std::uint8_t paintJobId = 0;
+    std::uint8_t wearLevel = 0;
+    std::uint8_t metallicGloss = 0;
+};
+
+struct NetworkApparelVisual {
+    std::uint8_t undergarmentId = 0;
+    std::uint8_t armorPlatesId = 0;
+    std::uint8_t decalId = 0;
+    std::uint8_t decalPosition = 0;
+    std::uint32_t customColorHEX = 0;
+};
+
+struct NetworkPlayerVisualSnapshot {
+    std::uint64_t networkPlayerId = 0;
+    char characterName[32]{};
+    NetworkWeaponVisual equippedWeapon{};
+    NetworkApparelVisual apparel{};
+    float positionX = 0.0f;
+    float positionZ = 0.0f;
+    float rotationY = 0.0f;
+};
+
+using LanlineVisualSnapshotBroadcast = bool (*)(const std::uint8_t* data, std::size_t size);
+
+extern std::vector<NetworkPlayerVisualSnapshot> g_ConnectedTeammates;
+
 ServicesUnlockState BuildServicesUnlockState(const SessionProfile& profile, const WorldFieldState* worldState);
 bool IsAllowedSupportItem(const SupportCatalogItem& item);
 std::vector<SupportCatalogItem> MakeDefaultSupportCatalog();
@@ -221,6 +255,11 @@ std::string FormatCountdown(std::int64_t secondsRemaining);
 std::filesystem::path DefaultLanlineServicesSavePath();
 bool SaveLanlineServicesSave(const LanlineServicesSave& save, const std::filesystem::path& path);
 bool LoadLanlineServicesSave(const std::filesystem::path& path, LanlineServicesSave& outSave);
+void HandleIncomingPlayerSnapshot(const std::uint8_t* rawNetworkBuffer, std::size_t bufferSize);
+void InjectOfflineDebugBot();
+void InjectOfflineDebugBot(const SessionProfile& profile);
+void SetLanlineVisualSnapshotBroadcast(LanlineVisualSnapshotBroadcast broadcast);
+bool SendMyVisualSnapshotToNetwork(const SessionProfile& profile, float currentX, float currentZ, float rotation);
 void DrawLanlineServicesPanel(LanlineServicesState& state,
     const ServicesUnlockState& unlockState,
     std::int64_t nowUnix);

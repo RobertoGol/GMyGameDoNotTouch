@@ -59,6 +59,7 @@ struct GameState {
     bool healPressed = false;
     bool reloadPressed = false;
     float radioTimer = 12.0f;
+    float sessionTime = 0.0f;
     float attackCooldown = 0.0f;
     float specialAttackCooldown = 0.0f;
     float damageCooldown = 0.0f;

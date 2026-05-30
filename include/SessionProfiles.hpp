@@ -30,6 +30,18 @@ struct InventoryEntry {
     float unitWeight = 0.0f;
 };
 
+struct SavedWeaponModData {
+    std::string weaponItemId;
+    std::string receiverId;
+    std::string barrelId;
+    std::string magazineId;
+    std::string muzzleId;
+    std::string star1;
+    std::string star2;
+    std::string star3;
+    std::string star4;
+};
+
 inline constexpr std::array<std::string_view, 6> kCanonicalPipDeviceItemIds{{
     "#%it_pipboy_0_1",
     "#%it_pipboy_1_0",
@@ -312,6 +324,7 @@ struct CharacterProfile {
     float carryWeight = 13000.0f;
     SpecialStats special{};
     std::vector<InventoryEntry> inventory{};
+    std::vector<SavedWeaponModData> weaponMods{};
     std::vector<TapeEntry> collectedTapes{};
     std::vector<PassiveSkill> passiveSkills{};
     SkillAwakeningProgress awakening{};

@@ -61,6 +61,7 @@ public:
     std::vector<WorldObjectReference> FindOutgoingObjectReferences(const std::string& registryId) const;
     std::vector<std::string> CollectEditorLayerNames() const;
     int CountObjectsInEditorLayer(std::string_view layerName) const;
+    float GetWorldHeightAt(float x, float y) const;
     bool HasIncomingObjectReferences(const std::string& registryId) const;
     bool HasScriptTag(const std::string& scriptTag) const;
     bool HasLinkTarget(const std::string& linkTarget) const;

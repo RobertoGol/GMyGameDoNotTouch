@@ -7,7 +7,7 @@ namespace bunker {
 namespace {
 
 constexpr char kSessionProfileFormat[] = "BPF1";
-constexpr int kCurrentSessionProfileVersion = 13;
+constexpr int kCurrentSessionProfileVersion = 14;
 
 bool HasInventoryEntry(const SessionProfile& profile, const std::string& itemId) {
     return std::any_of(
@@ -459,6 +459,17 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
 
     for (const auto& id : profile.account.linkedCharacters) out << "linked_character=" << id << '\n';
     for (const auto& item : profile.character.inventory) out << "inventory=" << item.itemId << ',' << item.count << ',' << item.unitWeight << '\n';
+    for (const auto& weapon : profile.character.weaponMods) {
+        out << "weapon_mods=" << weapon.weaponItemId << ','
+            << weapon.receiverId << ','
+            << weapon.barrelId << ','
+            << weapon.magazineId << ','
+            << weapon.muzzleId << ','
+            << weapon.star1 << ','
+            << weapon.star2 << ','
+            << weapon.star3 << ','
+            << weapon.star4 << '\n';
+    }
     for (const auto& tape : profile.character.collectedTapes) {
         out << "tape=" << tape.tapeId << ',' << tape.title << ',' << (tape.played ? 1 : 0)
             << ',' << (tape.damaged ? 1 : 0) << ',' << (tape.reconstructed ? 1 : 0) << '\n';
@@ -556,6 +567,7 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
     outProfile = MakeDefaultSessionProfile();
     outProfile.account.linkedCharacters.clear();
     outProfile.character.inventory.clear();
+    outProfile.character.weaponMods.clear();
     outProfile.character.collectedTapes.clear();
     outProfile.rescuedSpecialists.clear();
     outProfile.worldFieldStates.clear();
@@ -696,6 +708,23 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
             const auto second = value.find(',', first == std::string::npos ? first : first + 1);
             if (first != std::string::npos && second != std::string::npos) {
                 outProfile.character.inventory.push_back({value.substr(0, first), std::stoi(value.substr(first + 1, second - first - 1)), std::stof(value.substr(second + 1))});
+            }
+        } else if (key == "weapon_mods") {
+            std::array<std::string, 9> fields{};
+            std::size_t begin = 0;
+            bool complete = true;
+            for (std::size_t index = 0; index < fields.size(); ++index) {
+                const std::size_t end = index + 1 == fields.size() ? std::string::npos : value.find(',', begin);
+                if (end == std::string::npos && index + 1 != fields.size()) {
+                    complete = false;
+                    break;
+                }
+                fields[index] = value.substr(begin, end == std::string::npos ? std::string::npos : end - begin);
+                begin = end == std::string::npos ? value.size() : end + 1;
+            }
+            if (complete && !fields[0].empty()) {
+                outProfile.character.weaponMods.push_back({
+                    fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6], fields[7], fields[8]});
             }
         } else if (key == "tape") {
             const auto first = value.find(',');

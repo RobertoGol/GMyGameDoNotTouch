@@ -1,3 +1,5 @@
+#include "../../Dx11Renderer.hpp"
+
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
@@ -1273,14 +1275,12 @@ int main() {
         return -1;
     }
 
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window = glfwCreateWindow(1420, 900, "BunkerEditor", nullptr, nullptr);
     if (!window) {
         glfwTerminate();
         return -1;
     }
-
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -1289,8 +1289,17 @@ int main() {
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigWindowsMoveFromTitleBarOnly = true;
     ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 130");
+
+    int framebufferWidth = 0;
+    int framebufferHeight = 0;
+    glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+    bunker::Dx11Renderer dx11Renderer;
+    if (!dx11Renderer.Initialize(window, framebufferWidth, framebufferHeight)) {
+        ImGui::DestroyContext();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return -1;
+    }
 
     bunker::EnsureProjectDirectories();
 
@@ -2531,9 +2540,11 @@ int main() {
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
+        int width = 0;
+        int height = 0;
+        glfwGetFramebufferSize(window, &width, &height);
+        dx11Renderer.Resize(width, height);
+        dx11Renderer.BeginFrame(0.07f, 0.07f, 0.09f, 1.0f);
         if (!ImGui::GetIO().WantTextInput) {
             ImGuiIO& frameIo = ImGui::GetIO();
             auto selectRelativeObject = [&](int direction) {
@@ -2930,10 +2941,6 @@ int main() {
             filteredValidationIssueIndices.push_back(issueIndex);
         }
         syncEditorLayerStateTable();
-
-        glViewport(0, 0, 1420, 900);
-        glClearColor(0.07f, 0.07f, 0.09f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
 
         const auto disabledMenuItem = [](const char* label, const char* reason) {
             ImGui::BeginDisabled();
@@ -7498,19 +7505,10 @@ int main() {
             }
         }
 
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-            GLFWwindow* backupCurrentContext = glfwGetCurrentContext();
-            ImGui::UpdatePlatformWindows();
-            ImGui::RenderPlatformWindowsDefault();
-            glfwMakeContextCurrent(backupCurrentContext);
-        }
-        glfwSwapBuffers(window);
+        dx11Renderer.EndFrame();
     }
 
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
+    dx11Renderer.Shutdown();
     ImGui::DestroyContext();
     glfwDestroyWindow(window);
     glfwTerminate();

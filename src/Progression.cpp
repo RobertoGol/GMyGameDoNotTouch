@@ -1,20 +1,23 @@
 #include "../include/Progression.hpp"
+#include "../include/RpgSystem.hpp" // Каноничный слой формул Fallout 4
 
 #include <algorithm>
 
 namespace bunker {
 
+// 1. Расчет порога уровня (Использует каноничную формулу 75 + level * 25)
 int ExperienceRequiredForLevel(int level) {
-    const int safeLevel = std::max(1, level);
-    return 100 + ((safeLevel - 1) * 75);
+    return FalloutStyleExperienceRequiredForLevel(level);
 }
 
+// 2. Начисление опыта с учетом Интеллекта SPECIAL (+3% за каждое очко)
 bool AwardExperience(SessionProfile& profile, int amount, std::string* eventText) {
     if (amount <= 0) {
         return false;
     }
 
-    profile.character.experience += amount;
+    // Твой ИИ красиво применил бонус, не ломая внутренний цикл!
+    profile.character.experience += ApplyIntelligenceExperienceBonus(profile, amount);
     bool leveledUp = false;
 
     while (profile.character.experience >= ExperienceRequiredForLevel(profile.character.level)) {
@@ -39,6 +42,7 @@ bool AwardExperience(SessionProfile& profile, int amount, std::string* eventText
     return leveledUp;
 }
 
+// 3. СЛЕДУЮЩИЙ КОД БЫЛ СРЕЗАН, НО МЫ ЕГО ВОЗВРАЩАЕМ (Валюта LANLINE сети)
 int CurrentRelayCredits(const SessionProfile& profile) {
     return std::max(0, profile.lanlineServices.relayCredits);
 }

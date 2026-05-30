@@ -1,0 +1,14 @@
+D:\Projects\Game_Project\Launcher\Player\Launcher_Main.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\Launcher_Main.obj
+D:\Projects\Game_Project\Launcher\Common\LauncherSupport.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\LauncherSupport.obj
+D:\Projects\Game_Project\Game\src\GameplayDescriptorRegistry.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\GameplayDescriptorRegistry.obj
+D:\Projects\Game_Project\Game\src\LanlineServices.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\LanlineServices.obj
+D:\Projects\Game_Project\Game\src\LanlineSession.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\LanlineSession.obj
+D:\Projects\Game_Project\Game\src\LaunchSession.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\LaunchSession.obj
+D:\Projects\Game_Project\Game\src\SessionProfiles.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\SessionProfiles.obj
+D:\Projects\Game_Project\Game\src\StoryRoute.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\StoryRoute.obj
+D:\Projects\Game_Project\external\imgui\imgui.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\imgui.obj
+D:\Projects\Game_Project\external\imgui\imgui_draw.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\imgui_draw.obj
+D:\Projects\Game_Project\external\imgui\imgui_tables.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\imgui_tables.obj
+D:\Projects\Game_Project\external\imgui\imgui_widgets.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\imgui_widgets.obj
+D:\Projects\Game_Project\external\imgui\backends\imgui_impl_glfw.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\imgui_impl_glfw.obj
+D:\Projects\Game_Project\external\imgui\backends\imgui_impl_opengl3.cpp;D:\Projects\Game_Project\builds\verify_quick\BunkerLauncher.dir\Debug\imgui_impl_opengl3.obj

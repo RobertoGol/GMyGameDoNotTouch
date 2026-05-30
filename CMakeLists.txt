@@ -24,7 +24,13 @@ set(IMGUI_SRC
     external/imgui/backends/imgui_impl_opengl3.cpp
 )
 
+set(DX11_SRC
+    Dx11Renderer.cpp
+    external/imgui/backends/imgui_impl_dx11.cpp
+)
+
 set(COMMON_INCLUDE_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/external
     ${CMAKE_CURRENT_SOURCE_DIR}/external/glfw/include
@@ -43,6 +49,7 @@ function(configure_bunker_target target_name)
 endfunction()
 
 add_executable(BunkerGame
+    ${DX11_SRC}
     src/GameExecution.cpp
     src/GameplayDescriptorRegistry.cpp
     src/GameRuntime.cpp
@@ -51,6 +58,7 @@ add_executable(BunkerGame
     src/LanlineSession.cpp
     src/LaunchSession.cpp
     src/PrefabLibrary.cpp
+    src/ProceduralAnimation.cpp
     src/main.cpp
     src/Progression.cpp
     src/SessionProfiles.cpp
@@ -65,6 +73,7 @@ add_executable(BunkerGame
     ${IMGUI_SRC}
 )
 configure_bunker_target(BunkerGame)
+target_link_libraries(BunkerGame PRIVATE d3d11 dxgi d3dcompiler)
 
 add_executable(BunkerLauncher
     Launcher/src/Launcher_Main.cpp
@@ -96,9 +105,11 @@ add_executable(BunkerAdminLauncher
 configure_bunker_target(BunkerAdminLauncher)
 
 add_executable(BunkerEditor
+    ${DX11_SRC}
     Editor/src/Editor_Main.cpp
     Editor/src/EditorSupport.cpp
     src/PrefabLibrary.cpp
+    src/ProceduralAnimation.cpp
     src/GameplayDescriptorRegistry.cpp
     src/SessionProfiles.cpp
     src/World.cpp
@@ -109,6 +120,7 @@ add_executable(BunkerEditor
     ${IMGUI_SRC}
 )
 configure_bunker_target(BunkerEditor)
+target_link_libraries(BunkerEditor PRIVATE d3d11 dxgi d3dcompiler)
 
 add_executable(BunkerSmokeChecks
     tests/SmokeChecks.cpp

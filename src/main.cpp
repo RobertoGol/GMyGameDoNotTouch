@@ -1,3 +1,5 @@
+#include "../Dx11Renderer.hpp"
+
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
@@ -13,6 +15,7 @@
 #include "../include/GameExecution.hpp"
 #include "../include/GameRuntime.hpp"
 #include "../include/LanlineLobbyLogic.hpp"
+#include "../include/LanlineServices.hpp"
 #include "../include/LanlineSession.hpp"
 #include "../include/LaunchSession.hpp"
 #include "../include/WorldEvents.hpp"
@@ -371,20 +374,27 @@ int main() {
         return -1;
     }
 
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window = glfwCreateWindow(1400, 900, "BunkerGame", nullptr, nullptr);
     if (window == nullptr) {
         glfwTerminate();
         return -1;
     }
 
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
-
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 130");
+
+    int framebufferWidth = 0;
+    int framebufferHeight = 0;
+    glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+    bunker::Dx11Renderer dx11Renderer;
+    if (!dx11Renderer.Initialize(window, framebufferWidth, framebufferHeight)) {
+        ImGui::DestroyContext();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return -1;
+    }
 
     bunker::GameState gameState;
     gameState.phase = bunker::RuntimeGamePhase::WORLD_LOADING;
@@ -435,6 +445,9 @@ int main() {
     }
     bunker::SyncPartnerTankAnchor(world, player, sessionProfile);
     gameState.phase = bunker::RuntimeGamePhase::ACTIVE_GAME;
+    if (sessionProfile.sessionMode != "LAN Host" && sessionProfile.sessionMode != "LAN Client") {
+        bunker::InjectOfflineDebugBot(sessionProfile);
+    }
     if (executionContext.adoptedAnchorCount > 0) {
         gameState.lastEvent = "Runtime sealed " + std::to_string(executionContext.adoptedAnchorCount) +
             " semantic anchor(s) before activation.";
@@ -447,6 +460,7 @@ int main() {
         const double now = glfwGetTime();
         const float dt = static_cast<float>(now - lastTime);
         lastTime = now;
+        gameState.sessionTime += dt / 60.0f;
 
         bunker::SyncStoryFlagsFromWorld(sessionProfile, staticEraser);
         bunker::UpdateWorldMetadata(world, sessionProfile, staticEraser);
@@ -824,12 +838,10 @@ int main() {
         int height = 0;
         glfwGetFramebufferSize(window, &width, &height);
 
-        bunker::RenderWorld(world, player, gameState.weather, gameState.weatherIntensity, width, height);
+        dx11Renderer.Resize(width, height);
+        dx11Renderer.BeginFrame(0.08f, 0.09f, 0.12f, 1.0f);
+        dx11Renderer.RenderTerrain(world, gameState.weather, gameState.weatherIntensity, gameState.sessionTime);
         bunker::UpdateWindowTitle(window, player, world, sessionProfile);
-
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
 
         if (sessionProfile.character.hp <= 0.0f) {
             ImGui::SetNextWindowPos(ImVec2(40.0f, 80.0f), ImGuiCond_Always);
@@ -985,9 +997,7 @@ int main() {
 
         bunker::DrawPipPad(world, player, sessionProfile, staticEraser, gameState);
 
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        glfwSwapBuffers(window);
+        dx11Renderer.EndFrame();
     }
 
     const auto finalProfileSave = bunker::SaveProfileAtomically(sessionProfile, profilePath);
@@ -996,8 +1006,7 @@ int main() {
         "Final runtime profile save",
         BuildRuntimeSaveOutcome(nullptr, &finalProfileSave, sessionProfile.selectedWorld, true));
 
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
+    dx11Renderer.Shutdown();
     ImGui::DestroyContext();
     glfwDestroyWindow(window);
     glfwTerminate();
