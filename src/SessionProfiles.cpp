@@ -844,7 +844,16 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
                 start = next + 1;
             }
             if (parts.size() >= 7) {
-                outProfile.ownedVehicles.push_back({parts[0], parts[1], static_cast<VehicleType>(std::stoi(parts[2])), std::stoi(parts[3]) != 0, std::stoi(parts[4]) != 0, std::stof(parts[5]), std::stof(parts[6]), {}});
+                // Прямой парсинг по индексам вектора строк
+                VehicleEntry vehicle{};
+                vehicle.vehicleId = parts[0];
+                vehicle.displayName = parts[1];
+                vehicle.type = static_cast<VehicleType>(std::stoi(parts[2]));
+                vehicle.available = (std::stoi(parts[3]) != 0);
+                vehicle.deployed = (std::stoi(parts[4]) != 0);
+                vehicle.durability = std::stof(parts[5]);
+                vehicle.fuelOrCharge = std::stof(parts[6]);
+                outProfile.ownedVehicles.push_back(vehicle);
             }
         }
     }

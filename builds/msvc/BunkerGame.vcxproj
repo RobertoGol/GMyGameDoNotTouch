@@ -86,8 +86,8 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>D:\Projects\Game_Project\include;D:\Projects\Game_Project\Game\src;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalOptions>%(AdditionalOptions) /Zm300 /utf-8</AdditionalOptions>
+      <AdditionalIncludeDirectories>D:\Projects\Game_Project;D:\Projects\Game_Project\include;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zm300</AdditionalOptions>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <BufferSecurityCheck></BufferSecurityCheck>
@@ -100,10 +100,10 @@
       <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MinimalRebuild></MinimalRebuild>
-      <Optimization>Disabled</Optimization>
+      <Optimization>MaxSpeed</Optimization>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
-      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <SupportJustMyCode></SupportJustMyCode>
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
@@ -115,10 +115,10 @@
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>D:\Projects\Game_Project\include;D:\Projects\Game_Project\Game\src;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Projects\Game_Project;D:\Projects\Game_Project\include;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Midl>
-      <AdditionalIncludeDirectories>D:\Projects\Game_Project\include;D:\Projects\Game_Project\Game\src;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Projects\Game_Project;D:\Projects\Game_Project\include;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -126,7 +126,7 @@
       <ProxyFileName>%(Filename)_p.c</ProxyFileName>
     </Midl>
     <Link>
-      <AdditionalDependencies>external\glfw\src\Debug\glfw3.lib;opengl32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>external\glfw\src\Debug\glfw3.lib;opengl32.lib;d3d11.lib;dxgi.lib;d3dcompiler.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <DataExecutionPrevention></DataExecutionPrevention>
@@ -145,8 +145,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>D:\Projects\Game_Project\include;D:\Projects\Game_Project\Game\src;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalOptions>%(AdditionalOptions) /Zm300 /utf-8</AdditionalOptions>
+      <AdditionalIncludeDirectories>D:\Projects\Game_Project;D:\Projects\Game_Project\include;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zm300</AdditionalOptions>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <BufferSecurityCheck></BufferSecurityCheck>
@@ -161,7 +161,7 @@
       <Optimization>MaxSpeed</Optimization>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <SupportJustMyCode></SupportJustMyCode>
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
@@ -175,10 +175,10 @@
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>D:\Projects\Game_Project\include;D:\Projects\Game_Project\Game\src;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Projects\Game_Project;D:\Projects\Game_Project\include;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Midl>
-      <AdditionalIncludeDirectories>D:\Projects\Game_Project\include;D:\Projects\Game_Project\Game\src;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Projects\Game_Project;D:\Projects\Game_Project\include;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -186,7 +186,7 @@
       <ProxyFileName>%(Filename)_p.c</ProxyFileName>
     </Midl>
     <Link>
-      <AdditionalDependencies>external\glfw\src\Release\glfw3.lib;opengl32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>external\glfw\src\Release\glfw3.lib;opengl32.lib;d3d11.lib;dxgi.lib;d3dcompiler.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <DataExecutionPrevention></DataExecutionPrevention>
@@ -205,8 +205,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>D:\Projects\Game_Project\include;D:\Projects\Game_Project\Game\src;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalOptions>%(AdditionalOptions) /Zm300 /utf-8</AdditionalOptions>
+      <AdditionalIncludeDirectories>D:\Projects\Game_Project;D:\Projects\Game_Project\include;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zm300</AdditionalOptions>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <BufferSecurityCheck></BufferSecurityCheck>
@@ -218,10 +218,10 @@
       <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MinimalRebuild></MinimalRebuild>
-      <Optimization>MinSpace</Optimization>
+      <Optimization>MaxSpeed</Optimization>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <SupportJustMyCode></SupportJustMyCode>
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
@@ -235,10 +235,10 @@
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR=\"MinSizeRel\"</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>D:\Projects\Game_Project\include;D:\Projects\Game_Project\Game\src;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Projects\Game_Project;D:\Projects\Game_Project\include;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Midl>
-      <AdditionalIncludeDirectories>D:\Projects\Game_Project\include;D:\Projects\Game_Project\Game\src;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Projects\Game_Project;D:\Projects\Game_Project\include;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -246,7 +246,7 @@
       <ProxyFileName>%(Filename)_p.c</ProxyFileName>
     </Midl>
     <Link>
-      <AdditionalDependencies>external\glfw\src\MinSizeRel\glfw3.lib;opengl32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>external\glfw\src\MinSizeRel\glfw3.lib;opengl32.lib;d3d11.lib;dxgi.lib;d3dcompiler.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <DataExecutionPrevention></DataExecutionPrevention>
@@ -265,8 +265,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>D:\Projects\Game_Project\include;D:\Projects\Game_Project\Game\src;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalOptions>%(AdditionalOptions) /Zm300 /utf-8</AdditionalOptions>
+      <AdditionalIncludeDirectories>D:\Projects\Game_Project;D:\Projects\Game_Project\include;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zm300</AdditionalOptions>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <BufferSecurityCheck></BufferSecurityCheck>
@@ -282,7 +282,7 @@
       <Optimization>MaxSpeed</Optimization>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <SupportJustMyCode></SupportJustMyCode>
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
@@ -294,10 +294,10 @@
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>D:\Projects\Game_Project\include;D:\Projects\Game_Project\Game\src;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Projects\Game_Project;D:\Projects\Game_Project\include;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Midl>
-      <AdditionalIncludeDirectories>D:\Projects\Game_Project\include;D:\Projects\Game_Project\Game\src;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Projects\Game_Project;D:\Projects\Game_Project\include;D:\Projects\Game_Project\external;D:\Projects\Game_Project\external\glfw\include;D:\Projects\Game_Project\external\imgui;D:\Projects\Game_Project\external\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -305,7 +305,7 @@
       <ProxyFileName>%(Filename)_p.c</ProxyFileName>
     </Midl>
     <Link>
-      <AdditionalDependencies>external\glfw\src\RelWithDebInfo\glfw3.lib;opengl32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>external\glfw\src\RelWithDebInfo\glfw3.lib;opengl32.lib;d3d11.lib;dxgi.lib;d3dcompiler.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <DataExecutionPrevention></DataExecutionPrevention>
@@ -380,32 +380,33 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\BethesdaArchiveMount.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\GameExecution.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\GameplayDescriptorRegistry.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\GameRuntime.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\GameRuntimePipPad.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\LanlineServices.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\LanlineSession.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\LaunchSession.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\PrefabLibrary.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\Progression.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\SessionProfiles.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\Renderer.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\SkillSystem.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\StoryRoute.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\WorldEvents.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\World.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\WorldExport.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\WorldSemanticAuthoring.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\WorldValidation.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\Game\src\main.cpp" />
     <ClCompile Include="D:\Projects\Game_Project\external\imgui\imgui.cpp" />
     <ClCompile Include="D:\Projects\Game_Project\external\imgui\imgui_draw.cpp" />
     <ClCompile Include="D:\Projects\Game_Project\external\imgui\imgui_tables.cpp" />
     <ClCompile Include="D:\Projects\Game_Project\external\imgui\imgui_widgets.cpp" />
     <ClCompile Include="D:\Projects\Game_Project\external\imgui\backends\imgui_impl_glfw.cpp" />
-    <ClCompile Include="D:\Projects\Game_Project\external\imgui\backends\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\external\imgui\backends\imgui_impl_dx11.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\Dx11Renderer.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\GameExecution.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\GameplayDescriptorRegistry.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\GameRuntime.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\GameRuntimePipPad.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\LanlineServices.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\LanlineSession.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\LaunchSession.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\PrefabLibrary.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\ProceduralAnimation.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\main.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\Progression.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\SessionProfiles.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\Renderer.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\SkillSystem.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\StoryRoute.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\WorldEvents.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\World.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\WorldExport.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\WorldSemanticAuthoring.cpp" />
+    <ClCompile Include="D:\Projects\Game_Project\src\WorldValidation.cpp" />
   </ItemGroup>
   <ItemGroup />
   <ItemGroup>

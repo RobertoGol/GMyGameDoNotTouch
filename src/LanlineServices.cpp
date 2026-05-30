@@ -1100,8 +1100,7 @@ bool LoadLanlineServicesSave(const std::filesystem::path& path, LanlineServicesS
         else if (key == "voice_output_gain") outSave.voice.outputGain = std::stof(value);
         else if (key == "voice_input_device") outSave.voice.selectedInputDevice = std::stoi(value);
         else if (key == "voice_output_device") outSave.voice.selectedOutputDevice = std::stoi(value);
-        else if (key == "support_order") {
-        else if (key == "support_order") {
+       else if (key == "support_order") {
             std::vector<std::string> parts;
             std::size_t start = 0;
             while (start <= value.size()) {
@@ -1135,8 +1134,7 @@ bool LoadLanlineServicesSave(const std::filesystem::path& path, LanlineServicesS
     return true;
 }
 
-void HandleIncomingPlayerSnapshot(const std::uint8_t* rawNetworkBuffer, std::size_t 
-bufferSize) {
+void HandleIncomingPlayerSnapshot(const std::uint8_t* rawNetworkBuffer, std::size_t bufferSize) {
     if (rawNetworkBuffer == nullptr || bufferSize < sizeof(NetworkPlayerVisualSnapshot)) {
         return;
     }
@@ -1152,8 +1150,7 @@ bufferSize) {
 void InjectOfflineDebugBot() {
     NetworkPlayerVisualSnapshot debugBot{};
     debugBot.networkPlayerId = 99999;
-    std::snprintf(debugBot.characterName, sizeof(debugBot.characterName), "%s", 
-    "Test_Scout_Clone");
+    std::snprintf(debugBot.characterName, sizeof(debugBot.characterName), "%s", "Test_Scout_Clone");
     debugBot.equippedWeapon.weaponRegistryIdHash = 0x00abc123u;
     debugBot.equippedWeapon.receiverId = 2;
     debugBot.equippedWeapon.barrelId = 1;

@@ -1,0 +1,10 @@
+^D:\PROJECTS\GAME_PROJECT\BUILDS\MSVC\CMAKEFILES\98A888DAF464CD86305CA5762B2F1CD2\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SD:/Projects/Game_Project -BD:/Projects/Game_Project/builds/msvc --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/Projects/Game_Project/builds/msvc/BunkerProtocolSuite.slnx
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

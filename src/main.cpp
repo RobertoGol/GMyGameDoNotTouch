@@ -234,8 +234,6 @@ namespace {
         static std::string previousSignature;
         static double lastSyncTime = -10.0;
         const double now = glfwGetTime();
-static double lastSyncTime = -10.0;
-        const double now = glfwGetTime();
         const std::string seatAssignment = CurrentRuntimeSeatAssignment(player);
         const std::string actorName = sessionProfile.character.displayName.empty() ? "Operator" : 
         sessionProfile.character.displayName;
@@ -331,7 +329,8 @@ int main() {
         ImGui::CreateContext();
         ImGui::StyleColorsDark();
         ImGui_ImplGlfw_InitForOther(deniedWindow, true);
-        ImGui_ImplDX11_Init(pDeniedDevice, pDeniedContext);
+        ImGui_ImplDX11_Init(dx11Renderer.GetDevice(), dx11Renderer.GetDeviceContext());
+
         
         // Исправлено: строго DX11 бэкенд
         const float restricted_clear_color[4] = { 0.07f, 0.05f, 0.05f, 1.0f };
@@ -429,7 +428,8 @@ int main() {
     
     // Инициализируем бэкенд ImGui под DirectX 11 контекст основного движка игры
     ImGui_ImplGlfw_InitForOther(window, true);
-    ImGui_ImplDX11_Init(dx11Renderer.GetDevice(), dx11Renderer.GetDeviceContext());
+    ImGui_ImplDX11_Init(pDeniedDevice, pDeniedContext);
+
     
     bunker::GameState gameState;
     gameState.phase = bunker::RuntimeGamePhase::WORLD_LOADING;
@@ -595,6 +595,7 @@ const int adoptedAnchorCount = bunker::AdoptAllAutoCreatedSemanticAnchors(world,
             player.shockWaveStrength = 0.0f;
         }
         
+        // --- СИСТЕМА ОБНОВЛЕНИЯ ФИЗИКИ И ТЕПЛОВОЙ НАГРУЗКИ ---
         float moveX = 0.0f;
         float moveY = 0.0f;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) moveY += 1.0f;
@@ -603,20 +604,20 @@ const int adoptedAnchorCount = bunker::AdoptAllAutoCreatedSemanticAnchors(world,
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) moveX -= 1.0f;
         
         const float moveLength = std::sqrt((moveX * moveX) + (moveY * moveY));
-        if (moveLength > 0.0f) {
-            moveX /= moveLength;
-            moveY /= moveLength;
-        }
         
+                   const float moveLength = std::sqrt((moveX * moveX) + (moveY * moveY));
+
         if (player.insideTank) {
             float thermalRise = moveLength > 0.1f ? dt * 1.2f : -dt * 0.8f;
             bool towCouplerMounted = false;
+
             for (const auto& module : sessionProfile.partnerTank.loadout.modules) {
                 if (module.type == bunker::TankModuleSlotType::Bucket && module.moduleId == "tow_coupler_mk1") {
                     towCouplerMounted = true;
                     break;
                 }
             }
+            
             if (towCouplerMounted && moveLength > 0.1f) {
                 thermalRise += dt * 0.35f;
             }
@@ -626,17 +627,32 @@ const int adoptedAnchorCount = bunker::AdoptAllAutoCreatedSemanticAnchors(world,
             else if (gameState.weather == bunker::WeatherAnomaly::EtherFog) {
                 thermalRise += dt * 0.25f;
             }
-       }
-            const bool cooledByGrid = bunker::HasActiveFieldCheckpoint(sessionProfile) && (std::abs(player.x - sessionProfile.fieldCheckpointX) <= 4.0f) && (std::abs(player.y - sessionProfile.fieldCheckpointY) <= 4.0f);
+
+            
+            const bool cooledByGrid = bunker::HasActiveFieldCheckpoint(sessionProfile) && 
+                (std::abs(player.x - sessionProfile.fieldCheckpointX) <= 4.0f) && 
+                (std::abs(player.y - sessionProfile.fieldCheckpointY) <= 4.0f);
+            
             if (cooledByGrid) {
                 thermalRise -= dt * 1.4f;
             }
+            
             gameState.tankThermalLoad = std::clamp(gameState.tankThermalLoad + thermalRise, 0.0f, 100.0f);
         }
-        else 
-        {
+        else {
             gameState.tankThermalLoad = std::max(0.0f, gameState.tankThermalLoad - dt * 0.35f);
         }
+
+        // --- ТЯЖЕЛАЯ АТЛЕТИКА (HEAVY CARRY DRILL) ---
+        // Считаем moveLength на основе нажатых клавиш движения, чтобы переменная гарантированно существовала
+        float moveX = 0.0f;
+        float moveY = 0.0f;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) moveY += 1.0f;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) moveY -= 1.0f;
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) moveX += 1.0f;
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) moveX -= 1.0f;
+        const float moveLength = std::sqrt((moveX * moveX) + (moveY * moveY));
+
         if (!player.insideTank && moveLength > 0.1f && bunker::CurrentInventoryWeight(sessionProfile) >= 5.0f) {
             gameState.heavyCarryTimer += dt;
             if (gameState.heavyCarryTimer >= 30.0f) {
@@ -650,16 +666,18 @@ const int adoptedAnchorCount = bunker::AdoptAllAutoCreatedSemanticAnchors(world,
         } else {
             gameState.heavyCarryTimer = std::max(0.0f, gameState.heavyCarryTimer - dt * 0.5f);
         }
+
+        // --- СКОРОСТЬ ПОВОРОТА И ВВОД КАМЕРЫ ---
         const float rSpeed = 1.8f + (bunker::EffectiveStatValue(sessionProfile, gameState, 'A') * 0.08f);
         if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) player.facingRadians += dt * rSpeed;
         if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) player.facingRadians -= dt * rSpeed;
-        
-        const bool cycleViewNow = glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS;
+
+        const bool cycleViewNow = (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS);
         if (cycleViewNow && !gameState.cycleViewPressed) {
             bunker::AdvanceViewMode(player);
         }
         gameState.cycleViewPressed = cycleViewNow;
-        
+
         const bool toggleSeatNow = glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS;
         if (toggleSeatNow && !gameState.seatSwapPressed && player.insideTank) {
             bunker::TryToggleBt72CrewSeat(player, sessionProfile, gameState);
@@ -699,7 +717,8 @@ const int adoptedAnchorCount = bunker::AdoptAllAutoCreatedSemanticAnchors(world,
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        bunker::DrawImGuiEscMenuSystem(gameState, sessionProfile);
+        bunker::DrawImGuiEscMenuSystem(gameState, sessionProfile, world);
+
 
         ImGui::Render();
 
