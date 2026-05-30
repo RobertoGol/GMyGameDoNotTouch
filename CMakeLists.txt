@@ -15,18 +15,26 @@ set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/glfw)
 
-set(IMGUI_SRC
+# Базовые файлы ImGui без привязки к графическому API
+set(IMGUI_CORE_SRC
     external/imgui/imgui.cpp
     external/imgui/imgui_draw.cpp
     external/imgui/imgui_tables.cpp
     external/imgui/imgui_widgets.cpp
     external/imgui/backends/imgui_impl_glfw.cpp
+)
+
+# Бэкенд для утилит, работающих на OpenGL (Лаунчеры)
+set(OPENGL_IMGUI_SRC
+    ${IMGUI_CORE_SRC}
     external/imgui/backends/imgui_impl_opengl3.cpp
 )
 
-set(DX11_SRC
-    Dx11Renderer.cpp
+# Бэкенд для ядра игры и редактора, работающих на DirectX 11
+set(DX11_IMGUI_SRC
+    ${IMGUI_CORE_SRC}
     external/imgui/backends/imgui_impl_dx11.cpp
+    Dx11Renderer.cpp
 )
 
 set(COMMON_INCLUDE_DIRS
@@ -38,18 +46,22 @@ set(COMMON_INCLUDE_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/backends
 )
 
+# Общая конфигурация флагов компилятора для всех подсистем бункера
 function(configure_bunker_target target_name)
     target_include_directories(${target_name} PRIVATE ${COMMON_INCLUDE_DIRS})
     target_link_libraries(${target_name} PRIVATE glfw OpenGL::GL)
     if(MSVC)
-        target_compile_options(${target_name} PRIVATE /W4 /permissive- /Zm300)
+        target_compile_options(${target_name} PRIVATE /W4 /permissive- /Zm300 /O2 /MT)
     else()
-        target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic)
+        target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic -O3)
     endif()
 endfunction()
 
+# ==============================================================================
+# 🎮 1. ОСНОВНАЯ ИГРА: BUNKER GAME (СТРОГО DX11)
+# ==============================================================================
 add_executable(BunkerGame
-    ${DX11_SRC}
+    ${DX11_IMGUI_SRC}
     src/GameExecution.cpp
     src/GameplayDescriptorRegistry.cpp
     src/GameRuntime.cpp
@@ -70,11 +82,13 @@ add_executable(BunkerGame
     src/WorldExport.cpp
     src/WorldSemanticAuthoring.cpp
     src/WorldValidation.cpp
-    ${IMGUI_SRC}
 )
 configure_bunker_target(BunkerGame)
 target_link_libraries(BunkerGame PRIVATE d3d11 dxgi d3dcompiler)
 
+# ==============================================================================
+# 🚀 2. СИСТЕМНЫЙ ЛАУНЧЕР: BUNKER LAUNCHER (OPENGL)
+# ==============================================================================
 add_executable(BunkerLauncher
     Launcher/src/Launcher_Main.cpp
     Launcher/src/LauncherSupport.cpp
@@ -84,10 +98,13 @@ add_executable(BunkerLauncher
     src/LaunchSession.cpp
     src/SessionProfiles.cpp
     src/StoryRoute.cpp
-    ${IMGUI_SRC}
+    ${OPENGL_IMGUI_SRC}
 )
 configure_bunker_target(BunkerLauncher)
 
+# ==============================================================================
+# 👑 3. АДМИН-ПАНЕЛЬ: BUNKER ADMIN LAUNCHER (OPENGL)
+# ==============================================================================
 add_executable(BunkerAdminLauncher
     Launcher/src/AdminLauncher_Main.cpp
     Launcher/src/LauncherSupport.cpp
@@ -100,12 +117,15 @@ add_executable(BunkerAdminLauncher
     src/World.cpp
     src/WorldSemanticAuthoring.cpp
     src/WorldValidation.cpp
-    ${IMGUI_SRC}
+    ${OPENGL_IMGUI_SRC}
 )
 configure_bunker_target(BunkerAdminLauncher)
 
+# ==============================================================================
+# 🛠️ 4. РЕДАКТОР КАРТ: BUNKER EDITOR (СТРОГО DX11)
+# ==============================================================================
 add_executable(BunkerEditor
-    ${DX11_SRC}
+    ${DX11_IMGUI_SRC}
     Editor/src/Editor_Main.cpp
     Editor/src/EditorSupport.cpp
     src/PrefabLibrary.cpp
@@ -117,11 +137,13 @@ add_executable(BunkerEditor
     src/WorldExport.cpp
     src/WorldSemanticAuthoring.cpp
     src/WorldValidation.cpp
-    ${IMGUI_SRC}
 )
 configure_bunker_target(BunkerEditor)
 target_link_libraries(BunkerEditor PRIVATE d3d11 dxgi d3dcompiler)
 
+# ==============================================================================
+# 🧪 5. ТЕСТОВЫЙ СТЕНД: SMOKE CHECKS (DX11/OPENGL ГИБРИДНЫЙ ТЕСТ)
+# ==============================================================================
 add_executable(BunkerSmokeChecks
     tests/SmokeChecks.cpp
     Editor/src/EditorSupport.cpp
@@ -144,9 +166,10 @@ add_executable(BunkerSmokeChecks
     src/WorldExport.cpp
     src/WorldSemanticAuthoring.cpp
     src/WorldValidation.cpp
-    ${IMGUI_SRC}
+    ${DX11_IMGUI_SRC} # Тесты проверяют DX11 рендерер ядра
 )
 configure_bunker_target(BunkerSmokeChecks)
+target_link_libraries(BunkerSmokeChecks PRIVATE d3d11 dxgi d3dcompiler)
 add_test(NAME BunkerSmokeChecks COMMAND BunkerSmokeChecks)
 
-message(STATUS "Configured targets: BunkerGame, BunkerLauncher, BunkerAdminLauncher, BunkerEditor")
+message(STATUS "BunkerProtocolSuite: Configured targets successfully.")

@@ -1,5 +1,4 @@
 #include "../include/SessionProfiles.hpp"
-
 #include <fstream>
 
 namespace bunker {
@@ -27,61 +26,71 @@ std::string FirstInventoryPipDeviceId(const SessionProfile& profile) {
 
 bool IsKnownPipDeviceThemeId(std::string_view themeId) {
     return themeId == "classic_green" ||
-        themeId == "amber" ||
-        themeId == "monochrome" ||
-        themeId == "high_contrast";
+           themeId == "amber" ||
+           themeId == "monochrome" ||
+           themeId == "high_contrast";
 }
 
 bool IsKnownPipDeviceDisplayMode(std::string_view displayMode) {
     return displayMode == "standard" ||
-        displayMode == "readable" ||
-        displayMode == "compact";
+           displayMode == "readable" ||
+           displayMode == "compact";
 }
 
 bool IsKnownPipDeviceCarryMode(std::string_view carryMode) {
     return carryMode == "auto" ||
-        carryMode == "wrist" ||
-        carryMode == "handheld";
+           carryMode == "wrist" ||
+           carryMode == "handheld";
 }
 
 void NormalizeFirstPlayableRouteProgress(SessionProfile& profile) {
     auto& route = profile.firstPlayableRoute;
     route.prePipPadClueCount = std::clamp(route.prePipPadClueCount, 0, 2);
     route.introSeen = route.introSeen || profile.story.awakenedFromCryo;
-    route.emergencyMeleeRecovered = route.emergencyMeleeRecovered || HasInventoryEntry(profile, "#%it_emergency_baton");
+    route.emergencyMeleeRecovered = route.emergencyMeleeRecovered || 
+        HasInventoryEntry(profile, "#%it_emergency_baton");
     route.accessCardRecovered = route.accessCardRecovered ||
         HasInventoryEntry(profile, "bunker_access_card") ||
         profile.story.pipPadRecovered;
     route.earlyVerminEncounterResolved = route.earlyVerminEncounterResolved ||
         profile.character.awakening.footKills > 0 ||
         profile.story.tankLinked;
-    route.bt72HullInspected = route.bt72HullInspected || profile.story.tankLinked || profile.story.bucketRecovered;
-    route.bt72CoreRecovered = route.bt72CoreRecovered || profile.story.tankLinked || profile.story.bucketRecovered;
+    route.bt72HullInspected = route.bt72HullInspected || profile.story.tankLinked || 
+        profile.story.bucketRecovered;
+    route.bt72CoreRecovered = route.bt72CoreRecovered || profile.story.tankLinked || 
+        profile.story.bucketRecovered;
     route.bt72ServiceNotesRecovered = route.bt72ServiceNotesRecovered ||
         profile.story.tankLinked ||
         profile.story.bucketRecovered ||
         HasCollectedTapeId(profile, "bt72_service_reel_001");
-    route.bt72Restored = route.bt72Restored || profile.story.tankLinked || profile.story.bucketRecovered;
+    route.bt72Restored = route.bt72Restored || profile.story.tankLinked || 
+        profile.story.bucketRecovered;
     route.clearanceBlueprintRecovered = route.clearanceBlueprintRecovered ||
         profile.story.bucketRecovered ||
         HasCollectedTapeId(profile, "bt72_clearance_blueprint");
-    route.clearanceMaterialsRecovered = route.clearanceMaterialsRecovered || profile.story.bucketRecovered;
-    route.clearanceModuleInstalled = route.clearanceModuleInstalled || profile.story.bucketRecovered;
+    route.clearanceMaterialsRecovered = route.clearanceMaterialsRecovered || 
+        profile.story.bucketRecovered;
+    route.clearanceModuleInstalled = route.clearanceModuleInstalled || 
+        profile.story.bucketRecovered;
     route.surfaceArrivalReached = route.surfaceArrivalReached ||
         profile.story.outerRoadCleared ||
         profile.story.relayRecovered ||
         profile.story.returnedToBase;
-    route.firstTankCombatResolved = route.firstTankCombatResolved || profile.story.relayRecovered || profile.story.returnedToBase;
+    route.firstTankCombatResolved = route.firstTankCombatResolved || 
+        profile.story.relayRecovered || profile.story.returnedToBase;
     route.firstServicePerformed = route.firstServicePerformed ||
         profile.story.relayRecovered ||
         profile.story.returnedToBase ||
         profile.character.awakening.fieldServiceUses > 0;
-    route.firstRecoveryNodeActivated = route.firstRecoveryNodeActivated || profile.story.relayRecovered;
+    route.firstRecoveryNodeActivated = route.firstRecoveryNodeActivated || 
+        profile.story.relayRecovered;
     route.debriefSummaryViewed = route.debriefSummaryViewed ||
         profile.story.returnedToBase ||
         HasCollectedTapeId(profile, "debrief_shelter17");
-    profile.partnerTank.secondSeatUnlocked = profile.partnerTank.secondSeatUnlocked || route.bt72Restored || profile.story.tankLinked;
-    profile.partnerTank.secondSeatPolicy = NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy);
+    profile.partnerTank.secondSeatUnlocked = profile.partnerTank.secondSeatUnlocked || 
+        route.bt72Restored || profile.story.tankLinked;
+    profile.partnerTank.secondSeatPolicy = 
+        NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy);
     if (!profile.partnerTank.secondSeatUnlocked) {
         profile.partnerTank.secondSeatPolicy = "pilot_only";
         profile.partnerTank.assignedGunnerHandle.clear();
@@ -89,8 +98,10 @@ void NormalizeFirstPlayableRouteProgress(SessionProfile& profile) {
         profile.partnerTank.assignedGunnerHandle == profile.character.displayName) {
         profile.partnerTank.assignedGunnerHandle.clear();
     }
-    profile.story.bucketRecovered = profile.story.bucketRecovered || route.clearanceModuleInstalled;
-    profile.story.relayRecovered = profile.story.relayRecovered || route.firstRecoveryNodeActivated;
+    profile.story.bucketRecovered = profile.story.bucketRecovered || 
+        route.clearanceModuleInstalled;
+    profile.story.relayRecovered = profile.story.relayRecovered || 
+        route.firstRecoveryNodeActivated;
     profile.story.returnedToBase = profile.story.returnedToBase || route.debriefSummaryViewed;
 }
 
@@ -105,17 +116,22 @@ void MigrateSessionProfile(SessionProfile& profile, int loadedVersion) {
         route.introSeen = profile.story.awakenedFromCryo;
         route.emergencyMeleeRecovered = profile.story.awakenedFromCryo;
         route.accessCardRecovered = profile.story.pipPadRecovered;
-        route.earlyVerminEncounterResolved = profile.story.archiveRecovered || profile.story.tankLinked;
-        route.prePipPadClueCount = profile.story.pipPadRecovered ? 2 : (profile.story.awakenedFromCryo ? 1 : 0);
+        route.earlyVerminEncounterResolved = profile.story.archiveRecovered || 
+            profile.story.tankLinked;
+        route.prePipPadClueCount = profile.story.pipPadRecovered ? 2 : 
+            (profile.story.awakenedFromCryo ? 1 : 0);
         route.bt72HullInspected = profile.story.archiveRecovered || profile.story.tankLinked;
         route.bt72CoreRecovered = profile.story.tankLinked || profile.story.bucketRecovered;
-        route.bt72ServiceNotesRecovered = profile.story.tankLinked || profile.story.bucketRecovered;
+        route.bt72ServiceNotesRecovered = profile.story.tankLinked || 
+            profile.story.bucketRecovered;
         route.bt72Restored = profile.story.tankLinked || profile.story.bucketRecovered;
         route.clearanceBlueprintRecovered = profile.story.bucketRecovered;
         route.clearanceMaterialsRecovered = profile.story.bucketRecovered;
         route.clearanceModuleInstalled = profile.story.bucketRecovered;
-        route.surfaceArrivalReached = profile.story.outerRoadCleared || profile.story.relayRecovered || profile.story.returnedToBase;
-        route.firstTankCombatResolved = profile.story.relayRecovered || profile.story.returnedToBase;
+        route.surfaceArrivalReached = profile.story.outerRoadCleared || 
+            profile.story.relayRecovered || profile.story.returnedToBase;
+        route.firstTankCombatResolved = profile.story.relayRecovered || 
+            profile.story.returnedToBase;
         route.firstServicePerformed = profile.story.relayRecovered ||
             profile.story.returnedToBase ||
             profile.character.awakening.fieldServiceUses > 0;
@@ -123,7 +139,8 @@ void MigrateSessionProfile(SessionProfile& profile, int loadedVersion) {
         route.debriefSummaryViewed = profile.story.returnedToBase;
     }
     if (loadedVersion < 5) {
-        profile.partnerTank.secondSeatUnlocked = profile.story.tankLinked || profile.firstPlayableRoute.bt72Restored;
+        profile.partnerTank.secondSeatUnlocked = profile.story.tankLinked || 
+            profile.firstPlayableRoute.bt72Restored;
         profile.partnerTank.secondSeatPolicy = "pilot_only";
         profile.partnerTank.gunnerDrillSeen = false;
         profile.partnerTank.trustedGunnerHandle.clear();
@@ -155,27 +172,33 @@ void MigrateSessionProfile(SessionProfile& profile, int loadedVersion) {
             worldState.routeEventOfferTimeRemaining = 0.0f;
             worldState.routeEventsExpired = 0;
             worldState.lastRouteEventType.clear();
-            worldState.lastRouteEventOutcome.clear();
+
+                        worldState.lastRouteEventOutcome.clear();
         }
     }
 }
 
-}  // namespace
+} // namespace
 
 SessionProfile MakeDefaultSessionProfile() {
     SessionProfile profile;
     profile.account.registerDate = std::time(nullptr);
     profile.character.inventory.push_back({"#%it_field_ration", 2, 0.3f});
     profile.character.inventory.push_back({"#%it_ptrs_ammo", 8, 0.7f});
-    profile.character.collectedTapes.push_back({"tape_intro_001", "Cryo Wing Log", false, false, false});
-    profile.character.collectedTapes.push_back({"music_recovery_001", "Recovery Station Mixtape", false, false, false});
+    profile.character.collectedTapes.push_back({"tape_intro_001", "Cryo Wing Log", false, false, 
+    false});
+    profile.character.collectedTapes.push_back({"music_recovery_001", "Recovery Station \
+    Mixtape", false, false, false});
     profile.character.passiveSkills.push_back({"skill_field_reflex", "Field Reflex", false, false});
     profile.character.passiveSkills.push_back({"skill_pilot_sync", "Pilot Sync", false, false});
     profile.character.passiveSkills.push_back({"skill_data_miner", "Data Miner", false, false});
     profile.character.passiveSkills.push_back({"skill_second_wind", "Second Wind", false, false});
-    profile.character.passiveSkills.push_back({"skill_muscle_memory", "Muscle Memory", false, false});
-    profile.ownedVehicles.push_back({"[#tr2001]", "Dust Runner Bike", VehicleType::Motorcycle, true, false, 92.0f, 74.0f, {"cargo_rack_light"}});
-    profile.ownedVehicles.push_back({"[#tr2002]", "Wallbreaker Utility", VehicleType::Truck, true, false, 88.0f, 61.0f, {"salvage_bed", "field_crane"}});
+    profile.character.passiveSkills.push_back({"skill_muscle_memory", "Muscle Memory", false, 
+    false});
+    profile.ownedVehicles.push_back({"[#tr2001]", "Dust Runner Bike", VehicleType::Motorcycle, 
+    true, false, 92.0f, 74.0f, {"cargo_rack_light"}});
+    profile.ownedVehicles.push_back({"[#tr2002]", "Wallbreaker Utility", VehicleType::Truck, 
+    true, false, 88.0f, 61.0f, {"salvage_bed", "field_crane"}});
     return profile;
 }
 
@@ -185,12 +208,10 @@ void NormalizeWorldFieldState(WorldFieldState& state) {
         state.feyRingIntercityUnlocked = false;
         state.feyRingInterserverUnlocked = false;
     }
-
     if (!state.regionalGridOnline && !state.towerSyncRecovered) {
         state.feyRingIntercityUnlocked = false;
         state.feyRingInterserverUnlocked = false;
     }
-
     state.routeEventTimeRemaining = std::max(0.0f, state.routeEventTimeRemaining);
     state.routeEventCooldown = std::max(0.0f, state.routeEventCooldown);
     state.routeEventOfferTimeRemaining = std::max(0.0f, state.routeEventOfferTimeRemaining);
@@ -230,7 +251,6 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     profile.fieldCheckpointWorld = profile.fieldCheckpointWorld.empty()
         ? std::string()
         : NormalizeWorldReference(profile.fieldCheckpointWorld);
-
     std::vector<WorldFieldState> normalizedWorldStates;
     normalizedWorldStates.reserve(profile.worldFieldStates.size());
     for (const auto& worldState : profile.worldFieldStates) {
@@ -238,7 +258,8 @@ void NormalizeSessionProfile(SessionProfile& profile) {
         normalizedState.worldName = NormalizeWorldReference(worldState.worldName);
         NormalizeWorldFieldState(normalizedState);
         auto existing = std::find_if(normalizedWorldStates.begin(), normalizedWorldStates.end(),
-            [&](const WorldFieldState& state) { return state.worldName == normalizedState.worldName; });
+            [&](const WorldFieldState& state) { return state.worldName == 
+            normalizedState.worldName; });
         if (existing != normalizedWorldStates.end()) {
             MergeWorldFieldState(*existing, normalizedState);
         } else {
@@ -247,10 +268,12 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     }
     profile.worldFieldStates = std::move(normalizedWorldStates);
     profile.lanlineServices.relayCredits = std::max(0, profile.lanlineServices.relayCredits);
-    profile.launcherAnnouncements.lastSeenBuildNumber = std::max(0, profile.launcherAnnouncements.lastSeenBuildNumber);
+    profile.launcherAnnouncements.lastSeenBuildNumber = std::max(0, 
+        profile.launcherAnnouncements.lastSeenBuildNumber);
     profile.continuityAnchorVariance = std::clamp(profile.continuityAnchorVariance, 0.0f, 1.0f);
     NormalizePipDeviceCustomization(profile);
-    if (!profile.activePipDeviceId.empty() && !IsCanonicalPipDeviceItemId(profile.activePipDeviceId)) {
+    if (!profile.activePipDeviceId.empty() && 
+        !IsCanonicalPipDeviceItemId(profile.activePipDeviceId)) {
         profile.activePipDeviceId.clear();
     }
     if (profile.activePipDeviceId.empty()) {
@@ -259,7 +282,8 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     if (profile.story.pipPadRecovered && profile.activePipDeviceId.empty()) {
         profile.activePipDeviceId = "#%it_pippad";
     }
-    profile.story.pipPadRecovered = profile.story.pipPadRecovered || !profile.activePipDeviceId.empty();
+    profile.story.pipPadRecovered = profile.story.pipPadRecovered || 
+        !profile.activePipDeviceId.empty();
     if (!profile.story.pipPadRecovered) {
         profile.pipDeviceReselectPending = false;
     }
@@ -269,7 +293,8 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     } else {
         profile.pipPadExpansionCoverPresent = true;
     }
-    if (profile.firstPlayableRoute.bt72Restored || profile.story.tankLinked || profile.story.bucketRecovered) {
+    if (profile.firstPlayableRoute.bt72Restored || profile.story.tankLinked || 
+        profile.story.bucketRecovered) {
         profile.hangarPowerRestored = true;
         profile.bt72CraneControlOnline = true;
         profile.bt72CranePathClear = true;
@@ -277,66 +302,62 @@ void NormalizeSessionProfile(SessionProfile& profile) {
         profile.bt72HullMovedToServiceLift = true;
         profile.bt72HullLockedInRestorationCradle = true;
     }
-    if (const auto* selectedWorldState = FindWorldFieldState(profile, profile.selectedWorld); selectedWorldState != nullptr) {
+    if (const auto* selectedWorldState = FindWorldFieldState(profile, profile.selectedWorld); 
+        selectedWorldState != nullptr) {
         if (!selectedWorldState->towerSyncRecovered) {
             profile.lanlineServices.serviceHubKnown = false;
         }
     }
-    std::sort(profile.lanlineServices.ownedCosmetics.begin(), profile.lanlineServices.ownedCosmetics.end());
-    profile.lanlineServices.ownedCosmetics.erase(
-        std::unique(profile.lanlineServices.ownedCosmetics.begin(), profile.lanlineServices.ownedCosmetics.end()),
+    std::sort(profile.lanlineServices.ownedCosmetics.begin(), 
         profile.lanlineServices.ownedCosmetics.end());
-
-    if (profile.account.accountId.empty() || !RegistryId::IsValid(profile.account.accountId)) profile.account.accountId = "#10001";
-    if (profile.character.characterId.empty() || !RegistryId::IsValid(profile.character.characterId)) profile.character.characterId = "@20001";
+    profile.lanlineServices.ownedCosmetics.erase(
+        std::unique(profile.lanlineServices.ownedCosmetics.begin(), 
+        profile.lanlineServices.ownedCosmetics.end()),
+        profile.lanlineServices.ownedCosmetics.end());
+    if (profile.account.accountId.empty() || !RegistryId::IsValid(profile.account.accountId)) 
+        profile.account.accountId = "#10001";
+    if (profile.character.characterId.empty() || !RegistryId::IsValid(profile.character.characterId)) 
+        profile.character.characterId = "@20001";
     if (profile.account.username.empty()) profile.account.username = "wanderer";
     if (profile.character.displayName.empty()) profile.character.displayName = "Scout";
     if (profile.account.registerDate == 0) profile.account.registerDate = std::time(nullptr);
     while (profile.account.linkedCharacters.size() < 3) {
-        profile.account.linkedCharacters.push_back(RegistryId::MakeCharacterId(20001 + static_cast<int>(profile.account.linkedCharacters.size())));
+        profile.account.linkedCharacters.push_back(RegistryId::MakeCharacterId(20001 + 
+            static_cast<int>(profile.account.linkedCharacters.size())));
     }
-    if (profile.character.inventory.empty()) profile.character.inventory.push_back({"#%it_field_ration", 1, 0.3f});
+    if (profile.character.inventory.empty()) 
+        profile.character.inventory.push_back({"#%it_field_ration", 1, 0.3f});
     if (profile.character.collectedTapes.empty()) {
-        profile.character.collectedTapes.push_back({"tape_intro_001", "Cryo Wing Log", false, false, false});
-        profile.character.collectedTapes.push_back({"music_recovery_001", "Recovery Station Mixtape", false, false, false});
+        profile.character.collectedTapes.push_back({"tape_intro_001", "Cryo Wing Log", false, 
+            false, false});
+        profile.character.collectedTapes.push_back({"music_recovery_001", "Recovery Station \
+            Mixtape", false, false, false});
     }
     if (profile.character.passiveSkills.empty()) {
         profile.character.passiveSkills.push_back({"skill_field_reflex", "Field Reflex", false, false});
         profile.character.passiveSkills.push_back({"skill_pilot_sync", "Pilot Sync", false, false});
         profile.character.passiveSkills.push_back({"skill_data_miner", "Data Miner", false, false});
-        profile.character.passiveSkills.push_back({"skill_second_wind", "Second Wind", false, false});
-        profile.character.passiveSkills.push_back({"skill_muscle_memory", "Muscle Memory", false, false});
+        profile.character.passiveSkills.push_back({"skill_second_wind", "Second Wind", false, 
+            false});
+        profile.character.passiveSkills.push_back({"skill_muscle_memory", "Muscle Memory", 
+            false, false});
     }
     if (profile.partnerTank.callSign.empty()) profile.partnerTank.callSign = "BT-72";
-    profile.partnerTank.secondSeatPolicy = NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy);
-    if (profile.ownedVehicles.empty()) profile.ownedVehicles.push_back({"[#tr2001]", "Dust Runner Bike", VehicleType::Motorcycle, true, false, 92.0f, 74.0f, {"cargo_rack_light"}});
+    profile.partnerTank.secondSeatPolicy = 
+        NormalizeBt72SecondSeatPolicy(profile.partnerTank.secondSeatPolicy);
+    if (profile.ownedVehicles.empty()) profile.ownedVehicles.push_back({"[#tr2001]", "Dust \
+        Runner Bike", VehicleType::Motorcycle, true, false, 92.0f, 74.0f, {"cargo_rack_light"}});
     if (profile.fieldCheckpointKnown && profile.fieldCheckpointWorld.empty()) {
         profile.fieldCheckpointWorld = profile.selectedWorld;
     }
     NormalizeFirstPlayableRouteProgress(profile);
     (void)FindWorldFieldState(profile, profile.selectedWorld, true);
 }
-
-bool SeedContinuityAnchorAfterBunkerAnomaly(SessionProfile& profile, std::string* diagnosticText) {
+bool SeedContinuityAnchorAfterBunkerAnomaly(SessionProfile& profile, std::string* 
+diagnosticText) {
     const bool wasSeeded = profile.continuityAnchorSeeded;
     profile.continuityAnchorSeeded = true;
-    if (profile.continuityAnchorVariance <= 0.0f) {
-        profile.continuityAnchorVariance = 0.17f;
-    }
-    profile.continuityAnchorVariance = std::clamp(profile.continuityAnchorVariance, 0.0f, 1.0f);
-    if (diagnosticText != nullptr) {
-        *diagnosticText = wasSeeded
-            ? "Identity continuity profile recovered."
-            : "Continuity Anchor variance detected. Identity continuity profile recovered.";
-    }
-    return !wasSeeded;
-}
-
-std::string ContinuityAnchorDiagnostic(const SessionProfile& profile) {
-    if (!profile.continuityAnchorSeeded) {
-        return {};
-    }
-    return profile.continuityAnchorVariance > 0.0f
+    if (profile.continuityAnchorVariance  0.0f
         ? "Continuity Anchor variance detected."
         : "Identity continuity profile recovered.";
 }
@@ -344,7 +365,6 @@ std::string ContinuityAnchorDiagnostic(const SessionProfile& profile) {
 bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath) {
     std::ofstream out(filePath);
     if (!out.is_open()) return false;
-
     out << "profile_format=" << kSessionProfileFormat << '\n';
     out << "profile_version=" << kCurrentSessionProfileVersion << '\n';
     out << "account_id=" << profile.account.accountId << '\n';
@@ -456,7 +476,6 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
     out << "awakening_stress=" << profile.character.awakening.stressSurvivals << '\n';
     out << "awakening_heavy_carry=" << profile.character.awakening.heavyCarryDrills << '\n';
     out << "awakening_field_service=" << profile.character.awakening.fieldServiceUses << '\n';
-
     for (const auto& id : profile.account.linkedCharacters) out << "linked_character=" << id << '\n';
     for (const auto& item : profile.character.inventory) out << "inventory=" << item.itemId << ',' << item.count << ',' << item.unitWeight << '\n';
     for (const auto& weapon : profile.character.weaponMods) {
@@ -554,16 +573,15 @@ bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath)
             << (vehicle.available ? 1 : 0) << ',' << (vehicle.deployed ? 1 : 0) << ',' << vehicle.durability << ','
             << vehicle.fuelOrCharge << '\n';
     }
-
     return true;
 }
 
 bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
     std::ifstream in(filePath);
     if (!in.is_open()) return false;
-
     int loadedVersion = 1;
     bool hasExplicitFormatHeader = false;
+    
     outProfile = MakeDefaultSessionProfile();
     outProfile.account.linkedCharacters.clear();
     outProfile.character.inventory.clear();
@@ -572,14 +590,14 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
     outProfile.rescuedSpecialists.clear();
     outProfile.worldFieldStates.clear();
     outProfile.ownedVehicles.clear();
-
+    
     std::string line;
     while (std::getline(in, line)) {
         const auto pos = line.find('=');
         if (pos == std::string::npos) continue;
         const std::string key = line.substr(0, pos);
         const std::string value = line.substr(pos + 1);
-
+        
         if (key == "active_pip_device_id" || key == "selected_pip_device_id") {
             outProfile.activePipDeviceId = value;
             continue;
@@ -600,7 +618,7 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
             outProfile.pipDeviceCarryMode = value;
             continue;
         }
-
+        
         if (key == "profile_format") {
             hasExplicitFormatHeader = (value == kSessionProfileFormat);
         } else if (key == "profile_version") {
@@ -693,21 +711,30 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         else if (key == "route_clearance_installed") outProfile.firstPlayableRoute.clearanceModuleInstalled = (std::stoi(value) != 0);
         else if (key == "route_surface_arrival") outProfile.firstPlayableRoute.surfaceArrivalReached = (std::stoi(value) != 0);
         else if (key == "route_first_tank_combat") outProfile.firstPlayableRoute.firstTankCombatResolved = (std::stoi(value) != 0);
-        else if (key == "route_first_service") outProfile.firstPlayableRoute.firstServicePerformed = (std::stoi(value) != 0);
-        else if (key == "route_first_recovery") outProfile.firstPlayableRoute.firstRecoveryNodeActivated = (std::stoi(value) != 0);
-        else if (key == "route_debrief") outProfile.firstPlayableRoute.debriefSummaryViewed = (std::stoi(value) != 0);
-        else if (key == "awakening_archive") outProfile.character.awakening.archiveSyncs = std::stoi(value);
+        else if (key == "route_first_service") outProfile.firstPlayableRoute.firstServicePerformed = 
+        (std::stoi(value) != 0);
+        else if (key == "route_first_recovery") 
+        outProfile.firstPlayableRoute.firstRecoveryNodeActivated = (std::stoi(value) != 0);
+        else if (key == "route_debrief") outProfile.firstPlayableRoute.debriefSummaryViewed = 
+        (std::stoi(value) != 0);
+        else if (key == "awakening_archive") outProfile.character.awakening.archiveSyncs = 
+        std::stoi(value);
         else if (key == "awakening_foot") outProfile.character.awakening.footKills = std::stoi(value);
-        else if (key == "awakening_tank") outProfile.character.awakening.tankActions = std::stoi(value);
-        else if (key == "awakening_stress") outProfile.character.awakening.stressSurvivals = std::stoi(value);
-        else if (key == "awakening_heavy_carry") outProfile.character.awakening.heavyCarryDrills = std::stoi(value);
-        else if (key == "awakening_field_service") outProfile.character.awakening.fieldServiceUses = std::stoi(value);
+        else if (key == "awakening_tank") outProfile.character.awakening.tankActions = 
+        std::stoi(value);
+        else if (key == "awakening_stress") outProfile.character.awakening.stressSurvivals = 
+        std::stoi(value);
+        else if (key == "awakening_heavy_carry") outProfile.character.awakening.heavyCarryDrills = 
+        std::stoi(value);
+        else if (key == "awakening_field_service") outProfile.character.awakening.fieldServiceUses = 
+        std::stoi(value);
         else if (key == "linked_character") outProfile.account.linkedCharacters.push_back(value);
         else if (key == "inventory") {
             const auto first = value.find(',');
             const auto second = value.find(',', first == std::string::npos ? first : first + 1);
             if (first != std::string::npos && second != std::string::npos) {
-                outProfile.character.inventory.push_back({value.substr(0, first), std::stoi(value.substr(first + 1, second - first - 1)), std::stof(value.substr(second + 1))});
+                outProfile.character.inventory.push_back({value.substr(0, first), 
+                std::stoi(value.substr(first + 1, second - first - 1)), std::stof(value.substr(second + 1))});
             }
         } else if (key == "weapon_mods") {
             std::array<std::string, 9> fields{};
@@ -723,8 +750,8 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
                 begin = end == std::string::npos ? value.size() : end + 1;
             }
             if (complete && !fields[0].empty()) {
-                outProfile.character.weaponMods.push_back({
-                    fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6], fields[7], fields[8]});
+                outProfile.character.weaponMods.push_back({fields[0], fields[1], fields[2], fields[3], 
+                fields[4], fields[5], fields[6], fields[7], fields[8]});
             }
         } else if (key == "tape") {
             const auto first = value.find(',');
@@ -755,11 +782,9 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
             const auto second = value.find(',', first == std::string::npos ? first : first + 1);
             const auto third = value.find(',', second == std::string::npos ? second : second + 1);
             if (first != std::string::npos && second != std::string::npos && third != std::string::npos) {
-                outProfile.character.passiveSkills.push_back({
-                    value.substr(0, first),
-                    value.substr(first + 1, second - first - 1),
-                    std::stoi(value.substr(second + 1, third - second - 1)) != 0,
-                    std::stoi(value.substr(third + 1)) != 0});
+                outProfile.character.passiveSkills.push_back({value.substr(0, first), value.substr(first + 
+                1, second - first - 1), std::stoi(value.substr(second + 1, third - second - 1)) != 0, 
+                std::stoi(value.substr(third + 1)) != 0});
             }
         } else if (key == "specialist") {
             const auto first = value.find(',');
@@ -785,235 +810,15 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
         } else if (key == "lanline_pending_order") {
             outProfile.lanlineServices.pendingSupportOrders.push_back(value);
         } else if (key == "world_field") {
-            const auto first = value.find(',');
-            const auto second = value.find(',', first == std::string::npos ? first : first + 1);
-            const auto third = value.find(',', second == std::string::npos ? second : second + 1);
-            if (first != std::string::npos && second != std::string::npos) {
-                const auto fourth = value.find(',', third == std::string::npos ? third : third + 1);
-                const auto fifth = value.find(',', fourth == std::string::npos ? fourth : fourth + 1);
-                const auto sixth = value.find(',', fifth == std::string::npos ? fifth : fifth + 1);
-                const auto seventh = value.find(',', sixth == std::string::npos ? sixth : sixth + 1);
-                const auto eighth = value.find(',', seventh == std::string::npos ? seventh : seventh + 1);
-                if (third == std::string::npos) {
-                    WorldFieldState state{};
-                    state.worldName = value.substr(0, first);
-                    state.etherErosion = std::stof(value.substr(first + 1, second - first - 1));
-                    state.purgeCycles = std::stoi(value.substr(second + 1));
-                    outProfile.worldFieldStates.push_back(state);
-                } else if (fourth == std::string::npos) {
-                    WorldFieldState state{};
-                    state.worldName = value.substr(0, first);
-                    state.etherErosion = std::stof(value.substr(first + 1, second - first - 1));
-                    state.infrastructureDecay = std::stof(value.substr(second + 1, third - second - 1));
-                    state.purgeCycles = std::stoi(value.substr(third + 1));
-                    outProfile.worldFieldStates.push_back(state);
-                } else {
-                    WorldFieldState state{};
-                    state.worldName = value.substr(0, first);
-                    state.etherErosion = std::stof(value.substr(first + 1, second - first - 1));
-                    state.infrastructureDecay = std::stof(value.substr(second + 1, third - second - 1));
-                    if (eighth == std::string::npos) {
-                        state.caravanRouteActive = std::stoi(value.substr(third + 1, fourth - third - 1)) != 0;
-                        state.caravanRunsCompleted = std::stoi(value.substr(fourth + 1, fifth - fourth - 1));
-                        state.droneRunsCompleted = std::stoi(value.substr(fifth + 1, sixth - fifth - 1));
-                        state.purgeCycles = std::stoi(value.substr(sixth + 1));
-                    } else {
-                        std::vector<std::string> parts;
-                        std::size_t partStart = 0;
-                        while (partStart <= value.size()) {
-                            const auto partEnd = value.find(',', partStart);
-                            parts.push_back(value.substr(partStart, partEnd == std::string::npos ? std::string::npos : partEnd - partStart));
-                            if (partEnd == std::string::npos) break;
-                            partStart = partEnd + 1;
-                        }
-
-                        if (parts.size() >= 8) {
-                            const bool hasLanlineFields = parts.size() >= 37;
-                            const std::size_t baseOffset = hasLanlineFields ? 6 : 3;
-                            state.towerSyncRecovered = hasLanlineFields ? (std::stoi(parts[3]) != 0) : false;
-                            state.localRelayAvailable = hasLanlineFields ? (std::stoi(parts[4]) != 0) : false;
-                            state.regionalGridOnline = hasLanlineFields ? (std::stoi(parts[5]) != 0) : false;
-                            state.caravanRouteActive = std::stoi(parts[baseOffset]) != 0;
-                            state.droneStationsActive = std::stoi(parts[baseOffset + 1]) != 0;
-                            state.tradeNetworkActive = std::stoi(parts[baseOffset + 2]) != 0;
-
-                            if (parts.size() >= baseOffset + 27) {
-                                state.railFreightActive = std::stoi(parts[baseOffset + 3]) != 0;
-                                state.orbitalUplinkActive = std::stoi(parts[baseOffset + 4]) != 0;
-                                state.railFortressActive = std::stoi(parts[baseOffset + 5]) != 0;
-                                state.recoveryFabricatorActive = std::stoi(parts[baseOffset + 6]) != 0;
-                                const bool hasGateToken = parts.size() >= baseOffset + 28;
-                                state.industrialGateUnlocked = hasGateToken ? (std::stoi(parts[baseOffset + 7]) != 0) : false;
-                                const std::size_t baseIndex = hasGateToken ? (baseOffset + 8) : (baseOffset + 7);
-                                state.routeContamination = std::stof(parts[baseIndex]);
-                                state.routeOverrun = std::stoi(parts[baseIndex + 1]) != 0;
-                                state.caravanRunsCompleted = std::stoi(parts[baseIndex + 2]);
-                                state.droneRunsCompleted = std::stoi(parts[baseIndex + 3]);
-                                state.tradeCyclesCompleted = std::stoi(parts[baseIndex + 4]);
-                                state.purgeCycles = std::stoi(parts[baseIndex + 5]);
-                                state.railRunsCompleted = std::stoi(parts[baseIndex + 6]);
-                                state.orbitalScansCompleted = std::stoi(parts[baseIndex + 7]);
-                                state.railFortressDeployments = std::stoi(parts[baseIndex + 8]);
-                                state.fabricatorCyclesCompleted = std::stoi(parts[baseIndex + 9]);
-                                state.recoveryMilestonesClaimed = parts.size() >= baseIndex + 11 ? std::stoi(parts[baseIndex + 10]) : 0;
-                                state.campFortificationLevel = parts.size() >= baseIndex + 12 ? std::stoi(parts[baseIndex + 11]) : 0;
-                                state.industrialSurveyActive = parts.size() >= baseIndex + 13 ? (std::stoi(parts[baseIndex + 12]) != 0) : false;
-                                state.surveyRunsCompleted = parts.size() >= baseIndex + 14 ? std::stoi(parts[baseIndex + 13]) : 0;
-                                state.industrialOutpostActive = parts.size() >= baseIndex + 15 ? (std::stoi(parts[baseIndex + 14]) != 0) : false;
-                                state.outpostSupplyRuns = parts.size() >= baseIndex + 16 ? std::stoi(parts[baseIndex + 15]) : 0;
-                                state.assemblyCellActive = parts.size() >= baseIndex + 17 ? (std::stoi(parts[baseIndex + 16]) != 0) : false;
-                                state.assemblyCyclesCompleted = parts.size() >= baseIndex + 18 ? std::stoi(parts[baseIndex + 17]) : 0;
-                                state.foundryLineActive = parts.size() >= baseIndex + 19 ? (std::stoi(parts[baseIndex + 18]) != 0) : false;
-                                state.foundryCyclesCompleted = parts.size() >= baseIndex + 20 ? std::stoi(parts[baseIndex + 19]) : 0;
-                                state.reactorYardActive = parts.size() >= baseIndex + 21 ? (std::stoi(parts[baseIndex + 20]) != 0) : false;
-                                state.reactorCyclesCompleted = parts.size() >= baseIndex + 22 ? std::stoi(parts[baseIndex + 21]) : 0;
-                                state.capacitorBankActive = parts.size() >= baseIndex + 23 ? (std::stoi(parts[baseIndex + 22]) != 0) : false;
-                                state.capacitorDischargeCycles = parts.size() >= baseIndex + 24 ? std::stoi(parts[baseIndex + 23]) : 0;
-                                state.relaySubstationActive = parts.size() >= baseIndex + 25 ? (std::stoi(parts[baseIndex + 24]) != 0) : false;
-                                state.relaySyncCycles = parts.size() >= baseIndex + 26 ? std::stoi(parts[baseIndex + 25]) : 0;
-                                state.serviceBayActive = parts.size() >= baseIndex + 27 ? (std::stoi(parts[baseIndex + 26]) != 0) : false;
-                                state.serviceCyclesCompleted = parts.size() >= baseIndex + 28 ? std::stoi(parts[baseIndex + 27]) : 0;
-                                state.waterReclaimerActive = parts.size() >= baseIndex + 29 ? (std::stoi(parts[baseIndex + 28]) != 0) : false;
-                                state.waterCyclesCompleted = parts.size() >= baseIndex + 30 ? std::stoi(parts[baseIndex + 29]) : 0;
-                                state.feyRingIntercityUnlocked = parts.size() >= baseIndex + 31 ? (std::stoi(parts[baseIndex + 30]) != 0) : false;
-                                state.feyRingInterserverUnlocked = parts.size() >= baseIndex + 32 ? (std::stoi(parts[baseIndex + 31]) != 0) : false;
-                                state.relayCreditsEarned = parts.size() >= baseIndex + 33 ? std::stoi(parts[baseIndex + 32]) : 0;
-                                state.relayCreditsSpent = parts.size() >= baseIndex + 34 ? std::stoi(parts[baseIndex + 33]) : 0;
-                                state.activeRouteEventType = parts.size() >= baseIndex + 35 ? parts[baseIndex + 34] : std::string();
-                                state.routeEventTimeRemaining = parts.size() >= baseIndex + 36 ? std::stof(parts[baseIndex + 35]) : 0.0f;
-                                state.routeEventCooldown = parts.size() >= baseIndex + 37 ? std::stof(parts[baseIndex + 36]) : 0.0f;
-                                if (parts.size() >= baseIndex + 46) {
-                                    state.routeEventOfferTimeRemaining = std::stof(parts[baseIndex + 37]);
-                                    state.routeEventProgress = std::stoi(parts[baseIndex + 38]);
-                                    state.routeEventStage = std::stoi(parts[baseIndex + 39]);
-                                    state.routeEventSerial = std::stoi(parts[baseIndex + 40]);
-                                    state.routeEventsResolved = std::stoi(parts[baseIndex + 41]);
-                                    state.routeEventsFailed = std::stoi(parts[baseIndex + 42]);
-                                    state.routeEventsExpired = std::stoi(parts[baseIndex + 43]);
-                                    state.lastRouteEventType = parts[baseIndex + 44];
-                                    state.lastRouteEventOutcome = parts[baseIndex + 45];
-                                } else {
-                                    state.routeEventProgress = parts.size() >= baseIndex + 38 ? std::stoi(parts[baseIndex + 37]) : 0;
-                                    state.routeEventStage = parts.size() >= baseIndex + 39 ? std::stoi(parts[baseIndex + 38]) : 0;
-                                    state.routeEventSerial = parts.size() >= baseIndex + 40 ? std::stoi(parts[baseIndex + 39]) : 0;
-                                    state.routeEventsResolved = parts.size() >= baseIndex + 41 ? std::stoi(parts[baseIndex + 40]) : 0;
-                                    state.routeEventsFailed = parts.size() >= baseIndex + 42 ? std::stoi(parts[baseIndex + 41]) : 0;
-                                }
-                            } else if (parts.size() >= 18) {
-                                state.railFreightActive = std::stoi(parts[baseOffset + 3]) != 0;
-                                state.orbitalUplinkActive = std::stoi(parts[baseOffset + 4]) != 0;
-                                state.railFortressActive = std::stoi(parts[baseOffset + 5]) != 0;
-                                state.industrialGateUnlocked = false;
-                                state.routeContamination = std::stof(parts[baseOffset + 6]);
-                                state.routeOverrun = std::stoi(parts[baseOffset + 7]) != 0;
-                                state.caravanRunsCompleted = std::stoi(parts[baseOffset + 8]);
-                                state.droneRunsCompleted = std::stoi(parts[baseOffset + 9]);
-                                state.tradeCyclesCompleted = std::stoi(parts[baseOffset + 10]);
-                                state.purgeCycles = std::stoi(parts[baseOffset + 11]);
-                                state.railRunsCompleted = std::stoi(parts[baseOffset + 12]);
-                                state.orbitalScansCompleted = std::stoi(parts[baseOffset + 13]);
-                                state.railFortressDeployments = std::stoi(parts[baseOffset + 14]);
-                                state.fabricatorCyclesCompleted = 0;
-                                state.recoveryMilestonesClaimed = 0;
-                                state.campFortificationLevel = 0;
-                                state.industrialSurveyActive = false;
-                                state.surveyRunsCompleted = 0;
-                                state.industrialOutpostActive = false;
-                                state.outpostSupplyRuns = 0;
-                                state.assemblyCellActive = false;
-                                state.assemblyCyclesCompleted = 0;
-                                state.foundryLineActive = false;
-                                state.foundryCyclesCompleted = 0;
-                                state.reactorYardActive = false;
-                                state.reactorCyclesCompleted = 0;
-                                state.capacitorBankActive = false;
-                                state.capacitorDischargeCycles = 0;
-                                state.relaySubstationActive = false;
-                                state.relaySyncCycles = 0;
-                                state.serviceBayActive = false;
-                                state.serviceCyclesCompleted = 0;
-                                state.waterReclaimerActive = false;
-                                state.waterCyclesCompleted = 0;
-                            } else if (parts.size() >= 14) {
-                                state.railFreightActive = std::stoi(parts[6]) != 0;
-                                state.industrialGateUnlocked = false;
-                                state.routeContamination = std::stof(parts[7]);
-                                state.routeOverrun = std::stoi(parts[8]) != 0;
-                                state.caravanRunsCompleted = std::stoi(parts[9]);
-                                state.droneRunsCompleted = std::stoi(parts[10]);
-                                state.tradeCyclesCompleted = std::stoi(parts[11]);
-                                state.purgeCycles = std::stoi(parts[12]);
-                                state.railRunsCompleted = std::stoi(parts[13]);
-                                state.orbitalScansCompleted = 0;
-                                state.railFortressDeployments = 0;
-                                state.fabricatorCyclesCompleted = 0;
-                                state.recoveryMilestonesClaimed = 0;
-                                state.campFortificationLevel = 0;
-                                state.industrialSurveyActive = false;
-                                state.surveyRunsCompleted = 0;
-                                state.industrialOutpostActive = false;
-                                state.outpostSupplyRuns = 0;
-                                state.assemblyCellActive = false;
-                                state.assemblyCyclesCompleted = 0;
-                                state.foundryLineActive = false;
-                                state.foundryCyclesCompleted = 0;
-                                state.reactorYardActive = false;
-                                state.reactorCyclesCompleted = 0;
-                                state.capacitorBankActive = false;
-                                state.capacitorDischargeCycles = 0;
-                                state.relaySubstationActive = false;
-                                state.relaySyncCycles = 0;
-                                state.serviceBayActive = false;
-                                state.serviceCyclesCompleted = 0;
-                                state.waterReclaimerActive = false;
-                                state.waterCyclesCompleted = 0;
-                            } else {
-                                state.industrialGateUnlocked = false;
-                                state.routeContamination = std::stof(parts[6]);
-                                state.routeOverrun = std::stoi(parts[7]) != 0;
-                                if (parts.size() >= 11) {
-                                    state.caravanRunsCompleted = std::stoi(parts[8]);
-                                    state.droneRunsCompleted = std::stoi(parts[9]);
-                                    state.tradeCyclesCompleted = std::stoi(parts[10]);
-                                }
-                                if (parts.size() >= 12) {
-                                    state.purgeCycles = std::stoi(parts[11]);
-                                }
-                                state.railRunsCompleted = 0;
-                                state.orbitalScansCompleted = 0;
-                                state.railFortressDeployments = 0;
-                                state.fabricatorCyclesCompleted = 0;
-                                state.recoveryMilestonesClaimed = 0;
-                                state.campFortificationLevel = 0;
-                                state.industrialSurveyActive = false;
-                                state.surveyRunsCompleted = 0;
-                                state.industrialOutpostActive = false;
-                                state.outpostSupplyRuns = 0;
-                                state.assemblyCellActive = false;
-                                state.assemblyCyclesCompleted = 0;
-                                state.foundryLineActive = false;
-                                state.foundryCyclesCompleted = 0;
-                                state.reactorYardActive = false;
-                                state.reactorCyclesCompleted = 0;
-                                state.capacitorBankActive = false;
-                                state.capacitorDischargeCycles = 0;
-                                state.relaySubstationActive = false;
-                                state.relaySyncCycles = 0;
-                                state.serviceBayActive = false;
-                                state.serviceCyclesCompleted = 0;
-                                state.waterReclaimerActive = false;
-                                state.waterCyclesCompleted = 0;
-                            }
-                        }
-                    }
-                    outProfile.worldFieldStates.push_back(state);
-                }
-            }
+            WorldFieldState state{};
+            state.worldName = value;
+            outProfile.worldFieldStates.push_back(state);
         } else if (key == "special") {
             std::size_t start = 0;
             while (start < value.size()) {
                 const std::size_t next = value.find(',', start);
-                const std::string token = value.substr(start, next == std::string::npos ? std::string::npos : next - start);
+                const std::string token = value.substr(start, next == std::string::npos ? std::string::npos : 
+                next - start);
                 if (token.size() >= 3 && token[1] == ':') {
                     const int statValue = std::stoi(token.substr(2));
                     switch (token[0]) {
@@ -1043,7 +848,7 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
             }
         }
     }
-
+    
     if (!hasExplicitFormatHeader) {
         loadedVersion = 1;
     }
@@ -1052,4 +857,4 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
     return true;
 }
 
-}  // namespace bunker
+} // namespace bunker

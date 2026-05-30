@@ -1,6 +1,5 @@
 #include "../include/World.hpp"
 #include "../include/GameplayDescriptorRegistry.hpp"
-
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -172,7 +171,8 @@ const std::array<MapObject, 9>& StarterRouteRuntimeObjectSpecs() {
             "BT-72 Repair Patch Locker",
             InteractionType::Container,
             ObjectCategory::Container,
-            6.2f,
+
+                        6.2f,
             0.8f,
             0.0f,
             1.2f,
@@ -215,7 +215,6 @@ bool ReadString(std::ifstream& file, std::string& value) {
     if (!file) {
         return false;
     }
-
     value.resize(length);
     file.read(value.data(), static_cast<std::streamsize>(length));
     return static_cast<bool>(file);
@@ -230,7 +229,6 @@ bool ReadLootEntry(std::ifstream& file, LootEntry& entry) {
     file.read(reinterpret_cast<char*>(&entry.weight), sizeof(entry.weight));
     return static_cast<bool>(file);
 }
-
 std::string TrimLayerCopy(std::string_view value) {
     std::size_t first = 0;
     while (first < value.size() && std::isspace(static_cast<unsigned char>(value[first]))) {
@@ -239,7 +237,6 @@ std::string TrimLayerCopy(std::string_view value) {
     if (first == value.size()) {
         return {};
     }
-
     std::size_t last = value.size();
     while (last > first && std::isspace(static_cast<unsigned char>(value[last - 1]))) {
         --last;
@@ -261,35 +258,35 @@ bool IsRailGameplayTag(std::string_view normalizedTag) {
 
 bool IsIndustrialGameplayTag(std::string_view normalizedTag) {
     return normalizedTag == "industrial_gate" ||
-        normalizedTag == "industrial_survey" ||
-        normalizedTag == "industrial_outpost" ||
-        normalizedTag == "assembly_cell" ||
-        normalizedTag == "foundry_line" ||
-        normalizedTag == "reactor_yard" ||
-        normalizedTag == "capacitor_bank";
+           normalizedTag == "industrial_survey" ||
+           normalizedTag == "industrial_outpost" ||
+           normalizedTag == "assembly_cell" ||
+           normalizedTag == "foundry_line" ||
+           normalizedTag == "reactor_yard" ||
+           normalizedTag == "capacitor_bank";
 }
 
 bool IsServiceGameplayTag(std::string_view normalizedTag) {
     return normalizedTag == "tower_sync" ||
-        normalizedTag == "workshop_service" ||
-        normalizedTag == "power_pylon" ||
-        normalizedTag == "drone_station" ||
-        normalizedTag == "recovery_fabricator" ||
-        normalizedTag == "relay_substation" ||
-        normalizedTag == "service_bay" ||
-        normalizedTag == "water_reclaimer" ||
-        normalizedTag == "lanline_service_hub" ||
-        normalizedTag == "medical_support" ||
-        normalizedTag == "tank_service" ||
-        normalizedTag == "remote_link" ||
-        normalizedTag == "orbital_uplink";
+           normalizedTag == "workshop_service" ||
+           normalizedTag == "power_pylon" ||
+           normalizedTag == "drone_station" ||
+           normalizedTag == "recovery_fabricator" ||
+           normalizedTag == "relay_substation" ||
+           normalizedTag == "service_bay" ||
+           normalizedTag == "water_reclaimer" ||
+           normalizedTag == "lanline_service_hub" ||
+           normalizedTag == "medical_support" ||
+           normalizedTag == "tank_service" ||
+           normalizedTag == "remote_link" ||
+           normalizedTag == "orbital_uplink";
 }
 
 bool IsSpawnObject(const MapObject& object) {
     const std::string lowerRegistryId = ToLowerCopy(object.registryId);
     const std::string lowerDisplayName = ToLowerCopy(object.displayName);
     return lowerRegistryId.find("spawn") != std::string::npos ||
-        lowerDisplayName.find("spawn") != std::string::npos;
+           lowerDisplayName.find("spawn") != std::string::npos;
 }
 
 bool IsTerrainHeightSource(const MapObject& object) {
@@ -298,16 +295,16 @@ bool IsTerrainHeightSource(const MapObject& object) {
     const std::string scriptTag = ToLowerCopy(object.scriptTag);
     const std::string editorLayer = ToLowerCopy(object.editorLayer);
     return object.category == ObjectCategory::ResourceNode ||
-        object.category == ObjectCategory::Landmark ||
-        editorLayer == "terrain" ||
-        registryId.find("terrain") != std::string::npos ||
-        registryId.find("hill") != std::string::npos ||
-        registryId.find("ridge") != std::string::npos ||
-        registryId.find("mountain") != std::string::npos ||
-        displayName.find("hill") != std::string::npos ||
-        displayName.find("ridge") != std::string::npos ||
-        displayName.find("mountain") != std::string::npos ||
-        scriptTag.find("terrain") != std::string::npos;
+           object.category == ObjectCategory::Landmark ||
+           editorLayer == "terrain" ||
+           registryId.find("terrain") != std::string::npos ||
+           registryId.find("hill") != std::string::npos ||
+           registryId.find("ridge") != std::string::npos ||
+           registryId.find("mountain") != std::string::npos ||
+           displayName.find("hill") != std::string::npos ||
+           displayName.find("ridge") != std::string::npos ||
+           displayName.find("mountain") != std::string::npos ||
+           scriptTag.find("terrain") != std::string::npos;
 }
 
 void AppendUniqueLayer(std::vector<std::string>& layers, std::string layerName) {
@@ -318,7 +315,6 @@ void AppendUniqueLayer(std::vector<std::string>& layers, std::string layerName) 
         layers.push_back(std::move(layerName));
     }
 }
-
 float NormalizeDegrees(float value) {
     value = std::fmod(value, 360.0f);
     if (value < 0.0f) {
@@ -378,20 +374,20 @@ void NormalizeLoadedObject(MapObject& object) {
 
 bool LooksLikeLegacySemanticAutoAnchor(const MapObject& object) {
     return object.registryId.find("_auto_") != std::string::npos &&
-        !object.scriptTag.empty();
+           !object.scriptTag.empty();
 }
 
 bool LooksLikeRegistryStyleReference(std::string_view value) {
     return value.size() >= 2 && value.front() == '[' && value.back() == ']';
 }
 
-}  // namespace
+} // namespace
 
 const char* WorldObjectReferenceFieldLabel(WorldObjectReferenceField field) {
     switch (field) {
-    case WorldObjectReferenceField::LinkTarget:
-    default:
-        return "linkTarget";
+        case WorldObjectReferenceField::LinkTarget:
+        default:
+            return "linkTarget";
     }
 }
 
@@ -404,20 +400,19 @@ std::string NormalizeEditorLayerName(std::string_view layerName) {
     if (trimmed.empty()) {
         return {};
     }
-
     const std::string lowerLayer = ToLowerCopy(trimmed);
     for (std::string_view knownLayer : kKnownEditorLayers) {
         if (lowerLayer == ToLowerCopy(knownLayer)) {
             return std::string(knownLayer);
         }
     }
-
     trimmed[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(trimmed[0])));
     return trimmed;
 }
 
 std::string DefaultEditorLayerName(const MapObject& object) {
-    const std::string normalizedTag = std::string(NormalizeGameplayDescriptorTag(object.scriptTag));
+    const std::string normalizedTag = 
+        std::string(NormalizeGameplayDescriptorTag(object.scriptTag));
     if (normalizedTag == "fey_ring") {
         return "Fey";
     }
@@ -436,22 +431,21 @@ std::string DefaultEditorLayerName(const MapObject& object) {
     if (normalizedTag.starts_with("debug_")) {
         return "Debug";
     }
-
     switch (object.category) {
-    case ObjectCategory::Structure:
-    case ObjectCategory::Hangar:
-        return "Structures";
-    case ObjectCategory::ResourceNode:
-        return "Terrain";
-    case ObjectCategory::Container:
-        return "Loot";
-    case ObjectCategory::Landmark:
-        return "Markers";
-    case ObjectCategory::Terminal:
-    case ObjectCategory::Vehicle:
-    case ObjectCategory::Hostile:
-    default:
-        return "Gameplay";
+        case ObjectCategory::Structure:
+        case ObjectCategory::Hangar:
+            return "Structures";
+        case ObjectCategory::ResourceNode:
+            return "Terrain";
+        case ObjectCategory::Container:
+            return "Loot";
+        case ObjectCategory::Landmark:
+            return "Markers";
+        case ObjectCategory::Terminal:
+        case ObjectCategory::Vehicle:
+        case ObjectCategory::Hostile:
+        default:
+            return "Gameplay";
     }
 }
 
@@ -470,43 +464,45 @@ bool World::Load(const std::string& path) {
     if (!file.is_open()) {
         return false;
     }
-
     char header[4]{};
     file.read(header, 4);
     const std::string format(header, 4);
-    const bool hasExtendedObjectData = (format == "BWL2" || format == "BWL3" || format == "BWL4" || format == "BWL5" || format == "BWL6" || format == "BWL7");
-    const bool hasSemanticAuthoringState = (format == "BWL3" || format == "BWL4" || format == "BWL5" || format == "BWL6" || format == "BWL7");
-    const bool hasEditorLayerData = (format == "BWL4" || format == "BWL5" || format == "BWL6" || format == "BWL7");
-    const bool hasPrefabSourceData = (format == "BWL5" || format == "BWL6" || format == "BWL7");
+    const bool hasExtendedObjectData = (format == "BWL2" || format == "BWL3" || format == 
+        "BWL4" || format == "BWL5" || format == "BWL6" || format == "BWL7");
+    const bool hasSemanticAuthoringState = (format == "BWL3" || format == "BWL4" || format 
+        == "BWL5" || format == "BWL6" || format == "BWL7");
+    const bool hasEditorLayerData = (format == "BWL4" || format == "BWL5" || format == 
+        "BWL6" || format == "BWL7");
+    const bool hasPrefabSourceData = (format == "BWL5" || format == "BWL6" || format == 
+        "BWL7");
     const bool hasObjectZData = (format != "BWLD");
     const bool hasObjectRotationData = (format == "BWL6" || format == "BWL7");
     const bool hasScalableLootData = (format == "BWL7");
-    if (format != "BWLD" && format != "BWL2" && format != "BWL3" && format != "BWL4" && format != "BWL5" && format != "BWL6" && format != "BWL7") {
+    if (format != "BWLD" && format != "BWL2" && format != "BWL3" && format != "BWL4" && 
+        format != "BWL5" && format != "BWL6" && format != "BWL7") {
         return false;
     }
-
     Clear();
     if (!ReadString(file, metadata.name) || !ReadString(file, metadata.biome) ||
         !ReadString(file, metadata.objective)) {
         return false;
     }
-    file.read(reinterpret_cast<char*>(&metadata.playerSpawnX), sizeof(metadata.playerSpawnX));
-    file.read(reinterpret_cast<char*>(&metadata.playerSpawnY), sizeof(metadata.playerSpawnY));
+    file.read(reinterpret_cast<char*>(&metadata.playerSpawnX), 
+              sizeof(metadata.playerSpawnX));
+    file.read(reinterpret_cast<char*>(&metadata.playerSpawnY), 
+              sizeof(metadata.playerSpawnY));
     if (!file) {
         return false;
     }
-
     std::uint32_t count = 0;
     file.read(reinterpret_cast<char*>(&count), sizeof(count));
     if (!file) {
         return false;
     }
-
     for (std::uint32_t index = 0; index < count; ++index) {
         MapObject object;
         std::uint32_t interaction = 0;
         std::uint32_t category = 0;
-
         if (!ReadString(file, object.registryId) || !ReadString(file, object.displayName)) {
             return false;
         }
@@ -521,7 +517,6 @@ bool World::Load(const std::string& path) {
                 return false;
             }
         }
-
         file.read(reinterpret_cast<char*>(&interaction), sizeof(interaction));
         file.read(reinterpret_cast<char*>(&category), sizeof(category));
         file.read(reinterpret_cast<char*>(&object.x), sizeof(object.x));
@@ -544,21 +539,21 @@ bool World::Load(const std::string& path) {
         file.read(reinterpret_cast<char*>(&object.depth), sizeof(object.depth));
         file.read(reinterpret_cast<char*>(&object.height), sizeof(object.height));
         file.read(reinterpret_cast<char*>(&object.health), sizeof(object.health));
-        file.read(reinterpret_cast<char*>(&object.blocksMovement), sizeof(object.blocksMovement));
+        file.read(reinterpret_cast<char*>(&object.blocksMovement), 
+                  sizeof(object.blocksMovement));
         file.read(reinterpret_cast<char*>(&object.discovered), sizeof(object.discovered));
         file.read(reinterpret_cast<char*>(&object.manualLoot), sizeof(object.manualLoot));
         if (hasSemanticAuthoringState) {
-            file.read(reinterpret_cast<char*>(&object.semanticAutoCreated), sizeof(object.semanticAutoCreated));
-            file.read(reinterpret_cast<char*>(&object.semanticLayoutPinned), sizeof(object.semanticLayoutPinned));
+            file.read(reinterpret_cast<char*>(&object.semanticAutoCreated), 
+                      sizeof(object.semanticAutoCreated));
+            file.read(reinterpret_cast<char*>(&object.semanticLayoutPinned), 
+                      sizeof(object.semanticLayoutPinned));
         }
-
         if (!file) {
             return false;
         }
-
         object.interaction = static_cast<InteractionType>(interaction);
         object.category = static_cast<ObjectCategory>(category);
-
         for (auto& lootId : object.manualLootIds) {
             if (!ReadString(file, lootId)) {
                 return false;
@@ -583,43 +578,40 @@ bool World::Load(const std::string& path) {
                 object.lootEntries.push_back(std::move(entry));
             }
         }
-
-        if (!hasSemanticAuthoringState && hasExtendedObjectData && LooksLikeLegacySemanticAutoAnchor(object)) {
+        if (!hasSemanticAuthoringState && hasExtendedObjectData && 
+            LooksLikeLegacySemanticAutoAnchor(object)) {
             object.semanticAutoCreated = true;
         }
         NormalizeLoadedObject(object);
         objects.push_back(std::move(object));
     }
-
     return true;
 }
-
 bool World::Save(const std::string& path) const {
     std::ofstream file(path, std::ios::binary);
     if (!file.is_open()) {
         return false;
     }
-
     file.write(CurrentWorldBinaryFormatLabel(), 4);
     WriteString(file, metadata.name);
     WriteString(file, metadata.biome);
     WriteString(file, metadata.objective);
-    file.write(reinterpret_cast<const char*>(&metadata.playerSpawnX), sizeof(metadata.playerSpawnX));
-    file.write(reinterpret_cast<const char*>(&metadata.playerSpawnY), sizeof(metadata.playerSpawnY));
-
+    file.write(reinterpret_cast<const char*>(&metadata.playerSpawnX), 
+               sizeof(metadata.playerSpawnX));
+    file.write(reinterpret_cast<const char*>(&metadata.playerSpawnY), 
+               sizeof(metadata.playerSpawnY));
     const auto count = static_cast<std::uint32_t>(objects.size());
     file.write(reinterpret_cast<const char*>(&count), sizeof(count));
-
     for (const auto& object : objects) {
         const auto interaction = static_cast<std::uint32_t>(object.interaction);
         const auto category = static_cast<std::uint32_t>(object.category);
-
         WriteString(file, object.registryId);
         WriteString(file, object.displayName);
         WriteString(file, object.scriptTag);
         WriteString(file, object.linkTarget);
         const std::string normalizedLayer = NormalizeEditorLayerName(object.editorLayer);
-        WriteString(file, normalizedLayer.empty() ? DefaultEditorLayerName(object) : normalizedLayer);
+        WriteString(file, normalizedLayer.empty() ? DefaultEditorLayerName(object) : 
+                    normalizedLayer);
         WriteString(file, object.prefabSourceId);
         file.write(reinterpret_cast<const char*>(&interaction), sizeof(interaction));
         file.write(reinterpret_cast<const char*>(&category), sizeof(category));
@@ -633,15 +625,16 @@ bool World::Save(const std::string& path) const {
         file.write(reinterpret_cast<const char*>(&object.depth), sizeof(object.depth));
         file.write(reinterpret_cast<const char*>(&object.height), sizeof(object.height));
         file.write(reinterpret_cast<const char*>(&object.health), sizeof(object.health));
-        file.write(reinterpret_cast<const char*>(&object.blocksMovement), sizeof(object.blocksMovement));
+        file.write(reinterpret_cast<const char*>(&object.blocksMovement), 
+                  sizeof(object.blocksMovement));
         file.write(reinterpret_cast<const char*>(&object.discovered), sizeof(object.discovered));
         file.write(reinterpret_cast<const char*>(&object.manualLoot), sizeof(object.manualLoot));
-        file.write(reinterpret_cast<const char*>(&object.semanticAutoCreated), sizeof(object.semanticAutoCreated));
-        file.write(reinterpret_cast<const char*>(&object.semanticLayoutPinned), sizeof(object.semanticLayoutPinned));
-
+        file.write(reinterpret_cast<const char*>(&object.semanticAutoCreated), 
+                  sizeof(object.semanticAutoCreated));
+        file.write(reinterpret_cast<const char*>(&object.semanticLayoutPinned), 
+                  sizeof(object.semanticLayoutPinned));
         std::vector<LootEntry> persistedLootEntries = object.lootEntries;
         TrimTrailingEmptyLootEntries(persistedLootEntries);
-
         std::array<std::string, 4> legacyLootIds{};
         for (std::size_t lootIndex = 0;
              lootIndex < legacyLootIds.size() && lootIndex < persistedLootEntries.size();
@@ -660,7 +653,6 @@ bool World::Save(const std::string& path) const {
             WriteLootEntry(file, entry);
         }
     }
-
     return static_cast<bool>(file);
 }
 
@@ -671,7 +663,6 @@ void World::GeneratePrototypeZone() {
     metadata.objective = "Wake from cryostasis, recover the Pip-Pad, restore BT-72, and force open the first recovery route.";
     metadata.playerSpawnX = -12.0f;
     metadata.playerSpawnY = -8.0f;
-
     AddObject({
         "[%cryo_0001]",
         "Cryo Capsule 14",
@@ -689,7 +680,6 @@ void World::GeneratePrototypeZone() {
         false,
         {}
     });
-
     AddObject({
         "[%pip_0001]",
         "Pip-Pad Recovery Locker",
@@ -707,7 +697,6 @@ void World::GeneratePrototypeZone() {
         true,
         {"#%it_pippad", "cryo_medkit", "", ""}
     });
-
     AddObject({
         "[%archive_0001]",
         "Missing Personnel Archive",
@@ -725,7 +714,6 @@ void World::GeneratePrototypeZone() {
         false,
         {}
     });
-
     AddObject({
         "[%enemy_laska_0001]",
         "Feral Laska",
@@ -744,7 +732,6 @@ void World::GeneratePrototypeZone() {
         {},
         "vermin_rush"
     });
-
     AddObject({
         "[%core_0001]",
         "Central Core Rack",
@@ -761,7 +748,6 @@ void World::GeneratePrototypeZone() {
         true,
         {}
     });
-
     AddObject({
         "[%garage_0001]",
         "Garage Lift",
@@ -779,9 +765,7 @@ void World::GeneratePrototypeZone() {
         false,
         {}
     });
-
     AddStarterRouteRuntimeObjects(*this, false);
-
     AddObject({
         "[#tr_hull_0001]",
         "First Tank Hull",
@@ -799,7 +783,6 @@ void World::GeneratePrototypeZone() {
         false,
         {}
     });
-
     AddObject({
         "[%workshop_0001]",
         "Field Workshop",
@@ -817,7 +800,6 @@ void World::GeneratePrototypeZone() {
         false,
         {}
     });
-
     AddObject({
         "[%workshop_cache_0001]",
         "Workshop Supply Cache",
@@ -835,7 +817,6 @@ void World::GeneratePrototypeZone() {
         true,
         {"repair_patch", "power_cell", "#%it_ptrs_ammo", ""}
     });
-
     AddObject({
         "[%echo_0001]",
         "Echo Residue // Maintenance Ghost",
@@ -855,7 +836,6 @@ void World::GeneratePrototypeZone() {
         "echo_trace",
         "[%workshop_cache_0001]"
     });
-
     AddObject({
         "[%spec_eng_0001]",
         "Cryo Capsule // Senior Engineer",
@@ -875,7 +855,6 @@ void World::GeneratePrototypeZone() {
         "specialist_cryo",
         "engineer"
     });
-
     AddObject({
         "#%it_bucket_0001",
         "Bucket Plow Rack",
@@ -893,7 +872,6 @@ void World::GeneratePrototypeZone() {
         true,
         {"scrap_steel", "hydraulic_seal", "", ""}
     });
-
     AddObject({
         "[%bulkhead_0001]",
         "Outer Bulkhead",
@@ -911,7 +889,6 @@ void World::GeneratePrototypeZone() {
         false,
         {}
     });
-
     AddObject({
         "[%glass_lift_0001]",
         "Lift Observation Glass",
@@ -929,7 +906,6 @@ void World::GeneratePrototypeZone() {
         false,
         {}
     });
-
     AddObject({
         "#%res_scrap_0001",
         "Outer Debris Barrier",
@@ -947,7 +923,6 @@ void World::GeneratePrototypeZone() {
         true,
         {"steel_scrap", "copper_wire", "old_plate", ""}
     });
-
     AddObject({
         "#%term_0001",
         "Outskirts Relay Terminal",
@@ -965,7 +940,6 @@ void World::GeneratePrototypeZone() {
         false,
         {}
     });
-
     AddObject({
         "[%brush_surface_0001]",
         "Surface Brush Cluster",
@@ -983,7 +957,6 @@ void World::GeneratePrototypeZone() {
         false,
         {}
     });
-
     AddObject({
         "[%pylon_0001]",
         "North Service Pylon",
@@ -1003,7 +976,6 @@ void World::GeneratePrototypeZone() {
         "power_pylon",
         "regional_grid_north"
     });
-
     AddObject({
         "[%pylon_0002]",
         "South Service Pylon",
@@ -1023,7 +995,6 @@ void World::GeneratePrototypeZone() {
         "power_pylon",
         "regional_grid_south"
     });
-
     AddObject({
         "[%drone_0001]",
         "Field Drone Station",
@@ -1043,7 +1014,6 @@ void World::GeneratePrototypeZone() {
         "drone_station",
         "salvage_sweep"
     });
-
     AddObject({
         "[%rail_0001]",
         "Industrial Rail Depot",
@@ -1063,7 +1033,6 @@ void World::GeneratePrototypeZone() {
         "rail_depot",
         "industrial_spur_alpha"
     });
-
     AddObject({
         "[%orbit_0001]",
         "Orbital Uplink Mast",
@@ -1083,7 +1052,6 @@ void World::GeneratePrototypeZone() {
         "orbital_uplink",
         "low_orbit_scan"
     });
-
     AddObject({
         "[%fortress_0001]",
         "Rail Fortress Depot",
@@ -1103,7 +1071,6 @@ void World::GeneratePrototypeZone() {
         "rail_fortress_hub",
         "magistral_anchor_alpha"
     });
-
     AddObject({
         "[%fabricator_0001]",
         "Recovery Fabricator Node",
@@ -1123,7 +1090,6 @@ void World::GeneratePrototypeZone() {
         "recovery_fabricator",
         "shelter17_refinery"
     });
-
     AddObject({
         "[%industrial_gate_0001]",
         "Industrial Gate Override",
@@ -1143,7 +1109,6 @@ void World::GeneratePrototypeZone() {
         "industrial_gate",
         "inner_spur_alpha"
     });
-
     AddObject({
         "[%survey_0001]",
         "Industrial Survey Beacon",
@@ -1163,7 +1128,6 @@ void World::GeneratePrototypeZone() {
         "industrial_survey",
         "inner_spur_survey"
     });
-
     AddObject({
         "[%outpost_0001]",
         "Inner Spur Outpost Hub",
@@ -1183,7 +1147,6 @@ void World::GeneratePrototypeZone() {
         "industrial_outpost",
         "inner_spur_outpost"
     });
-
     AddObject({
         "[%assembly_0001]",
         "Inner Spur Assembly Cell",
@@ -1203,7 +1166,6 @@ void World::GeneratePrototypeZone() {
         "assembly_cell",
         "inner_spur_assembly"
     });
-
     AddObject({
         "[%foundry_0001]",
         "Inner Spur Foundry Line",
@@ -1223,7 +1185,234 @@ void World::GeneratePrototypeZone() {
         "foundry_line",
         "inner_spur_foundry"
     });
-
+    AddObject({
+        "[%reactor_0001]",
+        "Inner Spur Reactor Yard",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        52.0f,
+        -5.5f,
+        0.0f,
+        3.2f,
+        1.2f,
+        3.2f,
+        90.0f,
+        false,
+        true,
+        false,
+        {},
+        "power_pylon",
+        "regional_grid_north"
+    });
+    AddObject({
+        "[%pylon_0002]",
+        "South Service Pylon",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        25.0f,
+        -5.0f,
+        0.0f,
+        1.4f,
+        1.2f,
+        3.2f,
+        90.0f,
+        false,
+        true,
+        false,
+        {},
+        "power_pylon",
+        "regional_grid_south"
+    });
+    AddObject({
+        "[%drone_0001]",
+        "Field Drone Station",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        21.0f,
+        -8.0f,
+        0.0f,
+        1.8f,
+        1.5f,
+        2.4f,
+        85.0f,
+        false,
+        true,
+        false,
+        {},
+        "drone_station",
+        "salvage_sweep"
+    });
+    AddObject({
+        "[%rail_0001]",
+        "Industrial Rail Depot",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        28.5f,
+        -7.5f,
+        0.0f,
+        2.6f,
+        1.8f,
+        2.8f,
+        90.0f,
+        false,
+        true,
+        false,
+        {},
+        "rail_depot",
+        "industrial_spur_alpha"
+    });
+    AddObject({
+        "[%orbit_0001]",
+        "Orbital Uplink Mast",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        30.5f,
+        -2.5f,
+        0.0f,
+        2.2f,
+        1.6f,
+        4.2f,
+        100.0f,
+        false,
+        true,
+        false,
+        {},
+        "orbital_uplink",
+        "low_orbit_scan"
+    });
+    AddObject({
+        "[%fortress_0001]",
+        "Rail Fortress Depot",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        33.0f,
+        -7.2f,
+        0.0f,
+        3.0f,
+        1.9f,
+        3.0f,
+        100.0f,
+        false,
+        true,
+        false,
+        {},
+        "rail_fortress_hub",
+        "magistral_anchor_alpha"
+    });
+    AddObject({
+        "[%fabricator_0001]",
+        "Recovery Fabricator Node",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        8.5f,
+        -7.8f,
+        0.0f,
+        2.0f,
+        1.6f,
+        2.4f,
+        100.0f,
+        false,
+        true,
+        false,
+        {},
+        "recovery_fabricator",
+        "shelter17_refinery"
+    });
+    AddObject({
+        "[%industrial_gate_0001]",
+        "Industrial Gate Override",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        36.5f,
+        -3.2f,
+        0.0f,
+        2.4f,
+        1.8f,
+        2.8f,
+        100.0f,
+        false,
+        true,
+        false,
+        {},
+        "industrial_gate",
+        "inner_spur_alpha"
+    });
+    AddObject({
+        "[%survey_0001]",
+        "Industrial Survey Beacon",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        39.5f,
+        -5.6f,
+        0.0f,
+        2.0f,
+        1.6f,
+        3.0f,
+        100.0f,
+        false,
+        true,
+        false,
+        {},
+        "industrial_survey",
+        "inner_spur_survey"
+    });
+    AddObject({
+        "[%outpost_0001]",
+        "Inner Spur Outpost Hub",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        43.0f,
+        -7.0f,
+        0.0f,
+        2.4f,
+        1.8f,
+        2.6f,
+        100.0f,
+        false,
+        true,
+        false,
+        {},
+        "industrial_outpost",
+        "inner_spur_outpost"
+    });
+    AddObject({
+        "[%assembly_0001]",
+        "Inner Spur Assembly Cell",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        46.0f,
+        -4.8f,
+        0.0f,
+        2.6f,
+        1.8f,
+        2.8f,
+        100.0f,
+        false,
+        true,
+        false,
+        {},
+        "assembly_cell",
+        "inner_spur_assembly"
+    });
+    AddObject({
+        "[%foundry_0001]",
+        "Inner Spur Foundry Line",
+        InteractionType::Terminal,
+        ObjectCategory::Terminal,
+        48.8f,
+        -7.2f,
+        0.0f,
+        3.0f,
+        2.0f,
+        3.2f,
+        100.0f,
+        false,
+        true,
+        false,
+        {},
+        "foundry_line",
+        "inner_spur_foundry"
+    });
     AddObject({
         "[%reactor_0001]",
         "Inner Spur Reactor Yard",
@@ -1243,7 +1432,6 @@ void World::GeneratePrototypeZone() {
         "reactor_yard",
         "inner_spur_reactor"
     });
-
     AddObject({
         "[%capacitor_0001]",
         "Inner Spur Capacitor Bank",
@@ -1261,958 +1449,8 @@ void World::GeneratePrototypeZone() {
         false,
         {},
         "capacitor_bank",
-        "inner_spur_capacitor"
-    });
-
-    AddObject({
-        "[%substation_0001]",
-        "Inner Spur Relay Substation",
-        InteractionType::Terminal,
-        ObjectCategory::Terminal,
-        58.3f,
-        -5.8f,
-        0.0f,
-        3.1f,
-        2.0f,
-        3.2f,
-        100.0f,
-        false,
-        true,
-        false,
-        {},
-        "relay_substation",
-        "shelter17_backbone"
-    });
-
-    AddObject({
-        "[%servicebay_0001]",
-        "Inner Spur Service Bay",
-        InteractionType::Terminal,
-        ObjectCategory::Terminal,
-        61.1f,
-        -7.2f,
-        0.0f,
-        3.3f,
-        2.1f,
-        3.3f,
-        100.0f,
-        false,
-        true,
-        false,
-        {},
-        "service_bay",
-        "inner_spur_service"
-    });
-
-    AddObject({
-        "[%water_0001]",
-        "Inner Spur Water Reclaimer",
-        InteractionType::Terminal,
-        ObjectCategory::Terminal,
-        64.0f,
-        -5.6f,
-        0.0f,
-        3.0f,
-        2.0f,
-        3.1f,
-        100.0f,
-        false,
-        true,
-        false,
-        {},
-        "water_reclaimer",
-        "inner_spur_water"
-    });
-
-    AddObject({
-        "[%services_0001]",
-        "Shelter 17 Lanline Service Hub",
-        InteractionType::Terminal,
-        ObjectCategory::Terminal,
-        66.8f,
-        -6.8f,
-        0.0f,
-        2.6f,
-        1.8f,
-        2.8f,
-        100.0f,
-        false,
-        true,
-        false,
-        {},
-        "lanline_service_hub",
-        "shelter17_services"
-    });
-
-    AddObject({
-        "[%fey_0001]",
-        "Shelter 17 Fey Ring Gate",
-        InteractionType::Terminal,
-        ObjectCategory::Landmark,
-        69.4f,
-        -5.6f,
-        0.0f,
-        3.0f,
-        2.0f,
-        3.2f,
-        100.0f,
-        false,
-        true,
-        false,
-        {},
-        "fey_ring",
-        "intercity_ring"
-    });
-
-    AddObject({
-        "[%med_0001]",
-        "Field Medical Relay",
-        InteractionType::Terminal,
-        ObjectCategory::Terminal,
-        63.5f,
-        -8.7f,
-        0.0f,
-        1.8f,
-        1.4f,
-        2.1f,
-        100.0f,
-        false,
-        true,
-        false,
-        {},
-        "medical_support",
-        "field_medical"
-    });
-
-    AddObject({
-        "[%tankservice_0001]",
-        "BT-72 Tank Service Anchor",
-        InteractionType::Workshop,
-        ObjectCategory::Hangar,
-        61.7f,
-        -9.5f,
-        0.0f,
-        3.4f,
-        2.2f,
-        3.0f,
-        100.0f,
-        false,
-        true,
-        false,
-        {},
-        "tank_service",
-        "bt72_service"
-    });
-
-    AddObject({
-        "[%debrief_0001]",
-        "Shelter 17 Debrief Console",
-        InteractionType::Terminal,
-        ObjectCategory::Terminal,
-        -2.5f,
-        3.2f,
-        0.0f,
-        2.0f,
-        1.6f,
-        2.0f,
-        100.0f,
-        false,
-        true,
-        false,
-        {}
-    });
-
-    AddObject({
-        "[%enemy_ghoul_0001]",
-        "Outer Ghoul",
-        InteractionType::Hostile,
-        ObjectCategory::Hostile,
-        18.5f,
-        -1.0f,
-        0.0f,
-        1.3f,
-        1.1f,
-        1.6f,
-        55.0f,
-        true,
-        true,
-        false,
-        {},
-        "ghoul_rush"
-    });
-
-    AddObject({
-        "[%gate_0001]",
-        "Outer Gate Wall",
-        InteractionType::Static,
-        ObjectCategory::Structure,
-        24.0f,
-        2.0f,
-        0.0f,
-        8.0f,
-        2.0f,
-        4.0f,
-        500.0f,
-        true,
-        true,
-        false,
-        {}
-    });
-
-    AddObject({
-        "[%camp_0001]",
-        "Forward Camp Marker",
-        InteractionType::Transition,
-        ObjectCategory::Landmark,
-        22.0f,
-        -6.0f,
-        0.0f,
-        2.5f,
-        2.5f,
-        1.0f,
-        100.0f,
-        false,
-        true,
-        false,
-        {}
+        "inner_spur_capacitors"
     });
 }
 
-void World::EnsureStarterInfrastructure() {
-    if (objects.empty()) {
-        GeneratePrototypeZone();
-        return;
-    }
-
-    if (IsStarterScenarioWorld()) {
-        AddStarterRouteRuntimeObjects(*this, true);
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%echo_0001]")) {
-        AddObject({
-            "[%echo_0001]",
-            "Echo Residue // Maintenance Ghost",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            5.8f,
-            1.4f,
-            0.0f,
-            1.0f,
-            1.0f,
-            1.4f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "echo_trace",
-            "[%workshop_cache_0001]"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%spec_eng_0001]")) {
-        AddObject({
-            "[%spec_eng_0001]",
-            "Cryo Capsule // Senior Engineer",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            -10.4f,
-            -10.4f,
-            0.0f,
-            1.8f,
-            1.4f,
-            2.2f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "specialist_cryo",
-            "engineer"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%pylon_0001]")) {
-        AddObject({
-            "[%pylon_0001]",
-            "North Service Pylon",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            18.0f,
-            4.5f,
-            0.0f,
-            1.4f,
-            1.2f,
-            3.2f,
-            90.0f,
-            false,
-            true,
-            false,
-            {},
-            "power_pylon",
-            "regional_grid_north"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%pylon_0002]")) {
-        AddObject({
-            "[%pylon_0002]",
-            "South Service Pylon",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            25.0f,
-            -5.0f,
-            0.0f,
-            1.4f,
-            1.2f,
-            3.2f,
-            90.0f,
-            false,
-            true,
-            false,
-            {},
-            "power_pylon",
-            "regional_grid_south"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%drone_0001]")) {
-        AddObject({
-            "[%drone_0001]",
-            "Field Drone Station",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            21.0f,
-            -8.0f,
-            0.0f,
-            1.8f,
-            1.5f,
-            2.4f,
-            85.0f,
-            false,
-            true,
-            false,
-            {},
-            "drone_station",
-            "salvage_sweep"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%rail_0001]")) {
-        AddObject({
-            "[%rail_0001]",
-            "Industrial Rail Depot",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            28.5f,
-            -7.5f,
-            0.0f,
-            2.6f,
-            1.8f,
-            2.8f,
-            90.0f,
-            false,
-            true,
-            false,
-            {},
-            "rail_depot",
-            "industrial_spur_alpha"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%orbit_0001]")) {
-        AddObject({
-            "[%orbit_0001]",
-            "Orbital Uplink Mast",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            30.5f,
-            -2.5f,
-            0.0f,
-            2.2f,
-            1.6f,
-            4.2f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "orbital_uplink",
-            "low_orbit_scan"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%fortress_0001]")) {
-        AddObject({
-            "[%fortress_0001]",
-            "Rail Fortress Depot",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            33.0f,
-            -7.2f,
-            0.0f,
-            3.0f,
-            1.9f,
-            3.0f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "rail_fortress_hub",
-            "magistral_anchor_alpha"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%fabricator_0001]")) {
-        AddObject({
-            "[%fabricator_0001]",
-            "Recovery Fabricator Node",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            8.5f,
-            -7.8f,
-            0.0f,
-            2.0f,
-            1.6f,
-            2.4f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "recovery_fabricator",
-            "shelter17_refinery"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%industrial_gate_0001]")) {
-        AddObject({
-            "[%industrial_gate_0001]",
-            "Industrial Gate Override",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            36.5f,
-            -3.2f,
-            0.0f,
-            2.4f,
-            1.8f,
-            2.8f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "industrial_gate",
-            "inner_spur_alpha"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%survey_0001]")) {
-        AddObject({
-            "[%survey_0001]",
-            "Industrial Survey Beacon",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            39.5f,
-            -5.6f,
-            0.0f,
-            2.0f,
-            1.6f,
-            3.0f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "industrial_survey",
-            "inner_spur_survey"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%outpost_0001]")) {
-        AddObject({
-            "[%outpost_0001]",
-            "Inner Spur Outpost Hub",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            43.0f,
-            -7.0f,
-            0.0f,
-            2.4f,
-            1.8f,
-            2.6f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "industrial_outpost",
-            "inner_spur_outpost"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%assembly_0001]")) {
-        AddObject({
-            "[%assembly_0001]",
-            "Inner Spur Assembly Cell",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            46.0f,
-            -4.8f,
-            0.0f,
-            2.6f,
-            1.8f,
-            2.8f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "assembly_cell",
-            "inner_spur_assembly"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%foundry_0001]")) {
-        AddObject({
-            "[%foundry_0001]",
-            "Inner Spur Foundry Line",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            48.8f,
-            -7.2f,
-            0.0f,
-            3.0f,
-            2.0f,
-            3.2f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "foundry_line",
-            "inner_spur_foundry"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%reactor_0001]")) {
-        AddObject({
-            "[%reactor_0001]",
-            "Inner Spur Reactor Yard",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            52.0f,
-            -5.5f,
-            0.0f,
-            3.2f,
-            2.1f,
-            3.4f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "reactor_yard",
-            "inner_spur_reactor"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%capacitor_0001]")) {
-        AddObject({
-            "[%capacitor_0001]",
-            "Inner Spur Capacitor Bank",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            55.2f,
-            -7.0f,
-            0.0f,
-            3.0f,
-            2.0f,
-            3.0f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "capacitor_bank",
-            "inner_spur_capacitor"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%substation_0001]")) {
-        AddObject({
-            "[%substation_0001]",
-            "Inner Spur Relay Substation",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            58.3f,
-            -5.8f,
-            0.0f,
-            3.1f,
-            2.0f,
-            3.2f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "relay_substation",
-            "shelter17_backbone"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%servicebay_0001]")) {
-        AddObject({
-            "[%servicebay_0001]",
-            "Inner Spur Service Bay",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            61.1f,
-            -7.2f,
-            0.0f,
-            3.3f,
-            2.1f,
-            3.3f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "service_bay",
-            "inner_spur_service"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%water_0001]")) {
-        AddObject({
-            "[%water_0001]",
-            "Inner Spur Water Reclaimer",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            64.0f,
-            -5.6f,
-            0.0f,
-            3.0f,
-            2.0f,
-            3.1f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "water_reclaimer",
-            "inner_spur_water"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%services_0001]")) {
-        AddObject({
-            "[%services_0001]",
-            "Shelter 17 Lanline Service Hub",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            66.8f,
-            -6.8f,
-            0.0f,
-            2.6f,
-            1.8f,
-            2.8f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "lanline_service_hub",
-            "shelter17_services"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%fey_0001]")) {
-        AddObject({
-            "[%fey_0001]",
-            "Shelter 17 Fey Ring Gate",
-            InteractionType::Terminal,
-            ObjectCategory::Landmark,
-            69.4f,
-            -5.6f,
-            0.0f,
-            3.0f,
-            2.0f,
-            3.2f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "fey_ring",
-            "intercity_ring"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%med_0001]")) {
-        AddObject({
-            "[%med_0001]",
-            "Field Medical Relay",
-            InteractionType::Terminal,
-            ObjectCategory::Terminal,
-            63.5f,
-            -8.7f,
-            0.0f,
-            1.8f,
-            1.4f,
-            2.1f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "medical_support",
-            "field_medical"
-        });
-    }
-    if (IsStarterScenarioWorld() && !HasObject("[%tankservice_0001]")) {
-        AddObject({
-            "[%tankservice_0001]",
-            "BT-72 Tank Service Anchor",
-            InteractionType::Workshop,
-            ObjectCategory::Hangar,
-            61.7f,
-            -9.5f,
-            0.0f,
-            3.4f,
-            2.2f,
-            3.0f,
-            100.0f,
-            false,
-            true,
-            false,
-            {},
-            "tank_service",
-            "bt72_service"
-        });
-    }
-}
-
-bool World::HasObject(const std::string& registryId) const {
-    return std::any_of(objects.begin(), objects.end(), [&](const MapObject& object) {
-        return object.registryId == registryId;
-    });
-}
-
-const MapObject* World::FindObjectByRegistryId(const std::string& registryId) const {
-    for (const auto& object : objects) {
-        if (object.registryId == registryId) {
-            return &object;
-        }
-    }
-    return nullptr;
-}
-
-MapObject* World::FindObjectByRegistryId(const std::string& registryId) {
-    for (auto& object : objects) {
-        if (object.registryId == registryId) {
-            return &object;
-        }
-    }
-    return nullptr;
-}
-
-const MapObject* World::FindObjectByScriptTag(const std::string& scriptTag) const {
-    const std::string_view normalizedTag = NormalizeGameplayDescriptorTag(scriptTag);
-    for (const auto& object : objects) {
-        if (NormalizeGameplayDescriptorTag(object.scriptTag) == normalizedTag) {
-            return &object;
-        }
-    }
-    return nullptr;
-}
-
-MapObject* World::FindObjectByScriptTag(const std::string& scriptTag) {
-    const std::string_view normalizedTag = NormalizeGameplayDescriptorTag(scriptTag);
-    for (auto& object : objects) {
-        if (NormalizeGameplayDescriptorTag(object.scriptTag) == normalizedTag) {
-            return &object;
-        }
-    }
-    return nullptr;
-}
-
-const MapObject* World::FindObjectByLinkTarget(const std::string& linkTarget) const {
-    for (const auto& object : objects) {
-        if (object.linkTarget == linkTarget) {
-            return &object;
-        }
-    }
-    return nullptr;
-}
-
-MapObject* World::FindObjectByLinkTarget(const std::string& linkTarget) {
-    for (auto& object : objects) {
-        if (object.linkTarget == linkTarget) {
-            return &object;
-        }
-    }
-    return nullptr;
-}
-
-std::vector<WorldObjectReference> World::BuildObjectReferences() const {
-    std::vector<WorldObjectReference> references;
-    std::unordered_map<std::string, int> objectIndexById;
-    objectIndexById.reserve(objects.size());
-    for (int objectIndex = 0; objectIndex < static_cast<int>(objects.size()); ++objectIndex) {
-        objectIndexById[objects[static_cast<std::size_t>(objectIndex)].registryId] = objectIndex;
-    }
-
-    references.reserve(objects.size());
-    for (int objectIndex = 0; objectIndex < static_cast<int>(objects.size()); ++objectIndex) {
-        const auto& object = objects[static_cast<std::size_t>(objectIndex)];
-        if (object.linkTarget.empty()) {
-            continue;
-        }
-
-        const auto targetIt = objectIndexById.find(object.linkTarget);
-        const bool resolved = targetIt != objectIndexById.end();
-        if (!resolved && !LooksLikeRegistryStyleReference(object.linkTarget)) {
-            continue;
-        }
-
-        WorldObjectReference reference;
-        reference.field = WorldObjectReferenceField::LinkTarget;
-        reference.sourceObjectIndex = objectIndex;
-        reference.sourceObjectId = object.registryId;
-        reference.sourceDisplayName = object.displayName;
-        reference.sourceScriptTag = object.scriptTag;
-        reference.targetObjectId = object.linkTarget;
-        reference.viaValue = object.linkTarget;
-        reference.resolved = resolved;
-        if (resolved) {
-            reference.targetObjectIndex = targetIt->second;
-        }
-        references.push_back(std::move(reference));
-    }
-
-    return references;
-}
-
-std::vector<WorldObjectReference> World::FindIncomingObjectReferences(const std::string& registryId) const {
-    std::vector<WorldObjectReference> references;
-    for (const auto& reference : BuildObjectReferences()) {
-        if (!reference.resolved || reference.targetObjectId != registryId) {
-            continue;
-        }
-        references.push_back(reference);
-    }
-    return references;
-}
-
-std::vector<WorldObjectReference> World::FindOutgoingObjectReferences(const std::string& registryId) const {
-    std::vector<WorldObjectReference> references;
-    for (const auto& reference : BuildObjectReferences()) {
-        if (reference.sourceObjectId != registryId) {
-            continue;
-        }
-        references.push_back(reference);
-    }
-    return references;
-}
-
-std::vector<std::string> World::CollectEditorLayerNames() const {
-    std::vector<std::string> layerNames;
-    for (std::string_view knownLayer : kKnownEditorLayers) {
-        if (CountObjectsInEditorLayer(knownLayer) > 0) {
-            layerNames.emplace_back(knownLayer);
-        }
-    }
-
-    std::vector<std::string> customLayerNames;
-    for (const auto& object : objects) {
-        const std::string normalizedLayer = NormalizeEditorLayerName(object.editorLayer);
-        const std::string resolvedLayer = normalizedLayer.empty()
-            ? DefaultEditorLayerName(object)
-            : normalizedLayer;
-        if (std::find(kKnownEditorLayers.begin(), kKnownEditorLayers.end(), resolvedLayer) != kKnownEditorLayers.end()) {
-            continue;
-        }
-        AppendUniqueLayer(customLayerNames, resolvedLayer);
-    }
-
-    std::sort(customLayerNames.begin(), customLayerNames.end());
-    for (std::string& customLayer : customLayerNames) {
-        layerNames.push_back(std::move(customLayer));
-    }
-    return layerNames;
-}
-
-int World::CountObjectsInEditorLayer(std::string_view layerName) const {
-    const std::string normalizedQueryLayer = NormalizeEditorLayerName(layerName);
-    if (normalizedQueryLayer.empty()) {
-        return 0;
-    }
-
-    int count = 0;
-    for (const auto& object : objects) {
-        const std::string normalizedLayer = NormalizeEditorLayerName(object.editorLayer);
-        const std::string resolvedLayer = normalizedLayer.empty()
-            ? DefaultEditorLayerName(object)
-            : normalizedLayer;
-        if (resolvedLayer == normalizedQueryLayer) {
-            ++count;
-        }
-    }
-    return count;
-}
-
-float World::GetWorldHeightAt(float x, float y) const {
-    float height = 0.0f;
-    for (const auto& object : objects) {
-        if (!IsTerrainHeightSource(object)) {
-            continue;
-        }
-
-        const float radiusX = std::max(0.5f, object.width * 0.75f);
-        const float radiusY = std::max(0.5f, object.depth * 0.75f);
-        const float dx = (x - object.x) / radiusX;
-        const float dy = (y - object.y) / radiusY;
-        const float distanceSq = dx * dx + dy * dy;
-        if (distanceSq > 1.0f) {
-            continue;
-        }
-
-        const float influence = (1.0f - distanceSq) * (1.0f - distanceSq);
-        const float peak = std::max(object.z, object.height * 0.65f);
-        height += peak * influence;
-    }
-    return std::clamp(height, -18.0f, 42.0f);
-}
-
-bool World::HasIncomingObjectReferences(const std::string& registryId) const {
-    for (const auto& reference : BuildObjectReferences()) {
-        if (reference.resolved && reference.targetObjectId == registryId) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool World::HasScriptTag(const std::string& scriptTag) const {
-    return FindObjectByScriptTag(scriptTag) != nullptr;
-}
-
-bool World::HasLinkTarget(const std::string& linkTarget) const {
-    return FindObjectByLinkTarget(linkTarget) != nullptr;
-}
-
-bool World::IsStarterScenarioWorld() const {
-    return HasObject("[%cryo_0001]") &&
-        HasObject("[%archive_0001]") &&
-        HasObject("[#tr_hull_0001]");
-}
-
-const MapObject* World::FindNearestInteractive(float x, float y, float radius) const {
-    const MapObject* nearest = nullptr;
-    float bestDistanceSq = radius * radius;
-
-    for (const auto& object : objects) {
-        if (object.interaction == InteractionType::Static) {
-            continue;
-        }
-
-        const float dx = object.x - x;
-        const float dy = object.y - y;
-        const float distanceSq = (dx * dx) + (dy * dy);
-        if (distanceSq <= bestDistanceSq) {
-            nearest = &object;
-            bestDistanceSq = distanceSq;
-        }
-    }
-
-    return nearest;
-}
-
-void World::RemoveObject(const std::string& registryId) {
-    objects.erase(
-        std::remove_if(objects.begin(), objects.end(),
-            [&](const MapObject& obj) { return obj.registryId == registryId; }),
-        objects.end());
-}
-
-}  // namespace bunker
+} // namespace bunker

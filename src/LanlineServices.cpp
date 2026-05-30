@@ -1,13 +1,10 @@
 #include "../include/LanlineServices.hpp"
-
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <sstream>
-
 #include "imgui.h"
-
 #include "../include/AppPaths.hpp"
 #include "../include/StoryRoute.hpp"
 
@@ -46,7 +43,7 @@ NetworkPlayerVisualSnapshot BuildVisualSnapshot(const SessionProfile& profile, f
     NetworkPlayerVisualSnapshot snapshot{};
     snapshot.networkPlayerId = ParseNetworkPlayerId(profile.character.characterId);
     std::snprintf(snapshot.characterName, sizeof(snapshot.characterName), "%s", profile.character.displayName.c_str());
-
+    
     if (!profile.character.weaponMods.empty()) {
         const auto& weapon = profile.character.weaponMods.front();
         snapshot.equippedWeapon.weaponRegistryIdHash = HashVisualId(weapon.weaponItemId);
@@ -58,7 +55,7 @@ NetworkPlayerVisualSnapshot BuildVisualSnapshot(const SessionProfile& profile, f
         snapshot.equippedWeapon.wearLevel = 45;
         snapshot.equippedWeapon.metallicGloss = 180;
     }
-
+    
     snapshot.apparel.undergarmentId = 1;
     snapshot.apparel.armorPlatesId = 0;
     snapshot.apparel.decalId = 76;
@@ -82,19 +79,19 @@ void UpsertVisualSnapshot(const NetworkPlayerVisualSnapshot& snapshot) {
 
 const char* ToLabel(SupportCategory category) {
     switch (category) {
-        case SupportCategory::Materials: return "Materials";
-        case SupportCategory::Skins: return "Skins";
-        case SupportCategory::Cosmetics: return "Cosmetics";
-        case SupportCategory::Utility: return "Utility";
+        case SupportCategory::Materials:   return "Materials";
+        case SupportCategory::Skins:       return "Skins";
+        case SupportCategory::Cosmetics:   return "Cosmetics";
+        case SupportCategory::Utility:     return "Utility";
         case SupportCategory::TankService: return "Tank Service";
-        case SupportCategory::Medical: return "Medical";
+        case SupportCategory::Medical:     return "Medical";
     }
     return "Unknown";
 }
 
 const char* ToLabel(StoreCurrency currency) {
     switch (currency) {
-        case StoreCurrency::InGame: return "Recovery Scrip";
+        case StoreCurrency::InGame:          return "Recovery Scrip";
         case StoreCurrency::SymbolicSupport: return "Symbolic Support";
     }
     return "Unknown";
@@ -102,19 +99,19 @@ const char* ToLabel(StoreCurrency currency) {
 
 const char* ToLabel(SupportOrderState state) {
     switch (state) {
-        case SupportOrderState::Draft: return "Draft";
-        case SupportOrderState::Queued: return "Queued";
-        case SupportOrderState::Routed: return "Routed";
+        case SupportOrderState::Draft:     return "Draft";
+        case SupportOrderState::Queued:    return "Queued";
+        case SupportOrderState::Routed:    return "Routed";
         case SupportOrderState::Delivered: return "Delivered";
-        case SupportOrderState::Claimed: return "Claimed";
+        case SupportOrderState::Claimed:   return "Claimed";
     }
     return "Unknown";
 }
 
 const char* ToLabel(FeyGateState state) {
     switch (state) {
-        case FeyGateState::Closed: return "Closed";
-        case FeyGateState::Open: return "Open";
+        case FeyGateState::Closed:  return "Closed";
+        case FeyGateState::Open:    return "Open";
         case FeyGateState::Transit: return "Transit";
     }
     return "Unknown";
@@ -122,10 +119,10 @@ const char* ToLabel(FeyGateState state) {
 
 const char* ToLabel(ServicesUnlockTier tier) {
     switch (tier) {
-        case ServicesUnlockTier::Locked: return "Locked";
-        case ServicesUnlockTier::TowerLinked: return "Tower Linked";
+        case ServicesUnlockTier::Locked:         return "Locked";
+        case ServicesUnlockTier::TowerLinked:    return "Tower Linked";
         case ServicesUnlockTier::BackboneStable: return "Backbone Stable";
-        case ServicesUnlockTier::RelayExpanded: return "Relay Expanded";
+        case ServicesUnlockTier::RelayExpanded:  return "Relay Expanded";
     }
     return "Unknown";
 }
@@ -224,7 +221,6 @@ void AddProfileInventoryItem(SessionProfile& profile, const std::string& itemId,
     if (itemId.empty() || count <= 0) {
         return;
     }
-
     for (auto& entry : profile.character.inventory) {
         if (entry.itemId == itemId) {
             entry.count += count;
@@ -234,7 +230,6 @@ void AddProfileInventoryItem(SessionProfile& profile, const std::string& itemId,
             return;
         }
     }
-
     profile.character.inventory.push_back({itemId, count, unitWeight});
 }
 
@@ -247,18 +242,12 @@ const SupportCatalogItem* FindSupportCatalogItem(const LanlineServicesState& sta
     return nullptr;
 }
 
-void GrantSupportDeliveryItem(SessionProfile& profile,
-    const std::string& itemId,
-    int count,
-    float unitWeight,
-    std::vector<std::string>& grantedLabels) {
+void GrantSupportDeliveryItem(SessionProfile& profile, const std::string& itemId, int count, float unitWeight, std::vector<std::string>& grantedLabels) {
     AddProfileInventoryItem(profile, itemId, count, unitWeight);
     grantedLabels.push_back(itemId + " x" + std::to_string(count));
 }
 
-void GrantSupportDeliveryContent(SessionProfile& profile,
-    std::string_view contentId,
-    std::vector<std::string>& grantedLabels) {
+void GrantSupportDeliveryContent(SessionProfile& profile, std::string_view contentId, std::vector<std::string>& grantedLabels) {
     if (contentId == "bulk_salvage") {
         GrantSupportDeliveryItem(profile, "steel_scrap", 3, 0.5f, grantedLabels);
         GrantSupportDeliveryItem(profile, "old_plate", 1, 0.5f, grantedLabels);
@@ -306,7 +295,8 @@ void GrantSupportDeliveryContent(SessionProfile& profile,
     }
 }
 
-void AddChatMessage(ChatChannel& channel, const std::string& author, const std::string& body, const std::string& timeLabel) {
+void AddChatMessage(ChatChannel& channel, const std::string& author, const std::string& 
+body, const std::string& timeLabel) {
     channel.messages.push_back({author, body, timeLabel});
 }
 
@@ -336,7 +326,8 @@ FriendEntry* FindFriendEntry(LanlineServicesState& state, const std::string& han
     return nullptr;
 }
 
-bool PublishRelayChatMessage(const std::string& channelId, const std::string& author, const std::string& body, std::string* errorText) {
+bool PublishRelayChatMessage(const std::string& channelId, const std::string& author, const 
+std::string& body, std::string* errorText) {
     LanlineSessionState sessionState;
     if (!LoadLanlineSessionState(sessionState)) {
         if (errorText != nullptr) {
@@ -344,23 +335,22 @@ bool PublishRelayChatMessage(const std::string& channelId, const std::string& au
         }
         return false;
     }
-
     sessionState.updatedAt = CurrentLanlineTimestamp();
     sessionState.relayMessages.push_back({channelId, author, CurrentChatTimeLabel(), body});
     if (sessionState.relayMessages.size() > 32) {
         sessionState.relayMessages.erase(
             sessionState.relayMessages.begin(),
-            sessionState.relayMessages.begin() + static_cast<std::vector<LanlineRelayMessage>::difference_type>(sessionState.relayMessages.size() - 32));
+            sessionState.relayMessages.begin() + 
+            static_cast<std::vector<LanlineRelayMessage>::difference_type>(sessionState.relayMessages.size() - 32));
     }
-
     if (!SaveLanlineSessionState(sessionState) ||
-        !SaveLanlineSessionState(sessionState, LanlineSessionSnapshotPath(sessionState.sessionId))) {
+        !SaveLanlineSessionState(sessionState, 
+        LanlineSessionSnapshotPath(sessionState.sessionId))) {
         if (errorText != nullptr) {
             *errorText = "Relay transport failed to write Lanline session state.";
         }
         return false;
     }
-
     return true;
 }
 
@@ -376,14 +366,14 @@ bool PublishVoicePresence(const VoiceSettings& voice,
         }
         return false;
     }
-
     sessionState.updatedAt = CurrentLanlineTimestamp();
     auto presenceIt = std::find_if(
         sessionState.voicePresence.begin(),
         sessionState.voicePresence.end(),
         [&](const LanlineVoicePresence& entry) { return entry.handle == handle; });
     if (presenceIt == sessionState.voicePresence.end()) {
-        sessionState.voicePresence.push_back({handle, voice.enabled, voice.pushToTalk, speaking, peakLevel, CurrentChatTimeLabel()});
+        sessionState.voicePresence.push_back({handle, voice.enabled, voice.pushToTalk, speaking, 
+        peakLevel, CurrentChatTimeLabel()});
     } else {
         presenceIt->voiceEnabled = voice.enabled;
         presenceIt->pushToTalk = voice.pushToTalk;
@@ -391,21 +381,20 @@ bool PublishVoicePresence(const VoiceSettings& voice,
         presenceIt->peakLevel = peakLevel;
         presenceIt->timeLabel = CurrentChatTimeLabel();
     }
-
     if (sessionState.voicePresence.size() > 16) {
         sessionState.voicePresence.erase(
             sessionState.voicePresence.begin(),
-            sessionState.voicePresence.begin() + static_cast<std::vector<LanlineVoicePresence>::difference_type>(sessionState.voicePresence.size() - 16));
+            sessionState.voicePresence.begin() + 
+            static_cast<std::vector<LanlineVoicePresence>::difference_type>(sessionState.voicePresence.size() - 16));
     }
-
     if (!SaveLanlineSessionState(sessionState) ||
-        !SaveLanlineSessionState(sessionState, LanlineSessionSnapshotPath(sessionState.sessionId))) {
+        !SaveLanlineSessionState(sessionState, 
+        LanlineSessionSnapshotPath(sessionState.sessionId))) {
         if (errorText != nullptr) {
             *errorText = "Voice relay failed to write Lanline session state.";
         }
         return false;
     }
-
     return true;
 }
 
@@ -437,7 +426,8 @@ void DrawLanlineServicesLockedScreen(const ServicesUnlockState& unlockState) {
     }
 }
 
-void DrawFriendsTab(LanlineServicesState& state, char* searchBuffer, std::size_t searchBufferSize) {
+void DrawFriendsTab(LanlineServicesState& state, char* searchBuffer, std::size_t 
+searchBufferSize) {
     ImGui::InputText("Relay Search", searchBuffer, searchBufferSize);
     ImGui::Separator();
     for (auto& entry : state.friends) {
@@ -448,7 +438,6 @@ void DrawFriendsTab(LanlineServicesState& state, char* searchBuffer, std::size_t
                 continue;
             }
         }
-
         ImGui::PushID(entry.handle.c_str());
         ImGui::Text("%s", entry.handle.c_str());
         ImGui::BulletText("Node: %s", entry.nodeLabel.c_str());
@@ -465,30 +454,32 @@ void DrawFriendsTab(LanlineServicesState& state, char* searchBuffer, std::size_t
     }
 }
 
-void DrawChatTab(LanlineServicesState& state, int& selectedChannelIndex, char* messageBuffer, std::size_t messageBufferSize) {
+void DrawChatTab(LanlineServicesState& state, int& selectedChannelIndex, char* 
+messageBuffer, std::size_t messageBufferSize) {
     if (state.chatChannels.empty()) {
         ImGui::TextDisabled("Relay chat channels are still empty.");
         return;
     }
-
-    selectedChannelIndex = std::clamp(selectedChannelIndex, 0, static_cast<int>(state.chatChannels.size()) - 1);
-    if (ImGui::BeginCombo("Channel", state.chatChannels[static_cast<std::size_t>(selectedChannelIndex)].label.c_str())) {
+    selectedChannelIndex = std::clamp(selectedChannelIndex, 0, 
+    static_cast<int>(state.chatChannels.size()) - 1);
+    if (ImGui::BeginCombo("Channel", 
+    state.chatChannels[static_cast<std::size_t>(selectedChannelIndex)].label.c_str())) {
         for (int index = 0; index < static_cast<int>(state.chatChannels.size()); ++index) {
             const bool selected = selectedChannelIndex == index;
-            if (ImGui::Selectable(state.chatChannels[static_cast<std::size_t>(index)].label.c_str(), selected)) {
+            if (ImGui::Selectable(state.chatChannels[static_cast<std::size_t>(index)].label.c_str(), 
+            selected)) {
                 selectedChannelIndex = index;
             }
         }
         ImGui::EndCombo();
     }
-
     auto& channel = state.chatChannels[static_cast<std::size_t>(selectedChannelIndex)];
     ImGui::BeginChild("LanlineChatHistory", ImVec2(0.0f, 180.0f), true);
     for (const auto& message : channel.messages) {
-        ImGui::TextWrapped("[%s] %s: %s", message.timeLabel.c_str(), message.author.c_str(), message.body.c_str());
+        ImGui::TextWrapped("[%s] %s: %s", message.timeLabel.c_str(), message.author.c_str(), 
+        message.body.c_str());
     }
     ImGui::EndChild();
-
     ImGui::InputText("Message", messageBuffer, messageBufferSize);
     std::string relayStatus;
     if (ImGui::Button("Transmit")) {
@@ -505,7 +496,7 @@ void DrawChatTab(LanlineServicesState& state, int& selectedChannelIndex, char* m
     if (!relayStatus.empty()) {
         ImGui::TextDisabled("%s", relayStatus.c_str());
     } else {
-        ImGui::TextDisabled("Relay chat rides on the active Lanline session state and snapshot mirror.");
+        ImGui::TextDisabled("Relay chat rides on the active Lanline session state and snapshot \nmirror.");
     }
 }
 
@@ -532,9 +523,8 @@ void DrawVoiceTab(LanlineServicesState& state) {
     if (!voiceStatus.empty()) {
         ImGui::TextDisabled("%s", voiceStatus.c_str());
     } else {
-        ImGui::TextDisabled("Voice activity now relays through the active Lanline session state; raw audio transport remains future work.");
+        ImGui::TextDisabled("Voice activity now relays through the active Lanline session state; raw \naudio transport remains future work.");
     }
-
     bool showedPresence = false;
     for (const auto& entry : state.friends) {
         if (!entry.inCurrentSession && entry.statusText.find("Voice") == std::string::npos) {
@@ -546,9 +536,9 @@ void DrawVoiceTab(LanlineServicesState& state) {
             showedPresence = true;
         }
         ImGui::BulletText("%s | %s | %s",
-            entry.handle.c_str(),
-            entry.statusText.c_str(),
-            entry.online ? "online" : "offline");
+        entry.handle.c_str(),
+        entry.statusText.c_str(),
+        entry.online ? "online" : "offline");
     }
 }
 
@@ -560,19 +550,20 @@ void DrawOperationalSupportCategory(LanlineServicesState& state,
     ImGui::Text("%s", title);
     ImGui::TextDisabled("%s", subtitle);
     ImGui::Separator();
-
     bool drewAnyItem = false;
     for (const auto& item : state.supportCatalog) {
-        if (!IsAllowedSupportItem(item) || item.currency != StoreCurrency::InGame || item.category != category) {
+        if (!IsAllowedSupportItem(item) || item.currency != StoreCurrency::InGame || 
+        item.category != category) {
             continue;
         }
-        if (item.category == SupportCategory::TankService && !IsTankServiceUnlocked(unlockState)) {
+        if (item.category == SupportCategory::TankService && 
+        !IsTankServiceUnlocked(unlockState)) {
             continue;
         }
-        if (item.category == SupportCategory::Medical && !IsMedicalSupportUnlocked(unlockState)) {
+        if (item.category == SupportCategory::Medical && 
+        !IsMedicalSupportUnlocked(unlockState)) {
             continue;
         }
-
         drewAnyItem = true;
         ImGui::PushID(item.id.c_str());
         ImGui::Text("%s", item.label.c_str());
@@ -595,7 +586,8 @@ void DrawOperationalSupportCategory(LanlineServicesState& state,
             order.paymentCurrency = item.currency;
             order.priceCredits = item.priceCredits;
             order.createdAtUnix = static_cast<std::int64_t>(std::time(nullptr));
-            order.etaUnix = order.createdAtUnix + (item.category == SupportCategory::TankService ? 420 : 240);
+            order.etaUnix = order.createdAtUnix + (item.category == SupportCategory::TankService ? 
+            420 : 240);
             order.state = SupportOrderState::Queued;
             state.supportOrders.push_back(order);
         }
@@ -606,36 +598,38 @@ void DrawOperationalSupportCategory(LanlineServicesState& state,
         ImGui::Separator();
         ImGui::PopID();
     }
-
     if (!drewAnyItem) {
         if (category == SupportCategory::TankService && !IsTankServiceUnlocked(unlockState)) {
             ImGui::TextDisabled("Tank service remains locked until backbone stability is restored.");
-        } else if (category == SupportCategory::Medical && !IsMedicalSupportUnlocked(unlockState)) {
-            ImGui::TextDisabled("Medical support remains locked until the first tower sync is restored.");
+        } else if (category == SupportCategory::Medical && 
+        !IsMedicalSupportUnlocked(unlockState)) {
+            ImGui::TextDisabled("Medical support remains locked until the first tower sync is \nrestored.");
         } else {
             ImGui::TextDisabled("No relay requests are currently listed in this category.");
         }
     }
 }
 
-void DrawCosmeticSupportCategory(LanlineServicesState& state, SupportCategory category, const char* title) {
+void DrawCosmeticSupportCategory(LanlineServicesState& state, SupportCategory category, 
+const char* title) {
     ImGui::Text("%s", title);
-    ImGui::TextDisabled("Symbolic support only. Cosmetic ownership never grants gameplay advantage.");
+    ImGui::TextDisabled("Symbolic support only. Cosmetic ownership never grants gameplay \nadvantage.");
     ImGui::Separator();
-
     bool drewAnyItem = false;
     for (const auto& item : state.supportCatalog) {
-        if (!IsAllowedSupportItem(item) || item.currency != StoreCurrency::SymbolicSupport || item.category != category) {
+        if (!IsAllowedSupportItem(item) || item.currency != StoreCurrency::SymbolicSupport || 
+        item.category != category) {
             continue;
         }
-
         drewAnyItem = true;
         ImGui::PushID(item.id.c_str());
         const bool alreadyOwned =
-            std::find(state.ownedCosmetics.begin(), state.ownedCosmetics.end(), item.id) != state.ownedCosmetics.end();
+        std::find(state.ownedCosmetics.begin(), state.ownedCosmetics.end(), item.id) != 
+        state.ownedCosmetics.end();
         ImGui::Text("%s", item.label.c_str());
         ImGui::TextWrapped("%s", item.description.c_str());
-        ImGui::BulletText("Support tier: %s", item.supportLabel.empty() ? "Symbolic Support" : item.supportLabel.c_str());
+        ImGui::BulletText("Support tier: %s", item.supportLabel.empty() ? "Symbolic Support" : 
+        item.supportLabel.c_str());
         if (ImGui::TreeNode("Includes")) {
             for (const auto& content : item.contents) {
                 ImGui::BulletText("%s", content.c_str());
@@ -658,7 +652,6 @@ void DrawCosmeticSupportCategory(LanlineServicesState& state, SupportCategory ca
         ImGui::Separator();
         ImGui::PopID();
     }
-
     if (!drewAnyItem) {
         ImGui::TextDisabled("No cosmetic support items are currently listed in this category.");
     }
@@ -668,7 +661,6 @@ void DrawSupportOrdersSummary(const LanlineServicesState& state, std::int64_t no
     if (state.supportOrders.empty()) {
         return;
     }
-
     ImGui::Separator();
     ImGui::BulletText("Queued: %d", CountSupportOrdersInState(state, SupportOrderState::Queued));
     ImGui::BulletText("Routed: %d", CountSupportOrdersInState(state, SupportOrderState::Routed));
@@ -677,10 +669,10 @@ void DrawSupportOrdersSummary(const LanlineServicesState& state, std::int64_t no
     if (ImGui::TreeNode("Active Orders")) {
         for (const auto& order : state.supportOrders) {
             ImGui::BulletText("%s | %s | %s | ETA %s",
-                order.orderId.c_str(),
-                order.itemLabel.c_str(),
-                ToLabel(order.state),
-                order.etaUnix > 0 ? FormatCountdown(order.etaUnix - nowUnix).c_str() : "n/a");
+            order.orderId.c_str(),
+            order.itemLabel.c_str(),
+            ToLabel(order.state),
+            order.etaUnix > 0 ? FormatCountdown(order.etaUnix - nowUnix).c_str() : "n/a");
         }
         ImGui::TreePop();
     }
@@ -697,7 +689,6 @@ void DrawSupportOverview(LanlineServicesState& state, std::int64_t nowUnix) {
 void DrawFeyGateTab(LanlineServicesState& state, const ServicesUnlockState& unlockState, std::int64_t nowUnix) {
     ImGui::TextWrapped("Fey Ring Network: transit windows and relay routes.");
     ImGui::Separator();
-
     auto drawGateSection = [&](bool interServer, const char* title, bool unlocked, const char* lockedMessage) {
         ImGui::Text("%s", title);
         if (!unlocked) {
@@ -705,13 +696,11 @@ void DrawFeyGateTab(LanlineServicesState& state, const ServicesUnlockState& unlo
             ImGui::Separator();
             return;
         }
-
         bool drewAnyGate = false;
         for (auto& gate : state.feyGateCycles) {
             if (gate.interServer != interServer) {
                 continue;
             }
-
             drewAnyGate = true;
             gate.state = ComputeFeyGateState(gate, nowUnix);
             ImGui::PushID(gate.id.c_str());
@@ -733,13 +722,11 @@ void DrawFeyGateTab(LanlineServicesState& state, const ServicesUnlockState& unlo
             ImGui::Separator();
             ImGui::PopID();
         }
-
         if (!drewAnyGate) {
             ImGui::TextDisabled("No Fey Ring routes are currently authored for this section.");
             ImGui::Separator();
         }
     };
-
     drawGateSection(false,
         "Inter-city Routes",
         IsIntercityPortalScheduleUnlocked(unlockState),
@@ -748,13 +735,11 @@ void DrawFeyGateTab(LanlineServicesState& state, const ServicesUnlockState& unlo
         "Inter-server Portals",
         IsInterserverPortalScheduleUnlocked(unlockState),
         "Inter-server portal windows unlock only after relay expansion and wider network recovery.");
-
     if (unlockState.intercityPortalsUnlocked || unlockState.interserverPortalsUnlocked) {
         ImGui::TextDisabled("Transit windows remain authored-world schedules, not a public internet browser.");
     }
 }
-
-}  // namespace
+} // namespace
 
 ServicesUnlockState BuildServicesUnlockState(const SessionProfile& profile, const WorldFieldState* worldState) {
     const WorldFieldState* resolvedWorldState = worldState != nullptr
@@ -767,24 +752,13 @@ ServicesUnlockState BuildServicesUnlockState(const SessionProfile& profile, cons
     ServicesUnlockState state{};
     state.towerSyncRecovered = resolvedWorldState != nullptr && resolvedWorldState->towerSyncRecovered;
     state.firstTowerActivated = state.towerSyncRecovered;
-    state.localRelayAvailable = resolvedWorldState != nullptr &&
-        (resolvedWorldState->localRelayAvailable || state.towerSyncRecovered);
-    state.relaySubstationActive = resolvedWorldState != nullptr &&
-        IsRelaySubstationOperational(*resolvedWorldState);
-    state.serviceBayActive = resolvedWorldState != nullptr &&
-        IsServiceBayOperational(*resolvedWorldState);
-    state.waterReclaimerActive = resolvedWorldState != nullptr &&
-        IsWaterReclaimerOperational(*resolvedWorldState);
-    state.backboneStable = resolvedWorldState != nullptr &&
-        IsStableRecoveryBackbone(scopedProfile, *resolvedWorldState);
-    state.feyRingIntercityUnlocked = state.backboneStable &&
-        resolvedWorldState != nullptr &&
-        resolvedWorldState->feyRingIntercityUnlocked;
-    state.feyRingInterserverUnlocked = state.backboneStable &&
-        resolvedWorldState != nullptr &&
-        resolvedWorldState->feyRingInterserverUnlocked &&
-        IsOrbitalUplinkOperational(scopedProfile, *resolvedWorldState) &&
-        IsTradeNetworkOperational(scopedProfile, *resolvedWorldState);
+    state.localRelayAvailable = resolvedWorldState != nullptr && (resolvedWorldState->localRelayAvailable || state.towerSyncRecovered);
+    state.relaySubstationActive = resolvedWorldState != nullptr && IsRelaySubstationOperational(*resolvedWorldState);
+    state.serviceBayActive = resolvedWorldState != nullptr && IsServiceBayOperational(*resolvedWorldState);
+    state.waterReclaimerActive = resolvedWorldState != nullptr && IsWaterReclaimerOperational(*resolvedWorldState);
+    state.backboneStable = resolvedWorldState != nullptr && IsStableRecoveryBackbone(scopedProfile, *resolvedWorldState);
+    state.feyRingIntercityUnlocked = state.backboneStable && resolvedWorldState != nullptr && resolvedWorldState->feyRingIntercityUnlocked;
+    state.feyRingInterserverUnlocked = state.backboneStable && resolvedWorldState != nullptr && resolvedWorldState->feyRingInterserverUnlocked && IsOrbitalUplinkOperational(scopedProfile, *resolvedWorldState) && IsTradeNetworkOperational(scopedProfile, *resolvedWorldState);
     state.intercityPortalsUnlocked = state.feyRingIntercityUnlocked;
     state.interserverPortalsUnlocked = state.feyRingInterserverUnlocked;
     const auto backboneStatus = CurrentRecoveryBackboneStatus(scopedProfile);
@@ -793,14 +767,11 @@ ServicesUnlockState BuildServicesUnlockState(const SessionProfile& profile, cons
     state.backbonePayoff = backboneStatus.payoff;
     state.routeEventSummary = ActiveRouteEventSummary(scopedProfile);
     if (resolvedWorldState != nullptr) {
-        state.merchantWindowActive =
-            resolvedWorldState->activeRouteEventType == "merchant_window" &&
-            HasActiveRouteEvent(*resolvedWorldState);
+        state.merchantWindowActive = resolvedWorldState->activeRouteEventType == "merchant_window" && HasActiveRouteEvent(*resolvedWorldState);
         state.routeEventsResolved = resolvedWorldState->routeEventsResolved;
         state.routeEventsFailed = resolvedWorldState->routeEventsFailed;
         state.routeEventsExpired = resolvedWorldState->routeEventsExpired;
     }
-
     if (!state.towerSyncRecovered) {
         state.tier = ServicesUnlockTier::Locked;
     } else if (!state.backboneStable) {
@@ -832,10 +803,10 @@ std::vector<SupportCatalogItem> MakeDefaultSupportCatalog() {
         {"relay_filter_bundle", "Filter Media Bundle", "Purification media and relay-safe consumables for continued recovery operations.", SupportCategory::Utility, StoreCurrency::InGame, 95, "", false, false, false, TankSubsystem::None, {"filter_media", "sealant_roll", "field_battery"}},
         {"skin_bt72_ashgray", "BT-72 Hull Livery: Ash Gray", "Cosmetic paint set for BT-72. No gameplay effect.", SupportCategory::Skins, StoreCurrency::SymbolicSupport, 0, "Support Tier A", false, false, false, TankSubsystem::None, {"skin_bt72_ashgray"}},
         {"cosmetic_relay_badge", "Relay Operator Badge", "Terminal insignia and profile marker set. Cosmetic only.", SupportCategory::Cosmetics, StoreCurrency::SymbolicSupport, 0, "Support Tier B", false, false, false, TankSubsystem::None, {"badge_relay_operator", "terminal_theme_relay"}},
-        {"tank_suspension_kit", "BT-72 Suspension Repair Kit", "Service bundle for suspension and track maintenance.", SupportCategory::TankService, StoreCurrency::InGame, 210, "", false, false, false, TankSubsystem::Suspension, {"track_patch", "bearing_set", "grease_pack", "alignment_tools"}},
-        {"tank_turret_kit", "BT-72 Turret Service Kit", "Turret servo, stabilization and bearing maintenance bundle.", SupportCategory::TankService, StoreCurrency::InGame, 230, "", false, false, false, TankSubsystem::Turret, {"servo_patch", "turret_bearing", "stabilizer_fluid"}},
-        {"tank_engine_kit", "BT-72 Engine Service Kit", "Field maintenance kit for engine and cooling assembly.", SupportCategory::TankService, StoreCurrency::InGame, 250, "", false, false, false, TankSubsystem::Engine, {"engine_seal", "coolant_pack", "injector_cleanser"}},
-        {"tank_sensor_kit", "BT-72 Sensor Recovery Kit", "Optics, relay and calibration tools for damaged sensor arrays.", SupportCategory::TankService, StoreCurrency::InGame, 185, "", false, false, false, TankSubsystem::Sensors, {"lens_pack", "sensor_relay", "calibration_spool"}},
+        {"tank_suspension_kit", "BT-72 Suspension Repair Kit", "Service bundle for suspension and track maintenance.", SupportCategory::TankService, StoreCurrency::InGame, 210, "", false, false, false, TankSubsystem::None, {"track_patch", "bearing_set", "grease_pack", "alignment_tools"}},
+        {"tank_turret_kit", "BT-72 Turret Service Kit", "Turret servo, stabilization and bearing maintenance bundle.", SupportCategory::TankService, StoreCurrency::InGame, 230, "", false, false, false, TankSubsystem::None, {"servo_patch", "turret_bearing", "stabilizer_fluid"}},
+        {"tank_engine_kit", "BT-72 Engine Service Kit", "Field maintenance kit for engine and cooling assembly.", SupportCategory::TankService, StoreCurrency::InGame, 250, "", false, false, false, TankSubsystem::None, {"engine_seal", "coolant_pack", "injector_cleanser"}},
+        {"tank_sensor_kit", "BT-72 Sensor Recovery Kit", "Optics, relay and calibration tools for damaged sensor arrays.", SupportCategory::TankService, StoreCurrency::InGame, 185, "", false, false, false, TankSubsystem::None, {"lens_pack", "sensor_relay", "calibration_spool"}},
         {"medkit_standard", "Field Medkit", "Standard expedition med supply for operator recovery.", SupportCategory::Medical, StoreCurrency::InGame, 75, "", false, false, false, TankSubsystem::None, {"medkit", "bandage_roll", "sterile_patch"}},
         {"medkit_trauma", "Trauma Response Pack", "Advanced trauma bundle for severe field damage recovery.", SupportCategory::Medical, StoreCurrency::InGame, 120, "", false, false, false, TankSubsystem::None, {"trauma_kit", "injector", "coagulant_pack"}},
     };
@@ -903,12 +874,10 @@ void SyncLanlineServicesSessionProfile(SessionProfile& profile, const LanlineSer
     if (profile.selectedWorld.empty()) {
         return;
     }
-
     WorldFieldState* worldState = FindWorldFieldState(profile, profile.selectedWorld, true);
     if (worldState == nullptr) {
         return;
     }
-
     const int currentCredits = std::max(0, profile.lanlineServices.relayCredits);
     if (currentCredits > previousCredits) {
         worldState->relayCreditsEarned += currentCredits - previousCredits;
@@ -939,12 +908,10 @@ int CountSupportOrdersInState(const LanlineServicesState& state, SupportOrderSta
 int ClaimDeliveredSupportOrders(LanlineServicesState& state, SessionProfile& profile, std::string* summary) {
     int claimedCount = 0;
     std::vector<std::string> claimedOrderSummaries;
-
     for (auto& order : state.supportOrders) {
         if (order.state != SupportOrderState::Delivered) {
             continue;
         }
-
         std::vector<std::string> grantedLabels;
         if (const auto* catalogItem = FindSupportCatalogItem(state, order.itemId); catalogItem != nullptr) {
             for (const auto& contentId : catalogItem->contents) {
@@ -956,11 +923,9 @@ int ClaimDeliveredSupportOrders(LanlineServicesState& state, SessionProfile& pro
         } else if (order.paymentCurrency == StoreCurrency::SymbolicSupport) {
             profile.lanlineServices.ownedCosmetics.push_back(order.itemId);
         }
-
         NormalizeStringInventory(profile.lanlineServices.ownedCosmetics);
         order.state = SupportOrderState::Claimed;
         ++claimedCount;
-
         if (!grantedLabels.empty()) {
             claimedOrderSummaries.push_back(order.itemLabel + " -> " + JoinLabels(grantedLabels));
         } else if (order.paymentCurrency == StoreCurrency::SymbolicSupport) {
@@ -969,17 +934,15 @@ int ClaimDeliveredSupportOrders(LanlineServicesState& state, SessionProfile& pro
             claimedOrderSummaries.push_back(order.itemLabel + " -> depot manifest received");
         }
     }
-
     if (summary != nullptr) {
         summary->clear();
         if (claimedCount == 1) {
             *summary = "Lanline delivery received: " + claimedOrderSummaries.front() + ".";
         } else if (claimedCount > 1) {
             *summary = "Lanline deliveries received: " + std::to_string(claimedCount) +
-                " parcels. Latest: " + claimedOrderSummaries.back() + ".";
+                       " parcels. Latest: " + claimedOrderSummaries.back() + ".";
         }
     }
-
     return claimedCount;
 }
 
@@ -994,33 +957,30 @@ ServiceHubMode ResolveLanlineServicesMode(const ServicesUnlockState& unlockState
 }
 
 void SyncLanlineServicesPresence(LanlineServicesState& state,
-    const LanlineSessionState* sessionState,
-    const ServicesUnlockState& unlockState) {
+                                 const LanlineSessionState* sessionState,
+                                 const ServicesUnlockState& unlockState) {
     state.mode = ResolveLanlineServicesMode(unlockState, sessionState);
     state.chatChannels = MakeDefaultChatChannels();
     for (auto& friendEntry : state.friends) {
         friendEntry.inCurrentSession = false;
     }
-
     if (sessionState == nullptr) {
         if (auto* sessionChannel = FindChatChannel(state, "session")) {
             AddChatMessage(*sessionChannel, "Lanline", "No active session mirror is currently available.", "now");
         }
         return;
     }
-
     if (auto* sessionChannel = FindChatChannel(state, "session")) {
         char presenceBuffer[96] = {};
         std::snprintf(presenceBuffer, sizeof(presenceBuffer), "%s | %s | %s",
-            sessionState->sessionId.c_str(),
-            sessionState->mode.c_str(),
-            NormalizeWorldReference(sessionState->worldName).c_str());
+                     sessionState->sessionId.c_str(),
+                     sessionState->mode.c_str(),
+                     NormalizeWorldReference(sessionState->worldName).c_str());
         AddChatMessage(*sessionChannel, "Lanline", presenceBuffer, sessionState->updatedAt);
         for (const auto& eventLine : sessionState->eventLog) {
             AddChatMessage(*sessionChannel, "Session Log", eventLine, sessionState->updatedAt);
         }
     }
-
     for (const auto& relayMessage : sessionState->relayMessages) {
         ChatChannel* channel = FindChatChannel(state, relayMessage.channelId);
         if (channel == nullptr) {
@@ -1029,7 +989,6 @@ void SyncLanlineServicesPresence(LanlineServicesState& state,
         }
         AddChatMessage(*channel, relayMessage.author, relayMessage.body, relayMessage.timeLabel);
     }
-
     for (const auto& player : sessionState->players) {
         const std::string handle = player.displayName;
         FriendEntry* friendEntry = FindFriendEntry(state, handle);
@@ -1042,7 +1001,6 @@ void SyncLanlineServicesPresence(LanlineServicesState& state,
         friendEntry->online = player.online;
         friendEntry->inCurrentSession = true;
     }
-
     for (const auto& voicePresence : sessionState->voicePresence) {
         FriendEntry* friendEntry = FindFriendEntry(state, voicePresence.handle);
         const std::string voiceStatus = voicePresence.speaking
@@ -1091,7 +1049,6 @@ bool SaveLanlineServicesSave(const LanlineServicesSave& save, const std::filesys
     if (!out.is_open()) {
         return false;
     }
-
     out << "relay_credits=" << save.relayCredits << '\n';
     out << "voice_enabled=" << (save.voice.enabled ? 1 : 0) << '\n';
     out << "voice_ptt=" << (save.voice.pushToTalk ? 1 : 0) << '\n';
@@ -1125,7 +1082,6 @@ bool LoadLanlineServicesSave(const std::filesystem::path& path, LanlineServicesS
     if (!in.is_open()) {
         return false;
     }
-
     outSave = {};
     std::string line;
     while (std::getline(in, line)) {
@@ -1144,6 +1100,7 @@ bool LoadLanlineServicesSave(const std::filesystem::path& path, LanlineServicesS
         else if (key == "voice_output_gain") outSave.voice.outputGain = std::stof(value);
         else if (key == "voice_input_device") outSave.voice.selectedInputDevice = std::stoi(value);
         else if (key == "voice_output_device") outSave.voice.selectedOutputDevice = std::stoi(value);
+        else if (key == "support_order") {
         else if (key == "support_order") {
             std::vector<std::string> parts;
             std::size_t start = 0;
@@ -1178,11 +1135,11 @@ bool LoadLanlineServicesSave(const std::filesystem::path& path, LanlineServicesS
     return true;
 }
 
-void HandleIncomingPlayerSnapshot(const std::uint8_t* rawNetworkBuffer, std::size_t bufferSize) {
+void HandleIncomingPlayerSnapshot(const std::uint8_t* rawNetworkBuffer, std::size_t 
+bufferSize) {
     if (rawNetworkBuffer == nullptr || bufferSize < sizeof(NetworkPlayerVisualSnapshot)) {
         return;
     }
-
     NetworkPlayerVisualSnapshot snapshot{};
     std::memcpy(&snapshot, rawNetworkBuffer, sizeof(snapshot));
     snapshot.characterName[sizeof(snapshot.characterName) - 1] = '\0';
@@ -1195,159 +1152,25 @@ void HandleIncomingPlayerSnapshot(const std::uint8_t* rawNetworkBuffer, std::siz
 void InjectOfflineDebugBot() {
     NetworkPlayerVisualSnapshot debugBot{};
     debugBot.networkPlayerId = 99999;
-    std::snprintf(debugBot.characterName, sizeof(debugBot.characterName), "%s", "Test_Scout_Clone");
+    std::snprintf(debugBot.characterName, sizeof(debugBot.characterName), "%s", 
+    "Test_Scout_Clone");
     debugBot.equippedWeapon.weaponRegistryIdHash = 0x00abc123u;
     debugBot.equippedWeapon.receiverId = 2;
     debugBot.equippedWeapon.barrelId = 1;
     debugBot.equippedWeapon.magazineId = 1;
-    debugBot.equippedWeapon.muzzleId = 3;
-    debugBot.equippedWeapon.paintJobId = 5;
+    debugBot.equippedWeapon.muzzleId = 0;
+    debugBot.equippedWeapon.paintJobId = 0;
     debugBot.equippedWeapon.wearLevel = 0;
-    debugBot.equippedWeapon.metallicGloss = 255;
+    debugBot.equippedWeapon.metallicGloss = 0;
     debugBot.apparel.undergarmentId = 1;
-    debugBot.apparel.armorPlatesId = 4;
-    debugBot.apparel.decalId = 140;
+    debugBot.apparel.armorPlatesId = 1;
+    debugBot.apparel.decalId = 0;
     debugBot.apparel.decalPosition = 0;
-    debugBot.apparel.customColorHEX = 0xff5555u;
-    debugBot.positionX = 5.0f;
-    debugBot.positionZ = 5.0f;
-    debugBot.rotationY = 1.57f;
+    debugBot.apparel.customColorHEX = 0xFFFFFFu;
+    debugBot.positionX = 0.0f;
+    debugBot.positionZ = 0.0f;
+    debugBot.rotationY = 0.0f;
     UpsertVisualSnapshot(debugBot);
 }
 
-void InjectOfflineDebugBot(const SessionProfile& profile) {
-    InjectOfflineDebugBot();
-    if (!g_ConnectedTeammates.empty()) {
-        auto& debugBot = g_ConnectedTeammates.back();
-        debugBot.positionX = profile.partnerTank.worldPositionKnown ? profile.partnerTank.worldX + 5.0f : 5.0f;
-        debugBot.positionZ = profile.partnerTank.worldPositionKnown ? profile.partnerTank.worldY + 5.0f : 5.0f;
-    }
-}
-
-void SetLanlineVisualSnapshotBroadcast(LanlineVisualSnapshotBroadcast broadcast) {
-    gVisualSnapshotBroadcast = broadcast;
-}
-
-bool SendMyVisualSnapshotToNetwork(const SessionProfile& profile, float currentX, float currentZ, float rotation) {
-    const NetworkPlayerVisualSnapshot snapshot = BuildVisualSnapshot(profile, currentX, currentZ, rotation);
-    if (snapshot.networkPlayerId == 0) {
-        return false;
-    }
-
-    if (gVisualSnapshotBroadcast != nullptr) {
-        return gVisualSnapshotBroadcast(reinterpret_cast<const std::uint8_t*>(&snapshot), sizeof(snapshot));
-    }
-
-    UpsertVisualSnapshot(snapshot);
-    return false;
-}
-
-void DrawLanlineServicesPanel(LanlineServicesState& state,
-    const ServicesUnlockState& unlockState,
-    std::int64_t nowUnix) {
-    AdvanceLanlineSupportOrders(state, nowUnix);
-
-    if (!IsLanlineServicesUnlocked(unlockState)) {
-        DrawLanlineServicesLockedScreen(unlockState);
-        return;
-    }
-
-    static char friendSearch[128] = "";
-    static char messageInput[256] = "";
-    static int selectedChannelIndex = 0;
-
-    ImGui::Text("Lanline Services Online");
-    ImGui::BulletText("Unlock tier: %s", ToLabel(unlockState.tier));
-    ImGui::BulletText("Tower sync recovered: %s", unlockState.towerSyncRecovered ? "yes" : "no");
-    ImGui::BulletText("Local relay available: %s", unlockState.localRelayAvailable ? "yes" : "no");
-    ImGui::BulletText("Relay substation: %s", unlockState.relaySubstationActive ? "online" : "offline");
-    ImGui::BulletText("Service bay: %s", unlockState.serviceBayActive ? "online" : "offline");
-    ImGui::BulletText("Water reclaimer: %s", unlockState.waterReclaimerActive ? "online" : "offline");
-    ImGui::BulletText("Backbone stable: %s", unlockState.backboneStable ? "yes" : "no");
-    ImGui::BulletText("Fey inter-city: %s", unlockState.feyRingIntercityUnlocked ? "unlocked" : "locked");
-    ImGui::BulletText("Fey inter-server: %s", unlockState.feyRingInterserverUnlocked ? "unlocked" : "locked");
-    if (!unlockState.backboneStage.empty()) {
-        ImGui::BulletText("Industrial backbone: %s", unlockState.backboneStage.c_str());
-    }
-    if (!unlockState.backboneStatus.empty()) {
-        ImGui::TextWrapped("Backbone status: %s", unlockState.backboneStatus.c_str());
-    }
-    if (!unlockState.backbonePayoff.empty()) {
-        ImGui::TextWrapped("Backbone payoff: %s", unlockState.backbonePayoff.c_str());
-    }
-    if (!unlockState.routeEventSummary.empty()) {
-        ImGui::TextWrapped("Route event layer: %s", unlockState.routeEventSummary.c_str());
-    }
-    ImGui::BulletText("Route events resolved/failed/expired: %d / %d / %d",
-        unlockState.routeEventsResolved,
-        unlockState.routeEventsFailed,
-        unlockState.routeEventsExpired);
-    if (unlockState.merchantWindowActive) {
-        ImGui::TextWrapped("Merchant window: one discreet broker exchange is currently open on the active recovery route.");
-    }
-    ImGui::Separator();
-
-    if (ImGui::BeginTabBar("LanlineServicesTabs")) {
-        if (ImGui::BeginTabItem("Friends")) {
-            DrawFriendsTab(state, friendSearch, sizeof(friendSearch));
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Chat")) {
-            DrawChatTab(state, selectedChannelIndex, messageInput, sizeof(messageInput));
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Voice")) {
-            DrawVoiceTab(state);
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Supplies")) {
-            DrawSupportOverview(state, nowUnix);
-            DrawOperationalSupportCategory(
-                state,
-                unlockState,
-                SupportCategory::Materials,
-                "Supplies",
-                "Recovery materials and basic workshop stock on in-game currency.");
-            DrawOperationalSupportCategory(
-                state,
-                unlockState,
-                SupportCategory::Utility,
-                "Utility",
-                "Relay-safe consumables and support bundles on in-game currency.");
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Tank Service")) {
-            DrawSupportOverview(state, nowUnix);
-            DrawOperationalSupportCategory(
-                state,
-                unlockState,
-                SupportCategory::TankService,
-                "Tank Service",
-                "BT-72 recovery and maintenance requests. Unlocks after backbone stability.");
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Medical")) {
-            DrawSupportOverview(state, nowUnix);
-            DrawOperationalSupportCategory(
-                state,
-                unlockState,
-                SupportCategory::Medical,
-                "Medical",
-                "Operator recovery supplies. Unlocks after the first tower sync.");
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Cosmetics")) {
-            DrawSupportOverview(state, nowUnix);
-            DrawCosmeticSupportCategory(state, SupportCategory::Skins, "Skins");
-            DrawCosmeticSupportCategory(state, SupportCategory::Cosmetics, "Cosmetics");
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Fey Rings")) {
-            DrawFeyGateTab(state, unlockState, nowUnix);
-            ImGui::EndTabItem();
-        }
-        ImGui::EndTabBar();
-    }
-}
-
-}  // namespace bunker
+} // namespace bunker

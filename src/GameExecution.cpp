@@ -1,5 +1,4 @@
 #include "../include/GameExecution.hpp"
-
 #include <algorithm>
 #include <cctype>
 #include <sstream>
@@ -8,6 +7,7 @@ namespace bunker {
 
 namespace {
 
+// 1. Нормализация расширений файлов ассетов и плагинов
 std::string NormalizedExtension(std::string_view extension) {
     std::string normalized(extension);
     std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
@@ -19,6 +19,7 @@ std::string NormalizedExtension(std::string_view extension) {
     return normalized;
 }
 
+// 2. Сбор потенциальных поисковых ключей для объекта карты местности
 std::vector<std::string> CandidateKeysForObject(const MapObject& object) {
     std::vector<std::string> keys;
     auto pushKey = [&](std::string_view value) {
@@ -28,7 +29,7 @@ std::vector<std::string> CandidateKeysForObject(const MapObject& object) {
             keys.push_back(normalized);
         }
     };
-
+    
     pushKey(object.registryId);
     pushKey(object.prefabSourceId);
     pushKey(object.scriptTag);
@@ -36,21 +37,25 @@ std::vector<std::string> CandidateKeysForObject(const MapObject& object) {
     return keys;
 }
 
+// 3. Валидация расширений трехмерных графических ассетов движка
 bool IsRenderableAssetExtension(std::string_view extension) {
     const std::string normalized = NormalizedExtension(extension);
     return normalized == ".dds" || normalized == ".nif" || normalized == ".bgsm" || normalized == ".bgem";
 }
 
+// 4. Валидация расширений подключаемых плагинов данных
 bool IsPluginExtension(std::string_view extension) {
     const std::string normalized = NormalizedExtension(extension);
     return normalized == ".esm" || normalized == ".esp" || normalized == ".esl";
 }
 
+// 5. Валидация расширений файлов виртуальной машины скриптов
 bool IsScriptExtension(std::string_view extension) {
     const std::string normalized = NormalizedExtension(extension);
     return normalized == ".pex" || normalized == ".psc";
 }
 
+// 6. Формирование динамического шаблона генерации лута для контейнеров бункера
 std::vector<LootEntry> BuildRuntimeLootTemplate(const std::vector<LootEntry>& lootEntries) {
     std::vector<LootEntry> runtimeLoot;
     runtimeLoot.reserve(lootEntries.size());
@@ -62,8 +67,9 @@ std::vector<LootEntry> BuildRuntimeLootTemplate(const std::vector<LootEntry>& lo
     return runtimeLoot;
 }
 
-}  // namespace
+} // namespace
 
+// 7. Глобальная чистка строк под бесперебойный хэш-поиск ресурсов без учета регистра и спецсимволов
 std::string NormalizeResourceLookupKey(std::string_view value) {
     std::string normalized;
     normalized.reserve(value.size());
@@ -75,6 +81,7 @@ std::string NormalizeResourceLookupKey(std::string_view value) {
     return normalized;
 }
 
+// 8. Пересчет и индексация базы ключей глобального менеджера ресурсов
 void GlobalResourceManager::Rebuild(const ExternalDataScanSummary& summary) {
     resourcesByKey_.clear();
     for (const auto& file : summary.files) {
@@ -89,6 +96,7 @@ void GlobalResourceManager::Rebuild(const ExternalDataScanSummary& summary) {
     }
 }
 
+// 9. Возврат всех найденных путей по хэш-ключу
 std::vector<std::filesystem::path> GlobalResourceManager::FindAll(std::string_view key) const {
     const std::string normalized = NormalizeResourceLookupKey(key);
     if (normalized.empty()) {
@@ -98,6 +106,7 @@ std::vector<std::filesystem::path> GlobalResourceManager::FindAll(std::string_vi
     return it == resourcesByKey_.end() ? std::vector<std::filesystem::path>{} : it->second;
 }
 
+// 10. Поиск пути к первому файлу, соответствующему конкретному расширению
 std::filesystem::path GlobalResourceManager::FindFirstWithExtension(std::string_view key, std::string_view extension) const {
     const std::string normalizedExtension = NormalizedExtension(extension);
     for (const auto& candidate : FindAll(key)) {
@@ -109,6 +118,7 @@ std::filesystem::path GlobalResourceManager::FindFirstWithExtension(std::string_
     return {};
 }
 
+// 11. Поиск наиболее подходящего графического ассета (текстуры, модели) для объекта сцены
 std::filesystem::path GlobalResourceManager::FindBestAssetFor(const MapObject& object) const {
     for (const auto& key : CandidateKeysForObject(object)) {
         const auto candidates = FindAll(key);
@@ -122,6 +132,7 @@ std::filesystem::path GlobalResourceManager::FindBestAssetFor(const MapObject& o
     return {};
 }
 
+// 12. Ревизия зависимостей внешних подключаемых мастер-файлов игровых данных
 void DependencyLinker::Rebuild(const ExternalDataScanSummary& summary) {
     pluginByKey_.clear();
     for (const auto& file : summary.files) {
@@ -135,6 +146,7 @@ void DependencyLinker::Rebuild(const ExternalDataScanSummary& summary) {
     }
 }
 
+// 13. Разрешение прокси-пути плагина для сопряжения логики объекта бункера
 std::filesystem::path DependencyLinker::ResolvePluginProxyFor(const MapObject& object) const {
     for (const auto& key : CandidateKeysForObject(object)) {
         const auto it = pluginByKey_.find(key);
@@ -145,13 +157,14 @@ std::filesystem::path DependencyLinker::ResolvePluginProxyFor(const MapObject& o
     return {};
 }
 
+// 14. Сборка и связывание полной структуры контекста выполнения игрового мира (Ядро рантайма)
 WorldExecutionContext BuildWorldExecutionContext(const World& world, const std::filesystem::path& scanRoot) {
     WorldExecutionContext context;
     context.externalData = ScanExportDataDirectory(scanRoot);
     context.resources.Rebuild(context.externalData);
     context.dependencyLinker.Rebuild(context.externalData);
-
     context.objects.reserve(world.objects.size());
+    
     for (int objectIndex = 0; objectIndex < static_cast<int>(world.objects.size()); ++objectIndex) {
         const auto& object = world.objects[static_cast<std::size_t>(objectIndex)];
         GameObjectInstance instance;
@@ -159,12 +172,13 @@ WorldExecutionContext BuildWorldExecutionContext(const World& world, const std::
         instance.worldObjectIndex = objectIndex;
         instance.renderResourcePath = context.resources.FindBestAssetFor(object);
         instance.pluginProxyPath = context.dependencyLinker.ResolvePluginProxyFor(object);
+        
         if (!object.scriptTag.empty()) {
             instance.compiledScriptPath = context.resources.FindFirstWithExtension(object.scriptTag, ".pex");
             instance.sourceScriptPath = context.resources.FindFirstWithExtension(object.scriptTag, ".psc");
             instance.hasTerminalOverlay = object.interaction == InteractionType::Terminal;
         }
-
+        
         GameComponent physics;
         physics.kind = GameComponentKind::Physics;
         physics.width = object.width;
@@ -172,14 +186,14 @@ WorldExecutionContext BuildWorldExecutionContext(const World& world, const std::
         physics.height = object.height;
         physics.blocksMovement = object.blocksMovement;
         instance.components.push_back(std::move(physics));
-
+        
         if (!instance.renderResourcePath.empty()) {
             GameComponent render;
             render.kind = GameComponentKind::Render;
             render.resourcePath = instance.renderResourcePath;
             instance.components.push_back(std::move(render));
         }
-
+        
         std::vector<LootEntry> runtimeLoot = BuildRuntimeLootTemplate(object.lootEntries);
         if (!runtimeLoot.empty()) {
             GameComponent inventory;
@@ -187,13 +201,13 @@ WorldExecutionContext BuildWorldExecutionContext(const World& world, const std::
             inventory.inventoryTemplate = std::move(runtimeLoot);
             instance.components.push_back(std::move(inventory));
         }
-
+        
         context.objects.push_back(std::move(instance));
     }
-
     return context;
 }
 
+// 15. Локальный поиск инстанса игрового объекта в скомпилированном контексте выполнения
 const GameObjectInstance* FindGameObjectInstance(const WorldExecutionContext& context, std::string_view registryId) {
     const auto it = std::find_if(context.objects.begin(), context.objects.end(), [&](const GameObjectInstance& instance) {
         return instance.registryId == registryId;
@@ -201,6 +215,7 @@ const GameObjectInstance* FindGameObjectInstance(const WorldExecutionContext& co
     return it == context.objects.end() ? nullptr : &*it;
 }
 
+// 16. Генерация текстового описания оверлея взаимодействия с объектом для ImGui интерфейса
 std::string DescribeInteractionOverlay(const MapObject& object, const WorldExecutionContext& context) {
     std::ostringstream description;
     description << object.displayName;
@@ -236,15 +251,16 @@ bool TryExecuteCompiledScript(const MapObject& object, const WorldExecutionConte
     }
     if (!instance->compiledScriptPath.empty()) {
         statusText = "Executed compiled script bridge for " + object.scriptTag +
-            " via " + instance->compiledScriptPath.filename().string() + ".";
+                     " via " + instance->compiledScriptPath.filename().string() + ".";
         return true;
     }
     if (!instance->sourceScriptPath.empty()) {
-        statusText = "Compiled script missing; fell back to source script bridge for " + object.scriptTag +
-            " via " + instance->sourceScriptPath.filename().string() + ".";
+        statusText = "Compiled script missing; fell back to source script bridge for " + 
+                     object.scriptTag +
+                     " via " + instance->sourceScriptPath.filename().string() + ".";
         return true;
     }
     return false;
 }
 
-}  // namespace bunker
+} // namespace bunker
