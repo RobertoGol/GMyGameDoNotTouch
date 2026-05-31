@@ -1,4 +1,4 @@
-#include "../Dx11Renderer.hpp"
+#include "../include/Dx11Renderer.hpp"
 #include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h> // Захват HWND для DirectX 11 контекста
@@ -21,11 +21,14 @@
 #include "../include/WorldEvents.hpp"
 #include "../include/WorldSemanticAuthoring.hpp"
 
+
 // Объявления внешних функций из модуля EscMenuSystem.cpp
 namespace bunker {
     void HandleEscKeyPress(GameState& gameState);
-    void DrawImGuiEscMenuSystem(GameState& gameState, SessionProfile& profile);
+    void TryToggleActivePipDevice(GameState& gameState, SessionProfile& sessionProfile);
+    void DrawImGuiEscMenuSystem(GameState& gameState, SessionProfile& sessionProfile); 
 }
+
 
 namespace {
     struct RuntimeSaveOutcome {
@@ -325,11 +328,13 @@ int main() {
         pDeniedDevice->CreateRenderTargetView(pBackBuffer, nullptr, &pDeniedRTV);
         pBackBuffer->Release();
         
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGui::StyleColorsDark();
-        ImGui_ImplGlfw_InitForOther(deniedWindow, true);
-        ImGui_ImplDX11_Init(dx11Renderer.GetDevice(), dx11Renderer.GetDeviceContext());
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOther(deniedWindow, true);
+    ImGui_ImplDX11_Init(pDeniedDevice, pDeniedContext);
+
+// Примечание: Убедитесь, что передаются именно указатели на устройство и контекст, созданные на строках 323-325!
 
         
         // Исправлено: строго DX11 бэкенд
@@ -428,7 +433,8 @@ int main() {
     
     // Инициализируем бэкенд ImGui под DirectX 11 контекст основного движка игры
     ImGui_ImplGlfw_InitForOther(window, true);
-    ImGui_ImplDX11_Init(pDeniedDevice, pDeniedContext);
+    ImGui_ImplDX11_Init(dx11Renderer.GetDevice(), dx11Renderer.GetDeviceContext());
+
 
     
     bunker::GameState gameState;
@@ -717,14 +723,18 @@ const int adoptedAnchorCount = bunker::AdoptAllAutoCreatedSemanticAnchors(world,
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        bunker::DrawImGuiEscMenuSystem(gameState, sessionProfile, world);
+        // Отрисовка гибридного меню на базеGameState и SessionProfile
+        bunker::DrawImGuiEscMenuSystem(gameState, sessionProfile, world, player);
+
 
 
         ImGui::Render();
-
         dx11Renderer.BeginFrame();
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
         dx11Renderer.EndFrame();
+    }
+
+
     }
 
     // --- CLEANUP AND TERMINATION ---

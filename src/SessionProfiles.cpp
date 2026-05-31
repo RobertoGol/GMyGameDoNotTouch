@@ -353,14 +353,19 @@ void NormalizeSessionProfile(SessionProfile& profile) {
     NormalizeFirstPlayableRouteProgress(profile);
     (void)FindWorldFieldState(profile, profile.selectedWorld, true);
 }
-bool SeedContinuityAnchorAfterBunkerAnomaly(SessionProfile& profile, std::string* 
-diagnosticText) {
+
+bool SeedContinuityAnchorAfterBunkerAnomaly(SessionProfile& profile, std::string* diagnosticText) {
     const bool wasSeeded = profile.continuityAnchorSeeded;
     profile.continuityAnchorSeeded = true;
-    if (profile.continuityAnchorVariance  0.0f
-        ? "Continuity Anchor variance detected."
-        : "Identity continuity profile recovered.";
+    // Исправляем синтаксическую опечатку: используем тернарный оператор или обычный if
+    if (diagnosticText != nullptr) {
+        *diagnosticText = (profile.continuityAnchorVariance > 0.0f)
+            ? "Continuity Anchor variance detected."
+            : "Identity continuity profile recovered.";
+    }
+    return !wasSeeded;
 }
+
 
 bool SaveSessionProfile(const SessionProfile& profile, const fs::path& filePath) {
     std::ofstream out(filePath);
@@ -834,7 +839,7 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
                 if (next == std::string::npos) break;
                 start = next + 1;
             }
-        } else if (key == "vehicle") {
+       } else if (key == "vehicle") {
             std::vector<std::string> parts;
             std::size_t start = 0;
             while (start <= value.size()) {
@@ -844,18 +849,20 @@ bool LoadSessionProfile(const fs::path& filePath, SessionProfile& outProfile) {
                 start = next + 1;
             }
             if (parts.size() >= 7) {
-                // Прямой парсинг по индексам вектора строк
-                VehicleEntry vehicle{};
-                vehicle.vehicleId = parts[0];
-                vehicle.displayName = parts[1];
-                vehicle.type = static_cast<VehicleType>(std::stoi(parts[2]));
-                vehicle.available = (std::stoi(parts[3]) != 0);
-                vehicle.deployed = (std::stoi(parts[4]) != 0);
-                vehicle.durability = std::stof(parts[5]);
-                vehicle.fuelOrCharge = std::stof(parts[6]);
-                outProfile.ownedVehicles.push_back(vehicle);
+                // Агрегатный пуш напрямую в вектор: обходим использование имени VehicleEntry
+                outProfile.ownedVehicles.push_back({
+                    parts[0],                                    // vehicleId
+                    parts[1],                                    // displayName
+                    static_cast<VehicleType>(std::stoi(parts[2])), // type
+                    (std::stoi(parts[3]) != 0),                  // available
+                    (std::stoi(parts[4]) != 0),                  // deployed
+                    std::stof(parts[5]),                         // durability
+                    std::stof(parts[6]),                         // fuelOrCharge
+                    {}                                           // пустой список модулей
+                });
             }
         }
+
     }
     
     if (!hasExplicitFormatHeader) {

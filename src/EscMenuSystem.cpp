@@ -7,15 +7,18 @@ namespace bunker {
 // Изолированная системная переменная текущей открытой страницы меню
 EscMenuState g_CurrentMenuState = EscMenuState::Closed;
 
-// Функция-переключатель состояний при нажатии на клавишу ESCAPE
-void HandleEscKeyPress(GameState& gameState) {
+void HandleEscKeyPress(GameState& gameState, const SessionProfile& profile) {
     if (g_CurrentMenuState == EscMenuState::Closed) {
-        // Каноничное условие: если карта активирована голозаписью — заходим через бумажный пергамент Fallout 76
-        g_CurrentMenuState = gameState.isPaperMapAvailable ? EscMenuState::PaperMap : EscMenuState::Fallout4Menu;
+        // Заходим через бумажную карту местности, если Pip-Pad уже восстановлен оператором
+        g_CurrentMenuState = profile.story.pipPadRecovered ? EscMenuState::PaperMap : EscMenuState::Fallout4Menu;
     } else {
-        g_CurrentMenuState = EscMenuState::Closed; // Закрыть меню по нажатию на Esc повторно
+        g_CurrentMenuState = EscMenuState::Closed;
     }
+    (void)gameState; // Подавление варнингов компилятора
 }
+
+// ... далее без изменений идет вся остальная вычищенная логика слоев DrawImGuiEscMenuSystem, которую мы собрали ранее
+
 
 // Рендеринг интерфейса ImGui поверх трехмерного ландшафта игры
 void DrawImGuiEscMenuSystem(GameState& gameState, SessionProfile& profile) {
@@ -71,7 +74,7 @@ void DrawImGuiEscMenuSystem(GameState& gameState, SessionProfile& profile) {
         ImGui::SetNextWindowSize(ImVec2(500, 260));
         ImGui::Begin("ПАРАМЕТРЫ СИМУЛЯЦИИ", nullptr, ImGuiWindowFlags_NoResize);
         
-        // Ползунок угла обзора FOV из Titanfall 2 - критически важен для разгрузки слабых ноутбуков
+        // Ползунок угла обзора FOV из Titanfall 2 критически важен для разгрузки слабых ноутбуков
         ImGui::SliderFloat("Угол обзора (FOV)", &gameState.cameraFOV, 70.0f, 110.0f);
         ImGui::SliderFloat("Чувствительность мыши", &gameState.mouseSensitivity, 0.1f, 4.0f);
         ImGui::Separator();

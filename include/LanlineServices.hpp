@@ -219,15 +219,49 @@ struct NetworkApparelVisual {
     std::uint32_t customColorHEX = 0;
 };
 
-struct NetworkPlayerVisualSnapshot {
-    std::uint64_t networkPlayerId = 0;
-    char characterName[32]{};
-    NetworkWeaponVisual equippedWeapon{};
-    NetworkApparelVisual apparel{};
-    float positionX = 0.0f;
-    float positionZ = 0.0f;
-    float rotationY = 0.0f;
+#ifndef NETWORK_PLAYER_VISUAL_SNAPSHOT_GUARD
+#define NETWORK_PLAYER_VISUAL_SNAPSHOT_GUARD
+
+#include <cstdint>
+
+namespace bunker {
+
+#pragma pack(push, 1)
+struct WeaponVisualSnapshot {
+    uint32_t weaponRegistryIdHash;
+    uint8_t  receiverId;
+    uint8_t  barrelId;
+    uint8_t  magazineId;
+    uint8_t  muzzleId;
+    uint8_t  paintJobId;
+    uint8_t  wearLevel;
+    uint8_t  metallicGloss;
 };
+
+struct ApparelVisualSnapshot {
+    uint8_t  undergarmentId;
+    uint8_t  armorPlatesId;
+    uint8_t  decalId;
+    uint8_t  decalPosition;
+    uint32_t customColorHEX;
+};
+
+struct NetworkPlayerVisualSnapshot {
+    uint32_t networkPlayerId;
+    char     characterName[32];
+    WeaponVisualSnapshot equippedWeapon;
+    ApparelVisualSnapshot apparel;
+    float    positionX;
+    float    positionZ;
+    float    rotationY;
+    float    vehicleSpeed; // Поле для анимации гусениц
+};
+#pragma pack(pop)
+
+} // namespace bunker
+
+#endif // NETWORK_PLAYER_VISUAL_SNAPSHOT_GUARD
+
 
 using LanlineVisualSnapshotBroadcast = bool (*)(const std::uint8_t* data, std::size_t size);
 

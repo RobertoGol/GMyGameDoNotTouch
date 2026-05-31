@@ -1,7 +1,7 @@
-prefix=C:/Program Files (x86)/BunkerProtocolSuite
+prefix=C:/Program Files/BunkerProtocolSuite
 exec_prefix=${prefix}
-includedir=C:/Program Files (x86)/BunkerProtocolSuite/include
-libdir=C:/Program Files (x86)/BunkerProtocolSuite/lib
+includedir=C:/Program Files/BunkerProtocolSuite/include
+libdir=C:/Program Files/BunkerProtocolSuite/lib
 
 Name: GLFW
 Description: A multi-platform library for OpenGL, window and input

@@ -411,8 +411,7 @@ std::string NormalizeEditorLayerName(std::string_view layerName) {
 }
 
 std::string DefaultEditorLayerName(const MapObject& object) {
-    const std::string normalizedTag = 
-        std::string(NormalizeGameplayDescriptorTag(object.scriptTag));
+    const std::string normalizedTag = std::string(NormalizeGameplayDescriptorTag(object.scriptTag));
     if (normalizedTag == "fey_ring") {
         return "Fey";
     }
@@ -428,7 +427,8 @@ std::string DefaultEditorLayerName(const MapObject& object) {
     if (IsSpawnObject(object)) {
         return "Spawn";
     }
-    if (normalizedTag.starts_with("debug_")) {
+    // Ищем подстроку "debug_" строго с нулевого индекса начала строки
+    if (normalizedTag.rfind("debug_", 0) == 0) {
         return "Debug";
     }
     switch (object.category) {

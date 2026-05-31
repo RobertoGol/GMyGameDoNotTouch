@@ -1,3 +1,4 @@
+#include "AtomicPersistence.hpp"
 #include "../include/LanlineServices.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -1167,7 +1168,9 @@ void InjectOfflineDebugBot() {
     debugBot.positionX = 0.0f;
     debugBot.positionZ = 0.0f;
     debugBot.rotationY = 0.0f;
+    debugBot.vehicleSpeed = 0.0f;
     UpsertVisualSnapshot(debugBot);
 }
+
 
 } // namespace bunker
